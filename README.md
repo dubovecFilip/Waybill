@@ -1,8 +1,11 @@
-# TrucksBook Overcomer
+# Waybill
 
 Lokálny tracker zásielok pre **Euro Truck Simulator 2** a **American Truck
 Simulator**. Sám rozpozná začiatok a koniec zákazky, zapíše ju do lokálnej
 databázy a ukáže štatistiky — bez účtu, bez internetu, bez druhého programu.
+
+*Waybill* je nákladný list — dokument, ktorý sprevádza zásielku a nesie trasu,
+náklad a odosielateľa. Presne to, čo tento program o každej jazde uchová.
 
 ## Prečo
 
@@ -23,9 +26,9 @@ zákaz.
    [`third-party/README.md`](third-party/README.md).
 2. **Zbuilduj a spusti:**
    ```bash
-   dotnet build src/TelemetryReader
+   dotnet build src/Waybill
    ```
-   Potom spusti `TelemetryReader.exe` z `src/TelemetryReader/bin/Debug/net9.0-windows/`.
+   Potom spusti `Waybill.exe` z `src/Waybill/bin/Debug/net9.0-windows/`.
 3. **Hraj.** Appku môžeš zapnúť pred hrou aj po nej, poradie nehrá rolu. Zákazky
    sa rozpoznajú a uložia samé.
 
@@ -37,18 +40,18 @@ zákazku nadviaže — vrátane kilometrov najazdených, kým nebežala.
 Okno je bežný spôsob použitia, ale všetko sa dá aj zo skriptu:
 
 ```bash
-TelemetryReader.exe --list [n]                  # posledné zásielky
-TelemetryReader.exe --stats [dni]               # súhrn (celkovo alebo za obdobie)
-TelemetryReader.exe --export csv|json [cesta]   # export histórie
-TelemetryReader.exe --backup [cesta]            # záloha databázy
-TelemetryReader.exe --restore <cesta>           # obnova zo zálohy
-TelemetryReader.exe --replay <súbor.jsonl>      # prehrá starú nahrávku
-TelemetryReader.exe --test-resume <súbor> <riadok>   # test obnovy po reštarte
+Waybill.exe --list [n]                  # posledné zásielky
+Waybill.exe --stats [dni]               # súhrn (celkovo alebo za obdobie)
+Waybill.exe --export csv|json [cesta]   # export histórie
+Waybill.exe --backup [cesta]            # záloha databázy
+Waybill.exe --restore <cesta>           # obnova zo zálohy
+Waybill.exe --replay <súbor.jsonl>      # prehrá starú nahrávku
+Waybill.exe --test-resume <súbor> <riadok>   # test obnovy po reštarte
 ```
 
 ## Kde sú dáta
 
-Všetko je v `%LOCALAPPDATA%\TrucksBookOvercomer\` — teda **mimo** projektu, takže
+Všetko je v `%LOCALAPPDATA%\Waybill\` — teda **mimo** projektu, takže
 prebuildovanie ani `dotnet clean` o nič nepríde:
 
 | Čo | Kde |
@@ -93,7 +96,7 @@ celkovým herným časom zas počíta aj spánok.
 ## Štruktúra
 
 ```
-src/TelemetryReader/
+src/Waybill/
 ├── Tracking/       stavový automat zákazky, adaptér SDK, engine, formátovanie
 ├── Storage/        SQLite (deliveries, events, trip_points)
 ├── SCSSdkClient/   vendorovaný C# klient SDK (MIT, s lokálnymi opravami)
@@ -109,7 +112,7 @@ archive/            odložené, už nepoužívané
 Nahrávky v `sessions/` sú regresné testy. Po zmene v trackeri:
 
 ```bash
-TelemetryReader.exe --replay <stará-nahrávka.jsonl>
+Waybill.exe --replay <stará-nahrávka.jsonl>
 ```
 
 a porovnaj, či čísla sedia. `--test-resume` navyše simuluje reštart uprostred

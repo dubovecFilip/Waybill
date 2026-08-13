@@ -1,9 +1,9 @@
 using Newtonsoft.Json;
 using SCSSdkClient;
 using SCSSdkClient.Object;
-using TelemetryReader.Storage;
+using Waybill.Storage;
 
-namespace TelemetryReader.Tracking;
+namespace Waybill.Tracking;
 
 /// <summary>
 /// The live side of the app: reads shared memory, records the raw session file,

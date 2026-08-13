@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace TelemetryReader.Storage;
+namespace Waybill.Storage;
 
 /// <summary>One row in the deliveries grid. Property names are the column headers,
 /// so they are deliberately short and in Slovak like the rest of the UI.</summary>

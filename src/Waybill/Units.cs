@@ -1,4 +1,4 @@
-namespace TelemetryReader;
+namespace Waybill;
 
 public enum UnitSystem { Metric, Imperial }
 

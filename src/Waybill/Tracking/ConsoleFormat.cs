@@ -1,6 +1,6 @@
 using System.Linq;
 
-namespace TelemetryReader.Tracking;
+namespace Waybill.Tracking;
 
 /// <summary>Console formatting for job lifecycle events. Values are converted for
 /// display only - everything is stored metric (see Units).</summary>

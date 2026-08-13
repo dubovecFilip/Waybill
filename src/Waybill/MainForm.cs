@@ -1,10 +1,10 @@
 using System.Data;
 using System.Diagnostics;
 using System.Windows.Forms;
-using TelemetryReader.Storage;
-using TelemetryReader.Tracking;
+using Waybill.Storage;
+using Waybill.Tracking;
 
-namespace TelemetryReader;
+namespace Waybill;
 
 /// <summary>
 /// The whole UI: a live panel on top (what the engine is doing right now) and
@@ -31,7 +31,7 @@ public class MainForm : Form {
     private List<DeliveryRow> _rows = new();
 
     public MainForm() {
-        Text = "TrucksBook Overcomer";
+        Text = "Waybill";
         Width = 1100;
         Height = 720;
         MinimumSize = new Size(900, 560);

@@ -1,7 +1,7 @@
 using Newtonsoft.Json;
-using TelemetryReader.Storage;
+using Waybill.Storage;
 
-namespace TelemetryReader;
+namespace Waybill;
 
 /// <summary>
 /// User preferences, kept next to the database so they survive rebuilds. Small

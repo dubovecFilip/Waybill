@@ -2,7 +2,7 @@ using Newtonsoft.Json.Linq;
 using SCSSdkClient;
 using SCSSdkClient.Object;
 
-namespace TelemetryReader.Tracking;
+namespace Waybill.Tracking;
 
 /// <summary>
 /// Maps a raw SCSSdkClient telemetry object onto the Snapshot shape the

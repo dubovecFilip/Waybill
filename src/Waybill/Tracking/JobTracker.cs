@@ -1,6 +1,6 @@
 using System.Linq;
 
-namespace TelemetryReader.Tracking;
+namespace Waybill.Tracking;
 
 public class TrackerConfig {
     // Anything faster than this between two ticks is treated as a teleport.

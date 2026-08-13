@@ -4,9 +4,9 @@ using SCSSdkClient.Object;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
-using TelemetryReader;
-using TelemetryReader.Storage;
-using TelemetryReader.Tracking;
+using Waybill;
+using Waybill.Storage;
+using Waybill.Tracking;
 
 // This is a WinExe, so it owns no console. When started with arguments from a
 // terminal, attach to that terminal's console so the CLI output lands where the
@@ -27,7 +27,7 @@ ConsoleFormat.UnitSetting = Settings.Load().Units;
 // Snapshots are written once per second, plus one extra snapshot every time a
 // gameplay event fires, so no event can be missed between two ticks.
 
-// Offline regression mode: `TelemetryReader.exe --replay path\to\session.jsonl [--save]`
+// Offline regression mode: `Waybill.exe --replay path\to\session.jsonl [--save]`
 // replays a previously recorded file through the same Adapter+JobTracker the
 // live path uses below, with no shared memory and no game required. Mirrors
 // This is the regression harness: rerun an old recording after changing the
@@ -82,7 +82,7 @@ void TestResume(string path, int splitIdx) {
     Console.WriteLine($"s prerusenim:       {(resumed == null ? "-" : $"{resumed.DistanceKm:0.000} km, {resumed.Outcome}, {resumed.Validation.Status}, pokuty {resumed.Fines.Count}, kolizie {resumed.Collisions}, body trasy {resumed.TripPoints.Count}")}");
 }
 
-// `TelemetryReader.exe --list [n]` prints the n most recent saved deliveries
+// `Waybill.exe --list [n]` prints the n most recent saved deliveries
 // (default 20) without needing to launch the game at all.
 if (args.Length >= 1 && args[0] == "--list") {
     var n = args.Length >= 2 && int.TryParse(args[1], out var parsedN) ? parsedN : 20;
@@ -90,7 +90,7 @@ if (args.Length >= 1 && args[0] == "--list") {
     return;
 }
 
-// `TelemetryReader.exe --stats [days]` - all-time by default, or the last N days.
+// `Waybill.exe --stats [days]` - all-time by default, or the last N days.
 if (args.Length >= 1 && args[0] == "--stats") {
     long? since = args.Length >= 2 && int.TryParse(args[1], out var days)
         ? DateTimeOffset.UtcNow.AddDays(-days).ToUnixTimeMilliseconds()
@@ -99,7 +99,7 @@ if (args.Length >= 1 && args[0] == "--stats") {
     return;
 }
 
-// `TelemetryReader.exe --backup [path]` / `--restore <path>`
+// `Waybill.exe --backup [path]` / `--restore <path>`
 if (args.Length >= 1 && args[0] == "--backup") {
     using var backupStore = new DeliveryStore();
     var dest = backupStore.Backup(args.Length >= 2 ? args[1] : null);
@@ -118,7 +118,7 @@ if (args.Length >= 2 && args[0] == "--restore") {
     return;
 }
 
-// `TelemetryReader.exe --export csv|json [path]`
+// `Waybill.exe --export csv|json [path]`
 if (args.Length >= 2 && args[0] == "--export") {
     var format = args[1] == "json" ? "json" : "csv";
     var path = args.Length >= 3 ? args[2] : Path.Combine(DeliveryStore.DefaultDir(), $"deliveries-{DateTime.Now:yyyyMMdd-HHmmss}.{format}");

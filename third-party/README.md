@@ -19,7 +19,7 @@ C:\Program Files (x86)\Steam\steamapps\common\American Truck Simulator\bin\win_x
 
 Create the `plugins` folder if it isn't there.
 
-## `src/TelemetryReader/SCSSdkClient/`
+## `src/Waybill/SCSSdkClient/`
 
 The C# client from the same project, vendored into the source tree (it is not
 published as a NuGet package). Also MIT, same repository as above.

@@ -1,4 +1,4 @@
-namespace TelemetryReader.Tracking;
+namespace Waybill.Tracking;
 
 public class FineRecord {
     public double Amount;

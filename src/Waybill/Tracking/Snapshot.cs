@@ -1,4 +1,4 @@
-namespace TelemetryReader.Tracking;
+namespace Waybill.Tracking;
 
 /// <summary>
 /// Normalised view of one telemetry line, independent of SCSSdkClient's field

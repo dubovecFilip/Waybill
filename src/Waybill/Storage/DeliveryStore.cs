@@ -1,9 +1,9 @@
 using System.Linq;
 using Microsoft.Data.Sqlite;
 using Newtonsoft.Json;
-using TelemetryReader.Tracking;
+using Waybill.Tracking;
 
-namespace TelemetryReader.Storage;
+namespace Waybill.Storage;
 
 /// <summary>
 /// Local-first SQLite storage for finished deliveries, per the project's data
@@ -25,7 +25,7 @@ public class DeliveryStore : IDisposable {
     }
 
     public static string DefaultDir() =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TrucksBookOvercomer");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Waybill");
 
     public static string DefaultPath() => Path.Combine(DefaultDir(), "deliveries.db");
 

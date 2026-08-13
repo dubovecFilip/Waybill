@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace TelemetryReader;
+namespace Waybill;
 
 /// <summary>
 /// The app is built as a WinExe so double-clicking it shows only the window.
