@@ -1,0 +1,588 @@
+using System.Linq;
+using Microsoft.Data.Sqlite;
+using Newtonsoft.Json;
+using TelemetryReader.Tracking;
+
+namespace TelemetryReader.Storage;
+
+/// <summary>
+/// Local-first SQLite storage for finished deliveries, per the project's data
+/// model (deliveries + events tables). Lives outside bin/ (see DbPath) so a
+/// rebuild or `dotnet clean` never wipes delivery history.
+/// </summary>
+public class DeliveryStore : IDisposable {
+    public string DbPath { get; }
+
+    private readonly SqliteConnection _conn;
+
+    public DeliveryStore(string? dbPath = null) {
+        DbPath = dbPath ?? DefaultPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(DbPath)!);
+
+        _conn = new SqliteConnection($"Data Source={DbPath}");
+        _conn.Open();
+        CreateSchema();
+    }
+
+    public static string DefaultDir() =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TrucksBookOvercomer");
+
+    public static string DefaultPath() => Path.Combine(DefaultDir(), "deliveries.db");
+
+    private void CreateSchema() {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+            CREATE TABLE IF NOT EXISTS deliveries (
+                id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_uid                 TEXT NOT NULL UNIQUE,
+                game                    TEXT,
+                game_version            TEXT,
+                outcome                 TEXT,
+                validation_status       TEXT,
+                validation_flags        TEXT,
+                truck_make              TEXT,
+                truck_model             TEXT,
+                truck_id                TEXT,
+                trailer_name            TEXT,
+                trailer_id              TEXT,
+                cargo                   TEXT,
+                cargo_id                TEXT,
+                cargo_mass_kg           REAL,
+                source_city             TEXT,
+                source_company          TEXT,
+                destination_city        TEXT,
+                destination_company     TEXT,
+                planned_distance_km     REAL,
+                reported_distance_km    REAL,
+                actual_distance_km      REAL,
+                world_distance_km       REAL,
+                sim_speed_distance_km   REAL,
+                driving_game_min        REAL,
+                delivery_time_min       REAL,
+                offered_income          REAL,
+                revenue                 REAL,
+                penalty                 REAL,
+                fuel_used_l             REAL,
+                avg_consumption_l_100km REAL,
+                top_speed_kmh           REAL,
+                driving_ms              INTEGER,
+                paused_ms               INTEGER,
+                speeding_share          REAL,
+                truck_damage_pct        REAL,
+                trailer_damage_pct      REAL,
+                cargo_damage_pct        REAL,
+                tolls_paid              REAL,
+                ferries_used            INTEGER,
+                refuels                 INTEGER,
+                collisions              INTEGER,
+                late_delivery           INTEGER,
+                minutes_late            REAL,
+                cruise_control_share    REAL,
+                rest_stops              INTEGER,
+                rest_minutes            REAL,
+                fines_count             INTEGER,
+                fines_total             REAL,
+                started_at_ms           INTEGER,
+                finished_at_ms          INTEGER,
+                real_duration_ms        INTEGER,
+                game_duration_min       REAL,
+                notes                   TEXT DEFAULT '',
+                created_at              TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS events (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                delivery_id  INTEGER NOT NULL REFERENCES deliveries(id),
+                at_ms        INTEGER,
+                event_type   TEXT NOT NULL,
+                value        REAL,
+                extra_json   TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS trip_points (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                delivery_id  INTEGER NOT NULL REFERENCES deliveries(id),
+                at_ms        INTEGER,
+                x            REAL,
+                y            REAL,
+                z            REAL,
+                speed_kmh    REAL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_events_delivery ON events(delivery_id);
+            CREATE INDEX IF NOT EXISTS idx_trip_points_delivery ON trip_points(delivery_id);
+            CREATE INDEX IF NOT EXISTS idx_deliveries_started ON deliveries(started_at_ms);
+            """;
+        cmd.ExecuteNonQuery();
+    }
+
+    public void SaveDelivery(JobRecord r) {
+        using var tx = _conn.BeginTransaction();
+
+        var finesTotal = r.Fines.Sum(f => f.Amount);
+
+        using (var cmd = _conn.CreateCommand()) {
+            cmd.Transaction = tx;
+            cmd.CommandText = """
+                INSERT OR IGNORE INTO deliveries (
+                    job_uid, game, game_version, outcome, validation_status, validation_flags,
+                    truck_make, truck_model, truck_id, trailer_name, trailer_id,
+                    cargo, cargo_id, cargo_mass_kg,
+                    source_city, source_company, destination_city, destination_company,
+                    planned_distance_km, reported_distance_km, actual_distance_km,
+                    world_distance_km, sim_speed_distance_km, driving_game_min, delivery_time_min,
+                    offered_income, revenue, penalty,
+                    fuel_used_l, avg_consumption_l_100km, top_speed_kmh,
+                    driving_ms, paused_ms, speeding_share,
+                    truck_damage_pct, trailer_damage_pct, cargo_damage_pct,
+                    tolls_paid, ferries_used, refuels, collisions, late_delivery, minutes_late,
+                    cruise_control_share, rest_stops, rest_minutes,
+                    fines_count, fines_total,
+                    started_at_ms, finished_at_ms, real_duration_ms, game_duration_min
+                ) VALUES (
+                    $job_uid, $game, $game_version, $outcome, $validation_status, $validation_flags,
+                    $truck_make, $truck_model, $truck_id, $trailer_name, $trailer_id,
+                    $cargo, $cargo_id, $cargo_mass_kg,
+                    $source_city, $source_company, $destination_city, $destination_company,
+                    $planned_distance_km, $reported_distance_km, $actual_distance_km,
+                    $world_distance_km, $sim_speed_distance_km, $driving_game_min, $delivery_time_min,
+                    $offered_income, $revenue, $penalty,
+                    $fuel_used_l, $avg_consumption_l_100km, $top_speed_kmh,
+                    $driving_ms, $paused_ms, $speeding_share,
+                    $truck_damage_pct, $trailer_damage_pct, $cargo_damage_pct,
+                    $tolls_paid, $ferries_used, $refuels, $collisions, $late_delivery, $minutes_late,
+                    $cruise_control_share, $rest_stops, $rest_minutes,
+                    $fines_count, $fines_total,
+                    $started_at_ms, $finished_at_ms, $real_duration_ms, $game_duration_min
+                );
+                """;
+
+            cmd.Parameters.AddWithValue("$job_uid", r.JobUid);
+            cmd.Parameters.AddWithValue("$game", r.Game);
+            cmd.Parameters.AddWithValue("$game_version", r.GameVersion);
+            cmd.Parameters.AddWithValue("$outcome", r.Outcome);
+            cmd.Parameters.AddWithValue("$validation_status", r.Validation.Status);
+            cmd.Parameters.AddWithValue("$validation_flags", string.Join(",", r.Validation.Flags));
+            cmd.Parameters.AddWithValue("$truck_make", r.TruckMake);
+            cmd.Parameters.AddWithValue("$truck_model", r.TruckModel);
+            cmd.Parameters.AddWithValue("$truck_id", r.TruckId);
+            cmd.Parameters.AddWithValue("$trailer_name", (object?)r.TrailerName ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$trailer_id", r.TrailerId);
+            cmd.Parameters.AddWithValue("$cargo", r.Cargo);
+            cmd.Parameters.AddWithValue("$cargo_id", r.CargoId);
+            cmd.Parameters.AddWithValue("$cargo_mass_kg", r.CargoMassKg);
+            cmd.Parameters.AddWithValue("$source_city", r.SourceCity);
+            cmd.Parameters.AddWithValue("$source_company", r.SourceCompany);
+            cmd.Parameters.AddWithValue("$destination_city", r.DestinationCity);
+            cmd.Parameters.AddWithValue("$destination_company", r.DestinationCompany);
+            cmd.Parameters.AddWithValue("$planned_distance_km", r.PlannedDistanceKm);
+            cmd.Parameters.AddWithValue("$reported_distance_km", (object?)r.ReportedDistanceKm ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$actual_distance_km", r.DistanceKm);
+            cmd.Parameters.AddWithValue("$world_distance_km", r.WorldDistanceKm);
+            cmd.Parameters.AddWithValue("$sim_speed_distance_km", r.SimSpeedDistanceKm);
+            cmd.Parameters.AddWithValue("$driving_game_min", r.DrivingGameMinutes);
+            cmd.Parameters.AddWithValue("$delivery_time_min", (object?)r.DeliveryTimeMin ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$offered_income", r.OfferedIncome);
+            cmd.Parameters.AddWithValue("$revenue", (object?)r.Revenue ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$penalty", (object?)r.Penalty ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$fuel_used_l", r.FuelUsedL);
+            cmd.Parameters.AddWithValue("$avg_consumption_l_100km", (object?)r.AvgConsumptionLper100 ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$top_speed_kmh", r.TopSpeedKmh);
+            cmd.Parameters.AddWithValue("$driving_ms", r.DrivingMs);
+            cmd.Parameters.AddWithValue("$paused_ms", r.PausedMs);
+            cmd.Parameters.AddWithValue("$speeding_share", r.SpeedingShare);
+            cmd.Parameters.AddWithValue("$truck_damage_pct", r.TruckDamage);
+            cmd.Parameters.AddWithValue("$trailer_damage_pct", r.TrailerDamage);
+            cmd.Parameters.AddWithValue("$cargo_damage_pct", (object?)r.DeliveredCargoDamage ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$tolls_paid", r.TollsPaid);
+            cmd.Parameters.AddWithValue("$ferries_used", r.FerriesUsed);
+            cmd.Parameters.AddWithValue("$refuels", r.Refuels);
+            cmd.Parameters.AddWithValue("$collisions", r.Collisions);
+            cmd.Parameters.AddWithValue("$late_delivery", r.LateDelivery ? 1 : 0);
+            cmd.Parameters.AddWithValue("$minutes_late", (object?)r.MinutesLate ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$cruise_control_share", r.CruiseControlShare);
+            cmd.Parameters.AddWithValue("$rest_stops", r.RestStops);
+            cmd.Parameters.AddWithValue("$rest_minutes", r.RestMinutes);
+            cmd.Parameters.AddWithValue("$fines_count", r.Fines.Count);
+            cmd.Parameters.AddWithValue("$fines_total", finesTotal);
+            cmd.Parameters.AddWithValue("$started_at_ms", r.StartedAtMs);
+            cmd.Parameters.AddWithValue("$finished_at_ms", r.FinishedAtMs);
+            cmd.Parameters.AddWithValue("$real_duration_ms", r.RealDurationMs);
+            cmd.Parameters.AddWithValue("$game_duration_min", r.GameDurationMin);
+
+            cmd.ExecuteNonQuery();
+        }
+
+        long deliveryId;
+        using (var idCmd = _conn.CreateCommand()) {
+            idCmd.Transaction = tx;
+            idCmd.CommandText = "SELECT id FROM deliveries WHERE job_uid = $job_uid";
+            idCmd.Parameters.AddWithValue("$job_uid", r.JobUid);
+            deliveryId = (long)idCmd.ExecuteScalar()!;
+        }
+
+        InsertEvents(tx, deliveryId, r);
+        InsertTripPoints(tx, deliveryId, r);
+
+        tx.Commit();
+    }
+
+    /// <summary>Deliveries as grid rows for the UI, newest first. Each row is
+    /// formatted in its own game's units, so an ATS run reads in miles even when an
+    /// ETS2 one sits next to it in the list.</summary>
+    public IEnumerable<DeliveryRow> RecentDeliveryRows(int limit, string unitSetting) {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, started_at_ms, source_city, destination_city, cargo,
+                   truck_make || ' ' || truck_model, actual_distance_km,
+                   COALESCE(revenue, offered_income), fines_count, collisions,
+                   validation_status, COALESCE(notes, ''), COALESCE(game, '')
+            FROM deliveries
+            ORDER BY started_at_ms DESC
+            LIMIT $limit;
+            """;
+        cmd.Parameters.AddWithValue("$limit", limit);
+
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read()) {
+            var game = reader.GetString(12);
+            var units = Units.For(unitSetting, game);
+            var km = reader.GetDouble(6);
+            var money = reader.GetDouble(7);
+            yield return new DeliveryRow {
+                Id = reader.GetInt64(0),
+                Datum = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(1)).LocalDateTime,
+                Hra = game,
+                Odkial = reader.GetString(2),
+                Kam = reader.GetString(3),
+                Naklad = reader.GetString(4),
+                Tahac = reader.GetString(5),
+                DistanceKm = km,
+                Vzdialenost = units.FormatDistance(km),
+                Zarobok = money,
+                Odmena = units.FormatMoney(money),
+                Pokuty = reader.GetInt32(8),
+                Kolizie = reader.IsDBNull(9) ? 0 : reader.GetInt32(9),
+                Stav = reader.GetString(10),
+                Poznamky = reader.GetString(11),
+            };
+        }
+    }
+
+    /// <summary>Game of the most recent delivery - what "auto" units follow for
+    /// aggregate figures that can't belong to one game.</summary>
+    public string? MostRecentGame() {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "SELECT game FROM deliveries ORDER BY started_at_ms DESC LIMIT 1;";
+        return cmd.ExecuteScalar() as string;
+    }
+
+    /// <summary>The event timeline of one delivery, oldest first.</summary>
+    public IEnumerable<TimelineRow> TimelineRows(long deliveryId) {
+        using var cmd = _conn.CreateCommand();
+        // Anomalies are debugging detail about the SDK, not things the driver did,
+        // so the timeline shows only real gameplay events.
+        cmd.CommandText = """
+            SELECT at_ms, event_type, value, extra_json
+            FROM events
+            WHERE delivery_id = $id AND event_type NOT LIKE 'anomaly:%'
+            ORDER BY at_ms;
+            """;
+        cmd.Parameters.AddWithValue("$id", deliveryId);
+
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read()) {
+            var extra = reader.IsDBNull(3) ? null : reader.GetString(3);
+            string detail = "";
+            if (extra != null) {
+                try {
+                    detail = Newtonsoft.Json.Linq.JObject.Parse(extra)["Detail"]?.ToString() ?? "";
+                } catch { detail = ""; }
+            }
+            yield return new TimelineRow {
+                Cas = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(0)).LocalDateTime.ToString("HH:mm:ss"),
+                Udalost = reader.GetString(1),
+                Hodnota = reader.IsDBNull(2) ? "" : reader.GetDouble(2).ToString("0.##"),
+                Detail = detail,
+            };
+        }
+    }
+
+    /// <summary>Free-text note the user can attach to a delivery (roadmap: "edit notes").</summary>
+    public void SetNotes(long deliveryId, string notes) {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "UPDATE deliveries SET notes = $notes WHERE id = $id;";
+        cmd.Parameters.AddWithValue("$notes", notes);
+        cmd.Parameters.AddWithValue("$id", deliveryId);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>One compact line per delivery, newest first - for `--list`. Each line
+    /// is in its own game's units.</summary>
+    public IEnumerable<string> RecentDeliveries(int limit, string unitSetting) {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT started_at_ms, source_city, destination_city, cargo,
+                   actual_distance_km, revenue, offered_income, validation_status,
+                   validation_flags, COALESCE(game, '')
+            FROM deliveries
+            ORDER BY started_at_ms DESC
+            LIMIT $limit;
+            """;
+        cmd.Parameters.AddWithValue("$limit", limit);
+
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read()) {
+            var startedAt = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(0)).LocalDateTime;
+            var source = reader.GetString(1);
+            var dest = reader.GetString(2);
+            var cargo = reader.GetString(3);
+            var units = Units.For(unitSetting, reader.GetString(9));
+            var distance = units.Distance(reader.GetDouble(4));
+            var revenue = reader.IsDBNull(5) ? reader.GetDouble(6) : reader.GetDouble(5);
+            var status = reader.GetString(7);
+            var flags = reader.GetString(8);
+            var flagsSuffix = string.IsNullOrEmpty(flags) ? "" : $" [{flags}]";
+            yield return $"{startedAt:yyyy-MM-dd HH:mm}  {source,-15} -> {dest,-15}  {cargo,-20}  "
+                       + $"{distance,7:0.0} {units.DistanceUnit,-3} {revenue,7:0} {units.Currency,-3} {status}{flagsSuffix}";
+        }
+    }
+
+    private void InsertEvents(SqliteTransaction tx, long deliveryId, JobRecord r) {
+        using var cmd = _conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = """
+            INSERT INTO events (delivery_id, at_ms, event_type, value, extra_json)
+            VALUES ($delivery_id, $at_ms, $event_type, $value, $extra_json);
+            """;
+        var pDeliveryId = cmd.Parameters.Add("$delivery_id", SqliteType.Integer);
+        var pAtMs = cmd.Parameters.Add("$at_ms", SqliteType.Integer);
+        var pType = cmd.Parameters.Add("$event_type", SqliteType.Text);
+        var pValue = cmd.Parameters.Add("$value", SqliteType.Real);
+        var pExtra = cmd.Parameters.Add("$extra_json", SqliteType.Text);
+
+        void AddEvent(long atMs, string type, double? value, object? extra) {
+            pDeliveryId.Value = deliveryId;
+            pAtMs.Value = atMs;
+            pType.Value = type;
+            pValue.Value = (object?)value ?? DBNull.Value;
+            pExtra.Value = extra == null ? DBNull.Value : JsonConvert.SerializeObject(extra);
+            cmd.ExecuteNonQuery();
+        }
+
+        // The timeline carries each event at the moment it happened, which is what
+        // makes a delivery readable after the fact. Counters stamped with the finish
+        // time (what this used to write) told you a fine happened but not where.
+        foreach (var ev in r.Timeline) {
+            AddEvent(ev.AtMs, ev.Type, ev.Value, ev.Detail == null ? null : new { ev.Detail });
+        }
+        foreach (var a in r.Anomalies) {
+            AddEvent(a.AtMs, $"anomaly:{a.Code}", a.Delta ?? a.MovedKm ?? a.ImpliedKmh, a);
+        }
+        // Only known once the job closes, so it genuinely belongs at the finish.
+        if (r.LateDelivery) AddEvent(r.FinishedAtMs, "late_delivery", r.MinutesLate, null);
+    }
+
+    private void InsertTripPoints(SqliteTransaction tx, long deliveryId, JobRecord r) {
+        using var cmd = _conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = """
+            INSERT INTO trip_points (delivery_id, at_ms, x, y, z, speed_kmh)
+            VALUES ($delivery_id, $at_ms, $x, $y, $z, $speed_kmh);
+            """;
+        var pDeliveryId = cmd.Parameters.Add("$delivery_id", SqliteType.Integer);
+        var pAtMs = cmd.Parameters.Add("$at_ms", SqliteType.Integer);
+        var pX = cmd.Parameters.Add("$x", SqliteType.Real);
+        var pY = cmd.Parameters.Add("$y", SqliteType.Real);
+        var pZ = cmd.Parameters.Add("$z", SqliteType.Real);
+        var pSpeed = cmd.Parameters.Add("$speed_kmh", SqliteType.Real);
+
+        foreach (var p in r.TripPoints) {
+            pDeliveryId.Value = deliveryId;
+            pAtMs.Value = p.AtMs;
+            pX.Value = p.X;
+            pY.Value = p.Y;
+            pZ.Value = p.Z;
+            pSpeed.Value = p.SpeedKmh;
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>All trip points for one delivery, in order - the raw material for a
+    /// future route replay/map view. Coordinates are the SDK's raw world-space
+    /// units, not GPS; no map projection exists yet (see project_vision memory).</summary>
+    public IEnumerable<(long AtMs, double X, double Y, double Z, double SpeedKmh)> TripPoints(long deliveryId) {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "SELECT at_ms, x, y, z, speed_kmh FROM trip_points WHERE delivery_id = $id ORDER BY at_ms";
+        cmd.Parameters.AddWithValue("$id", deliveryId);
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read()) {
+            yield return (reader.GetInt64(0), reader.GetDouble(1), reader.GetDouble(2), reader.GetDouble(3), reader.GetDouble(4));
+        }
+    }
+
+    /// <summary>Aggregate stats for `--stats`. Pass sinceMs to scope to a window
+    /// (e.g. this week); null means all-time.</summary>
+    public StatsSummary GetStats(long? sinceMs = null) {
+        var summary = new StatsSummary();
+
+        using (var cmd = _conn.CreateCommand()) {
+            cmd.CommandText = """
+                SELECT
+                    COUNT(*),
+                    SUM(CASE WHEN validation_status = 'accepted' THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN validation_status = 'review' THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN validation_status = 'rejected' THEN 1 ELSE 0 END),
+                    COALESCE(SUM(actual_distance_km), 0),
+                    COALESCE(SUM(revenue), 0),
+                    COALESCE(SUM(fuel_used_l), 0),
+                    COALESCE(SUM(driving_ms), 0),
+                    COALESCE(SUM(driving_game_min), 0),
+                    COALESCE(SUM(collisions), 0),
+                    COALESCE(SUM(late_delivery), 0),
+                    COALESCE(SUM(fines_total), 0)
+                FROM deliveries
+                WHERE $since IS NULL OR started_at_ms >= $since;
+                """;
+            cmd.Parameters.AddWithValue("$since", (object?)sinceMs ?? DBNull.Value);
+            using var reader = cmd.ExecuteReader();
+            if (reader.Read() && !reader.IsDBNull(0)) {
+                summary.TotalDeliveries = reader.GetInt32(0);
+                summary.Accepted = reader.IsDBNull(1) ? 0 : reader.GetInt32(1);
+                summary.Review = reader.IsDBNull(2) ? 0 : reader.GetInt32(2);
+                summary.Rejected = reader.IsDBNull(3) ? 0 : reader.GetInt32(3);
+                summary.TotalDistanceKm = reader.GetDouble(4);
+                summary.TotalRevenue = reader.GetDouble(5);
+                summary.TotalFuelL = reader.GetDouble(6);
+                summary.TotalDrivingMs = reader.GetInt64(7);
+                summary.TotalGameMinutes = reader.GetDouble(8);
+                summary.TotalCollisions = reader.GetInt32(9);
+                summary.LateDeliveries = reader.GetInt32(10);
+                summary.TotalFines = reader.GetDouble(11);
+            }
+        }
+
+        summary.FavoriteTruck = TopValue("truck_make || ' ' || truck_model", sinceMs);
+        summary.FavoriteRoute = TopValue("source_city || ' -> ' || destination_city", sinceMs);
+        summary.FavoriteCargo = TopValue("cargo", sinceMs);
+
+        return summary;
+    }
+
+    private string? TopValue(string groupExpr, long? sinceMs) {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT {groupExpr} AS v, COUNT(*) AS c
+            FROM deliveries
+            WHERE ($since IS NULL OR started_at_ms >= $since) AND {groupExpr} IS NOT NULL AND {groupExpr} != ''
+            GROUP BY v
+            ORDER BY c DESC
+            LIMIT 1;
+            """;
+        cmd.Parameters.AddWithValue("$since", (object?)sinceMs ?? DBNull.Value);
+        return cmd.ExecuteScalar() as string;
+    }
+
+    /// <summary>Dumps the deliveries table to CSV or JSON, per the roadmap's
+    /// "export CSV/JSON" MVP item. Column names match the SQL schema above.</summary>
+    public void Export(string path, string format) {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM deliveries ORDER BY started_at_ms;";
+        using var reader = cmd.ExecuteReader();
+        var columns = Enumerable.Range(0, reader.FieldCount).Select(reader.GetName).ToArray();
+
+        if (format == "json") {
+            var rows = new List<Dictionary<string, object?>>();
+            while (reader.Read()) {
+                var row = new Dictionary<string, object?>();
+                foreach (var c in columns) row[c] = reader.IsDBNull(reader.GetOrdinal(c)) ? null : reader.GetValue(reader.GetOrdinal(c));
+                rows.Add(row);
+            }
+            File.WriteAllText(path, JsonConvert.SerializeObject(rows, Formatting.Indented));
+            return;
+        }
+
+        using var writer = new StreamWriter(path);
+        writer.WriteLine(string.Join(",", columns));
+        while (reader.Read()) {
+            var cells = new string[reader.FieldCount];
+            for (var i = 0; i < reader.FieldCount; i++) {
+                cells[i] = CsvCell(reader.IsDBNull(i) ? "" : reader.GetValue(i).ToString() ?? "");
+            }
+            writer.WriteLine(string.Join(",", cells));
+        }
+    }
+
+    /// <summary>Writes a clean, consistent copy of the database to <paramref name="path"/>.
+    /// Uses VACUUM INTO rather than a file copy so it is safe to run while the tracker
+    /// is mid-delivery and holding the database open.</summary>
+    public string Backup(string? path = null) {
+        path ??= Path.Combine(DefaultDir(), "backups", $"deliveries-{DateTime.Now:yyyyMMdd-HHmmss}.db");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        if (File.Exists(path)) File.Delete(path); // VACUUM INTO refuses an existing target
+
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "VACUUM INTO $path;";
+        cmd.Parameters.AddWithValue("$path", path);
+        cmd.ExecuteNonQuery();
+        return path;
+    }
+
+    /// <summary>Replaces the live database with a backup. The current database is
+    /// backed up first and its path returned, so a restore is never a one-way door.
+    /// The store must be disposed afterwards - the connection now points at replaced
+    /// files - so this is static and takes paths rather than acting on an open store.</summary>
+    public static string RestoreFromBackup(string backupPath, string? dbPath = null) {
+        dbPath ??= DefaultPath();
+        if (!File.Exists(backupPath)) throw new FileNotFoundException("Zaloha neexistuje", backupPath);
+
+        // Verify it's actually a readable database with the expected table before
+        // overwriting anything.
+        using (var probe = new SqliteConnection($"Data Source={backupPath};Mode=ReadOnly")) {
+            probe.Open();
+            using var check = probe.CreateCommand();
+            check.CommandText = "SELECT COUNT(*) FROM deliveries;";
+            check.ExecuteScalar();
+        }
+        SqliteConnection.ClearAllPools();
+
+        var safety = Path.Combine(DefaultDir(), "backups", $"pred-obnovou-{DateTime.Now:yyyyMMdd-HHmmss}.db");
+        Directory.CreateDirectory(Path.GetDirectoryName(safety)!);
+        if (File.Exists(dbPath)) File.Copy(dbPath, safety, overwrite: true);
+
+        File.Copy(backupPath, dbPath, overwrite: true);
+        // SQLite side files would otherwise contradict the restored database.
+        foreach (var side in new[] { dbPath + "-wal", dbPath + "-shm" }) {
+            if (File.Exists(side)) File.Delete(side);
+        }
+        return safety;
+    }
+
+    private static string CsvCell(string s) =>
+        s.Contains(',') || s.Contains('"') || s.Contains('\n') ? "\"" + s.Replace("\"", "\"\"") + "\"" : s;
+
+    public void Dispose() {
+        _conn.Dispose();
+        GC.SuppressFinalize(this);
+    }
+}
+
+public class StatsSummary {
+    public int TotalDeliveries;
+    public int Accepted;
+    public int Review;
+    public int Rejected;
+    public double TotalDistanceKm;
+    public double TotalRevenue;
+    public double TotalFuelL;
+    public long TotalDrivingMs;
+    /// <summary>In-game minutes elapsed across all deliveries. Distances are in
+    /// simulated km, so average speed must divide by this, never by real time.</summary>
+    public double TotalGameMinutes;
+    public int TotalCollisions;
+    public int LateDeliveries;
+    public double TotalFines;
+    public string? FavoriteTruck;
+    public string? FavoriteRoute;
+    public string? FavoriteCargo;
+}

@@ -1,0 +1,21 @@
+# Build output
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json
+
+# Telemetry recordings and the local database live in
+# %LOCALAPPDATA%\TrucksBookOvercomer\ and never belong in the repo,
+# but ignore them here too in case anything ends up in the tree.
+*.jsonl
+*.db
+*.db-wal
+*.db-shm
+
+# Exports
+deliveries-*.csv
+deliveries-*.json
