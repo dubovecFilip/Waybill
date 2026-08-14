@@ -628,6 +628,9 @@ public class MainForm : Form {
         _log.ForeColor = Muted;
         _log.Font = new Font("Consolas", 8.5F);
         _log.IntegralHeight = false;
+        // Nothing follows from picking a log line, and the system highlight it draws
+        // is a bright blue bar that belongs to no part of this window.
+        _log.SelectionMode = SelectionMode.None;
         logBox.Controls.Add(_log);
 
         // Docked children stack in reverse order of adding, so add bottom-up.

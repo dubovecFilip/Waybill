@@ -112,8 +112,17 @@ live in `%LOCALAPPDATA%\Waybill\`, independent of where the exe sits.
 Start order does not matter, the app connects to the game as soon as it finds it.
 Jobs are detected and saved without any input.
 
-The top of the window shows the job in progress, the *Deliveries* tab holds the
-history with search, filter and notes, and the *Statistics* tab holds the summary.
+Three pages down the left. *Deliveries* is the history, with search, a filter, the
+verdict on each drive and its event timeline underneath.
+
+*Current job* is what the engine sees right now: the route, the cargo, and how far
+along the drive is.
+
+![The current job page](assets/screenshot-current-job.png)
+
+*Statistics* is the whole logbook at a glance, on one screen with no scrolling.
+
+![The statistics page](assets/screenshot-statistics.png)
 
 ## Command line
 
