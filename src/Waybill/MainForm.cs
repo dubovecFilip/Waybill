@@ -1104,7 +1104,10 @@ public class MainForm : Form {
                 r.Tahac.Contains(text, StringComparison.OrdinalIgnoreCase));
         }
 
-        _grid.DataSource = new SortableBindingList<DeliveryRow>(filtered.ToList());
+        _grid.DataSource = new SortableBindingList<DeliveryRow>(filtered.ToList(), new Dictionary<string, string> {
+            [nameof(DeliveryRow.Vzdialenost)] = nameof(DeliveryRow.DistanceKm),
+            [nameof(DeliveryRow.Odmena)] = nameof(DeliveryRow.Zarobok),
+        });
         // Raw metric values back the formatted columns; hide them but keep them
         // bound so sorting by distance/pay sorts numerically rather than by text.
         foreach (var hidden in new[] { nameof(DeliveryRow.Id), nameof(DeliveryRow.DistanceKm), nameof(DeliveryRow.Zarobok) }) {

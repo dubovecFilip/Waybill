@@ -47,8 +47,15 @@ public class SortableBindingList<T> : BindingList<T> {
     private bool _sorted;
     private ListSortDirection _direction;
     private PropertyDescriptor? _property;
+    private readonly Dictionary<string, string> _sortBy;
 
-    public SortableBindingList(IList<T> list) : base(list) { }
+    /// <summary><paramref name="sortBy"/> maps a displayed property to the one to
+    /// actually sort on. Distance and pay are shown as formatted text carrying a unit,
+    /// and sorting those as text puts 283,0 km before 64,5 km because the digit 2
+    /// comes before 6. The numbers behind them do the sorting instead.</summary>
+    public SortableBindingList(IList<T> list, Dictionary<string, string>? sortBy = null) : base(list) {
+        _sortBy = sortBy ?? new Dictionary<string, string>();
+    }
 
     protected override bool SupportsSortingCore => true;
     protected override bool IsSortedCore => _sorted;
@@ -56,14 +63,29 @@ public class SortableBindingList<T> : BindingList<T> {
     protected override PropertyDescriptor? SortPropertyCore => _property;
 
     protected override void ApplySortCore(PropertyDescriptor prop, ListSortDirection direction) {
+        // The glyph belongs on the column that was clicked, so the displayed property
+        // is remembered even when a different one does the comparing.
         _property = prop;
         _direction = direction;
 
+        var key = prop;
+        if (_sortBy.TryGetValue(prop.Name, out var numericName)
+            && TypeDescriptor.GetProperties(typeof(T))[numericName] is { } numeric) {
+            key = numeric;
+        }
+
         if (Items is List<T> items) {
             items.Sort((a, b) => {
-                var x = prop.GetValue(a) as IComparable;
-                var y = prop.GetValue(b);
-                var cmp = x?.CompareTo(y) ?? 0;
+                var x = key.GetValue(a);
+                var y = key.GetValue(b);
+                // Nulls sort last rather than throwing, which a missing payout would.
+                var cmp = (x, y) switch {
+                    (null, null) => 0,
+                    (null, _) => 1,
+                    (_, null) => -1,
+                    (IComparable c, _) => c.CompareTo(y),
+                    _ => 0,
+                };
                 return direction == ListSortDirection.Ascending ? cmp : -cmp;
             });
         }
