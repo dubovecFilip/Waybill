@@ -55,14 +55,24 @@ hra telemetriu neposiela a Waybill nemá čo sledovať.
 
 ### Samostatný .exe
 
+Príkaz sa spúšťa **z koreňového priečinka repozitára**, teda odtiaľ, kde leží
+`README.md`. Cesty v ňom sú relatívne, takže z iného miesta nebude fungovať.
+
 ```bash
 dotnet publish src/Waybill -c Release -r win-x64 -p:PublishSingleFile=true -o dist
 ```
 
-Výsledkom je jediný súbor `dist/Waybill.exe` s veľkosťou okolo 50 MB, ktorý beží
-aj na počítači bez nainštalovaného .NET. Nastavenia pre publish sú v
-`Waybill.csproj` schválne podmienené, pretože ako obyčajné vlastnosti by zasiahli
-aj bežný `dotnet build` a presunuli jeho výstup do podpriečinka.
+Výsledkom je jediný súbor `dist\Waybill.exe` s veľkosťou okolo 50 MB, ktorý beží
+aj na počítači bez nainštalovaného .NET. Dá sa presunúť alebo skopírovať kamkoľvek,
+databáza aj nahrávky sú v `%LOCALAPPDATA%\Waybill\` nezávisle od jeho umiestnenia.
+
+Priečinok `dist/` je v `.gitignore`, takže sa nedostane do repozitára. Vzniká
+v ňom aj `Waybill.pdb` so symbolmi na ladenie. Na rozdávanie ho netreba a dá sa
+vypnúť pridaním `-p:DebugType=none`.
+
+Nastavenia pre publish sú v `Waybill.csproj` schválne podmienené, pretože ako
+obyčajné vlastnosti by zasiahli aj bežný `dotnet build` a presunuli jeho výstup
+do podpriečinka.
 
 ## Používanie
 
