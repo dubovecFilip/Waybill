@@ -47,6 +47,11 @@ public class MainForm : Form {
 
         Strings.Language = _settings.Language;
 
+        // Before anything asks where the games are, including the menu built below.
+        foreach (var game in new[] { SimGame.Ats, SimGame.Ets2 }) {
+            GameLauncher.SetOverride(game, _settings.PathFor(game));
+        }
+
         BuildLayout();
 
         Load += (_, _) => StartEngine();
@@ -156,8 +161,69 @@ public class MainForm : Form {
         var pluginItem = new ToolStripMenuItem(Strings.T("menu.installPlugin"));
         pluginItem.Click += (_, _) => AfterMenuCloses(InstallPlugin);
         play.DropDownItems.Add(pluginItem);
+        play.DropDownItems.Add(BuildGamePathsMenu());
 
         return play;
+    }
+
+    /// <summary>Lets the games be pointed at by hand. The automatic search reads
+    /// Steam's own registry entries, which describe where Steam thinks things are:
+    /// that misses a game installed outside Steam entirely, and it can land on the
+    /// empty folder Steam leaves behind after a game is moved to another library.</summary>
+    private ToolStripMenuItem BuildGamePathsMenu() {
+        var paths = new ToolStripMenuItem(Strings.T("menu.gamePaths"));
+
+        foreach (var game in new[] { SimGame.Ats, SimGame.Ets2 }) {
+            // The current answer is on the label, so the menu doubles as a way to see
+            // which folder is being used without opening anything.
+            var current = _settings.PathFor(game) ?? GameLauncher.FindGameDirectory(game);
+            var shown = current ?? Strings.T("msg.gameNotFound");
+            var suffix = _settings.PathFor(game) == null ? $" ({Strings.T("msg.gamePathAutoNow")})" : "";
+
+            var item = new ToolStripMenuItem($"{GameLauncher.DisplayName(game)}...") { ToolTipText = shown + suffix };
+            item.Click += (_, _) => AfterMenuCloses(() => PickGameFolder(game));
+            paths.DropDownItems.Add(item);
+        }
+
+        paths.DropDownItems.Add(new ToolStripSeparator());
+        var auto = new ToolStripMenuItem(Strings.T("menu.gamePathAuto"));
+        auto.Click += (_, _) => AfterMenuCloses(() => {
+            foreach (var game in new[] { SimGame.Ats, SimGame.Ets2 }) {
+                _settings.SetPathFor(game, null);
+                GameLauncher.SetOverride(game, null);
+            }
+            _settings.Save();
+            AddLog(Strings.T("msg.gamePathCleared"));
+            BuildLayout();
+        });
+        paths.DropDownItems.Add(auto);
+
+        return paths;
+    }
+
+    private void PickGameFolder(SimGame game) {
+        using var dlg = new FolderBrowserDialog {
+            Description = $"{GameLauncher.DisplayName(game)}: {Strings.T("msg.pickGameFolder")}",
+            UseDescriptionForTitle = true,
+            SelectedPath = _settings.PathFor(game) ?? GameLauncher.FindGameDirectory(game) ?? "",
+        };
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+        // Checked the same way the automatic search checks a candidate, so a folder
+        // accepted here behaves exactly like one that was found on its own.
+        if (!GameLauncher.LooksLikeGameDirectory(game, dlg.SelectedPath)) {
+            MessageBox.Show(this, $"{Strings.T("msg.notGameFolder")}\n{dlg.SelectedPath}",
+                GameLauncher.DisplayName(game), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        _settings.SetPathFor(game, dlg.SelectedPath);
+        _settings.Save();
+        GameLauncher.SetOverride(game, dlg.SelectedPath);
+        AddLog($"{Strings.T("msg.gamePathSet")}: {dlg.SelectedPath}");
+
+        // The launch entries are enabled from what was found, so they are rebuilt.
+        BuildLayout();
     }
 
     /// <summary>

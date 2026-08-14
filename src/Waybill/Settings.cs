@@ -14,6 +14,18 @@ public class Settings {
     /// <summary>UI language code, see Strings.All.</summary>
     public string Language { get; set; } = "sk";
 
+    /// <summary>Where the games are installed, when the automatic search is wrong or
+    /// finds nothing: a non Steam copy, a library the registry does not list, or the
+    /// empty folder Steam leaves behind after moving a game. Null means search.</summary>
+    public string? AtsPath { get; set; }
+    public string? Ets2Path { get; set; }
+
+    public string? PathFor(SimGame game) => game == SimGame.Ats ? AtsPath : Ets2Path;
+
+    public void SetPathFor(SimGame game, string? path) {
+        if (game == SimGame.Ats) AtsPath = path; else Ets2Path = path;
+    }
+
     [JsonIgnore]
     public static string Path => System.IO.Path.Combine(DeliveryStore.DefaultDir(), "settings.json");
 

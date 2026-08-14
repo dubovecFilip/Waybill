@@ -21,6 +21,24 @@ public static class GameLauncher {
 
     public static int AppId(SimGame game) => game == SimGame.Ats ? AtsAppId : Ets2AppId;
 
+    /// <summary>Folders the user picked by hand, consulted before any search. Steam's
+    /// registry entries only describe Steam's own idea of where things are, and it is
+    /// wrong often enough (moved libraries, leftover folders, non Steam copies) that
+    /// there has to be a way to simply say where the game is.</summary>
+    private static readonly Dictionary<SimGame, string> Overrides = new();
+
+    public static void SetOverride(SimGame game, string? path) {
+        if (string.IsNullOrWhiteSpace(path)) Overrides.Remove(game);
+        else Overrides[game] = path;
+    }
+
+    public static string? GetOverride(SimGame game) => Overrides.TryGetValue(game, out var p) ? p : null;
+
+    /// <summary>Whether a folder really holds this game, which is the same question
+    /// the automatic search asks: is the executable in it.</summary>
+    public static bool LooksLikeGameDirectory(SimGame game, string path) =>
+        File.Exists(Path.Combine(path, "bin", "win_x64", ExecutableName(game)));
+
     public static string DisplayName(SimGame game) =>
         game == SimGame.Ats ? "American Truck Simulator" : "Euro Truck Simulator 2";
 
@@ -45,6 +63,10 @@ public static class GameLauncher {
     /// any drive, so the registry's library list is consulted rather than guessing
     /// at Program Files.</summary>
     public static string? FindGameDirectory(SimGame game) {
+        // A folder the user pointed at wins outright, including over a working
+        // automatic result: it was set precisely because the search was wrong.
+        if (GetOverride(game) is { } chosen) return Directory.Exists(chosen) ? chosen : null;
+
         foreach (var library in SteamLibraries()) {
             var candidate = Path.Combine(library, "steamapps", "common", FolderName(game));
 
