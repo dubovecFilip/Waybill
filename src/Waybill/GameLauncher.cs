@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Compression;
 using System.Linq;
 using Microsoft.Win32;
 
@@ -25,6 +26,8 @@ public static class GameLauncher {
 
     private static string FolderName(SimGame game) => DisplayName(game);
 
+    private static string ExecutableName(SimGame game) => game == SimGame.Ats ? "amtrucks.exe" : "eurotrucks2.exe";
+
     /// <summary>Whether the game appears to be installed. Used to grey out the
     /// launch entry rather than offering something that can only fail.</summary>
     public static bool IsInstalled(SimGame game) => FindGameDirectory(game) != null;
@@ -44,7 +47,13 @@ public static class GameLauncher {
     public static string? FindGameDirectory(SimGame game) {
         foreach (var library in SteamLibraries()) {
             var candidate = Path.Combine(library, "steamapps", "common", FolderName(game));
-            if (Directory.Exists(candidate)) return candidate;
+
+            // The executable, not just the folder. Moving a game to another library
+            // leaves the old folder behind, empty apart from a bin\win_x64\plugins
+            // tree, and matching on the folder alone picks that ghost: the plugin
+            // then reads as missing while it sits installed in the copy actually
+            // being played, and installing it writes into a folder no game reads.
+            if (File.Exists(Path.Combine(candidate, "bin", "win_x64", ExecutableName(game)))) return candidate;
         }
         return null;
     }
@@ -72,7 +81,8 @@ public static class GameLauncher {
 
     /// <summary>Looks for the telemetry plugin shipped with this project, so the
     /// usual case needs no file picker at all. Checks next to the executable first
-    /// (published layout), then the repository's third-party folder.</summary>
+    /// (published layout), then the repository's third-party folder, which ships the
+    /// plugin as the upstream release zip rather than a loose DLL.</summary>
     public static string? FindBundledPlugin() {
         var candidates = new List<string>();
         var baseDir = AppContext.BaseDirectory;
@@ -83,11 +93,40 @@ public static class GameLauncher {
         // Walk up from the executable towards the repository root looking for
         // third-party/, which holds the plugin release.
         var dir = new DirectoryInfo(baseDir);
+        var zips = new List<string>();
         for (var i = 0; i < 6 && dir != null; i++, dir = dir.Parent) {
-            candidates.Add(Path.Combine(dir.FullName, "third-party", "scs-telemetry.dll"));
+            var thirdParty = Path.Combine(dir.FullName, "third-party");
+            candidates.Add(Path.Combine(thirdParty, "scs-telemetry.dll"));
+            if (Directory.Exists(thirdParty)) zips.AddRange(Directory.GetFiles(thirdParty, "*scs-telemetry*.zip"));
         }
 
-        return candidates.FirstOrDefault(File.Exists);
+        return candidates.FirstOrDefault(File.Exists) ?? zips.Select(ExtractFromZip).FirstOrDefault(p => p != null);
+    }
+
+    /// <summary>Pulls Win64/scs-telemetry.dll out of an upstream release zip into a
+    /// folder of our own and hands back the path. The zip is what the project ships,
+    /// so without this the "bundled" plugin could never be found and every install
+    /// fell through to asking the user to go and find the file themselves.</summary>
+    private static string? ExtractFromZip(string zipPath) {
+        try {
+            using var zip = ZipFile.OpenRead(zipPath);
+            var entry = zip.Entries.FirstOrDefault(e =>
+                e.FullName.EndsWith("Win64/scs-telemetry.dll", StringComparison.OrdinalIgnoreCase));
+            if (entry == null) return null;
+
+            var target = Path.Combine(Storage.DeliveryStore.DefaultDir(), "plugin", "scs-telemetry.dll");
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+
+            // Re-extract only when the zip is newer, so the copy stays current if the
+            // bundled release is ever updated without needing a version check.
+            if (!File.Exists(target) || File.GetLastWriteTimeUtc(zipPath) > File.GetLastWriteTimeUtc(target)) {
+                entry.ExtractToFile(target, overwrite: true);
+            }
+            return target;
+        } catch {
+            // A damaged or unreadable zip just means falling back to the file picker.
+            return null;
+        }
     }
 
     public static bool IsPluginInstalled(SimGame game) {

@@ -267,7 +267,6 @@ Application.SetCompatibleTextRenderingDefault(false);
 // Anything that escapes an event handler would otherwise take the window down
 // with no explanation, or leave it wedged. Show it and write it down instead:
 // a tracker that quietly dies mid-delivery is worse than one that complains.
-Application.ThreadException += (_, e) => ReportCrash(e.Exception, fatal: false);
 AppDomain.CurrentDomain.UnhandledException += (_, e) => ReportCrash(e.ExceptionObject as Exception, fatal: true);
 
 void ReportCrash(Exception? ex, bool fatal) {
@@ -286,4 +285,23 @@ void ReportCrash(Exception? ex, bool fatal) {
         "Waybill", MessageBoxButtons.OK, MessageBoxIcon.Error);
 }
 
-Application.Run(new MainForm());
+// The window has to run on a single threaded COM apartment. Every file dialog is
+// a shell COM object, and on a multithreaded apartment showing one disables the
+// owner window and then never returns: no dialog ever appears, the message loop
+// stops, and Windows ends the process as an AppHang - which is not an exception,
+// so nothing reaches the handlers above and errors.log stays empty. An entry
+// point normally declares this with [STAThread], but this file uses top level
+// statements and the compiler generates its entry point without one, so the
+// window gets a thread that carries the apartment instead.
+var ui = new Thread(RunWindow) { Name = "waybill-ui" };
+ui.SetApartmentState(ApartmentState.STA);
+ui.Start();
+ui.Join();
+
+void RunWindow() {
+    // Registered here rather than next to the AppDomain handler: this one applies
+    // to whichever thread adds it, so on the main thread it would never fire for
+    // anything thrown inside the message loop.
+    Application.ThreadException += (_, e) => ReportCrash(e.Exception, fatal: false);
+    Application.Run(new MainForm());
+}
