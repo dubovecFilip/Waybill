@@ -32,6 +32,15 @@ public static class SessionFiles {
     public static string Compress(string path) {
         if (!File.Exists(path) || path.EndsWith(CompressedExtension, StringComparison.OrdinalIgnoreCase)) return path;
 
+        // Starting the app without the game running records nothing, and packing that
+        // leaves an empty archive behind. They pile up fast (28 of 42 recordings on
+        // one machine), bury the real ones, and an empty or truncated archive is not
+        // valid gzip, so anything walking the folder trips over it.
+        if (new FileInfo(path).Length == 0) {
+            try { File.Delete(path); } catch { /* it will be picked up on the next start */ }
+            return path;
+        }
+
         var target = path + ".gz";
         try {
             using (var source = File.OpenRead(path))
@@ -59,6 +68,15 @@ public static class SessionFiles {
         foreach (var path in Directory.EnumerateFiles(directory, "*" + Extension)) {
             if (skip != null && string.Equals(path, skip, StringComparison.OrdinalIgnoreCase)) continue;
             if (Compress(path) != path) packed++;
+        }
+
+        // Empty archives from before the check above, plus any left by a process that
+        // died mid-compress. Zero bytes is not a recording that failed to pack, it is
+        // not a gzip stream at all, so there is nothing in one to lose.
+        foreach (var path in Directory.EnumerateFiles(directory, "*" + CompressedExtension)) {
+            try {
+                if (new FileInfo(path).Length == 0) File.Delete(path);
+            } catch { /* not worth failing a start over */ }
         }
         return packed;
     }
