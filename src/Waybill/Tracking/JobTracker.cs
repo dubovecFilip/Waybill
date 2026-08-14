@@ -13,6 +13,16 @@ public class TrackerConfig {
     public double MaxTickMs = 10000;
     // How much over the posted limit counts as speeding.
     public double SpeedingToleranceKmh = 5;
+    // Driving style is a separate question from "was the limit exceeded at all".
+    // Everybody drifts a little over, and being a few km/h above for a while is not
+    // what anyone means by driving like a pirate, so the style measure only counts
+    // being clearly over. Ten above stays acceptable; past that it is deliberate.
+    public double StyleSpeedingToleranceKmh = 10;
+    // Share of driving time clearly over the limit that separates the two styles.
+    public double StyleSpeedingShareMax = 0.05;
+    // Collisions barely enter into it: one bad moment on a long haul says nothing
+    // about how someone drives. Only a run of them does.
+    public int StyleCollisionsMax = 3;
     // A job shorter than this is almost certainly a bug or an abuse attempt.
     public double MinPlausibleDistanceKm = 0.5;
     // The odometer counts simulated km at the game's compressed time rate, so at
@@ -96,6 +106,9 @@ public class JobState {
     public long DrivingMs;
     public long PausedMs;
     public long SpeedingMs;
+    /// <summary>Time spent clearly over the limit, not merely over it. Feeds the
+    /// driving style; <see cref="SpeedingMs"/> stays the strict measure.</summary>
+    public long HardSpeedingMs;
     public double TopSpeedKmh;
     public List<FineRecord> Fines = new();
     public double Tolls;
@@ -331,6 +344,7 @@ public class JobTracker {
             DrivingMs = j.DrivingMs,
             PausedMs = j.PausedMs,
             SpeedingShare = j.DrivingMs > 0 ? Math.Round((double)j.SpeedingMs / j.DrivingMs, 4) : 0,
+            HardSpeedingShare = j.DrivingMs > 0 ? Math.Round((double)j.HardSpeedingMs / j.DrivingMs, 4) : 0,
             Fines = j.Fines,
             TollsPaid = j.Tolls,
             FerriesUsed = j.Ferries,
@@ -343,6 +357,9 @@ public class JobTracker {
             Timeline = j.Timeline,
             TripPoints = j.TripPoints,
         };
+        record.DrivingStyle = j.Fines.Count == 0
+            && record.HardSpeedingShare < 0.05
+            && j.Collisions < 3 ? "clean" : "race";
         record.Anomalies.Add(new Anomaly { AtMs = nowMs, Code = "abandoned" });
         // Not rejected: nothing here suggests the driving was faked, only that it was
         // never finished, which the cancelled outcome already says.
@@ -615,6 +632,9 @@ public class JobTracker {
         if (snap.SpeedLimitKmh > 0 && snap.Truck.SpeedKmh > snap.SpeedLimitKmh + _config.SpeedingToleranceKmh) {
             j.SpeedingMs += dtMs;
         }
+        if (snap.SpeedLimitKmh > 0 && snap.Truck.SpeedKmh > snap.SpeedLimitKmh + _config.StyleSpeedingToleranceKmh) {
+            j.HardSpeedingMs += dtMs;
+        }
 
         RecordEvents(snap, j, found, inGrace, nowMs);
 
@@ -773,8 +793,24 @@ public class JobTracker {
             record.Penalty = jc.Penalty;
         }
 
+        record.HardSpeedingShare = j.DrivingMs > 0 ? Math.Round((double)j.HardSpeedingMs / j.DrivingMs, 4) : 0;
+        record.DrivingStyle = Style(record, j.Fines.Count, j.Collisions);
         record.Validation = Validate(record);
         return record;
+    }
+
+    /// <summary>Which of the two ways this delivery was driven. Someone keeping to the
+    /// rules and someone treating the road as a track are not the same category and
+    /// their numbers should not be compared, but neither of them is doing anything
+    /// wrong, so this never touches the verdict.
+    ///
+    /// Read from what was measured rather than declared up front, which means it can
+    /// be derived again for every past delivery from its recording.</summary>
+    private string Style(JobRecord record, int fines, int collisions) {
+        var clean = fines == 0
+            && record.HardSpeedingShare < _config.StyleSpeedingShareMax
+            && collisions < _config.StyleCollisionsMax;
+        return clean ? "clean" : "race";
     }
 
     /// <summary>

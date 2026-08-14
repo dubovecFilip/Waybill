@@ -41,6 +41,8 @@ public class DeliveryStore : IDisposable {
     /// </summary>
     private void MigrateSchema() {
         var expected = new (string Table, string Column, string Definition)[] {
+            ("deliveries", "driving_style", "TEXT"),
+            ("deliveries", "hard_speeding_share", "REAL"),
             ("deliveries", "world_distance_km", "REAL"),
             ("deliveries", "sim_speed_distance_km", "REAL"),
             ("deliveries", "driving_game_min", "REAL"),
@@ -120,6 +122,8 @@ public class DeliveryStore : IDisposable {
                 driving_ms              INTEGER,
                 paused_ms               INTEGER,
                 speeding_share          REAL,
+                hard_speeding_share     REAL,
+                driving_style           TEXT,
                 truck_damage_pct        REAL,
                 trailer_damage_pct      REAL,
                 cargo_damage_pct        REAL,
@@ -189,7 +193,7 @@ public class DeliveryStore : IDisposable {
                     world_distance_km, sim_speed_distance_km, driving_game_min, delivery_time_min,
                     offered_income, revenue, penalty,
                     fuel_used_l, avg_consumption_l_100km, top_speed_kmh,
-                    driving_ms, paused_ms, speeding_share,
+                    driving_ms, paused_ms, speeding_share, hard_speeding_share, driving_style,
                     truck_damage_pct, trailer_damage_pct, cargo_damage_pct,
                     tolls_paid, ferries_used, refuels, collisions, late_delivery, minutes_late,
                     cruise_control_share, rest_stops, rest_minutes,
@@ -204,7 +208,7 @@ public class DeliveryStore : IDisposable {
                     $world_distance_km, $sim_speed_distance_km, $driving_game_min, $delivery_time_min,
                     $offered_income, $revenue, $penalty,
                     $fuel_used_l, $avg_consumption_l_100km, $top_speed_kmh,
-                    $driving_ms, $paused_ms, $speeding_share,
+                    $driving_ms, $paused_ms, $speeding_share, $hard_speeding_share, $driving_style,
                     $truck_damage_pct, $trailer_damage_pct, $cargo_damage_pct,
                     $tolls_paid, $ferries_used, $refuels, $collisions, $late_delivery, $minutes_late,
                     $cruise_control_share, $rest_stops, $rest_minutes,
@@ -247,6 +251,8 @@ public class DeliveryStore : IDisposable {
             cmd.Parameters.AddWithValue("$driving_ms", r.DrivingMs);
             cmd.Parameters.AddWithValue("$paused_ms", r.PausedMs);
             cmd.Parameters.AddWithValue("$speeding_share", r.SpeedingShare);
+            cmd.Parameters.AddWithValue("$hard_speeding_share", r.HardSpeedingShare);
+            cmd.Parameters.AddWithValue("$driving_style", r.DrivingStyle);
             cmd.Parameters.AddWithValue("$truck_damage_pct", r.TruckDamage);
             cmd.Parameters.AddWithValue("$trailer_damage_pct", r.TrailerDamage);
             cmd.Parameters.AddWithValue("$cargo_damage_pct", (object?)r.DeliveredCargoDamage ?? DBNull.Value);
@@ -390,8 +396,15 @@ public class DeliveryStore : IDisposable {
             cmd.CommandText = """
                 SELECT id, started_at_ms, source_city, destination_city, cargo,
                        truck_make || ' ' || truck_model, actual_distance_km,
-                       COALESCE(revenue, offered_income), fines_count, collisions,
-                       validation_status, COALESCE(notes, ''), COALESCE(game, '')
+                       -- Only a delivery that arrived earns anything. Falling back to
+                       -- the offer for every row showed a cancelled job as if its
+                       -- money had been paid; what it actually did was cost a penalty.
+                       CASE WHEN outcome = 'delivered' OR source = 'trucksbook'
+                            THEN COALESCE(revenue, offered_income)
+                            ELSE -COALESCE(penalty, 0) END,
+                       fines_count, collisions,
+                       validation_status, COALESCE(notes, ''), COALESCE(game, ''),
+                       COALESCE(outcome, ''), COALESCE(driving_style, '')
                 FROM deliveries
                 ORDER BY started_at_ms DESC
                 LIMIT $limit;
@@ -418,6 +431,8 @@ public class DeliveryStore : IDisposable {
                     Odmena = units.FormatMoney(money),
                     Pokuty = reader.GetInt32(8),
                     Kolizie = reader.IsDBNull(9) ? 0 : reader.GetInt32(9),
+                    Vysledok = reader.GetString(13),
+                    Styl = reader.GetString(14),
                     Stav = reader.GetString(10),
                     Poznamky = reader.GetString(11),
                 });

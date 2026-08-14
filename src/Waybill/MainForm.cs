@@ -660,6 +660,8 @@ public class MainForm : Form {
                 [nameof(DeliveryRow.Odmena)] = Strings.T("col.pay"),
                 [nameof(DeliveryRow.Pokuty)] = Strings.T("col.fines"),
                 [nameof(DeliveryRow.Kolizie)] = Strings.T("col.collisions"),
+                [nameof(DeliveryRow.Vysledok)] = Strings.T("col.outcome"),
+                [nameof(DeliveryRow.Styl)] = Strings.T("col.style"),
                 [nameof(DeliveryRow.Stav)] = Strings.T("col.status"),
                 [nameof(DeliveryRow.Poznamky)] = Strings.T("col.notes"),
             };

@@ -47,6 +47,15 @@ public class TripPoint {
 public class JobRecord {
     public string JobUid = "";
     public string Outcome = ""; // delivered | cancelled | unresolved | reloaded
+
+    /// <summary>How the delivery was driven: "clean" or "race". Derived from what was
+    /// measured, never chosen in advance, so it can be recomputed for old deliveries
+    /// from their recordings. Informational only, exactly like the assists: it sorts
+    /// deliveries into comparable groups and never affects the verdict.</summary>
+    public string DrivingStyle = "";
+    /// <summary>Share of driving time spent clearly over the limit, which is what the
+    /// style is judged on. <see cref="SpeedingShare"/> remains the strict measure.</summary>
+    public double HardSpeedingShare;
     public string Game = "";
     public string GameVersion = "";
     public long StartedAtMs;

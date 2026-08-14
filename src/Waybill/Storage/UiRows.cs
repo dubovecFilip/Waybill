@@ -21,6 +21,11 @@ public class DeliveryRow {
     public string Odmena { get; set; } = "";
     public int Pokuty { get; set; }
     public int Kolizie { get; set; }
+    /// <summary>How the job ended. Without it a cancelled job is indistinguishable
+    /// from a delivered one in the list.</summary>
+    public string Vysledok { get; set; } = "";
+    /// <summary>Driving style, derived from how the delivery was actually driven.</summary>
+    public string Styl { get; set; } = "";
     public string Stav { get; set; } = "";
     public string Poznamky { get; set; } = "";
 }

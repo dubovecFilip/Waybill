@@ -29,6 +29,24 @@ Column `validation_status`. One per delivery, derived from the flags.
 | `rejected` | At least one flag that is direct evidence the driving did not happen |
 | `imported` | Came from a TrucksBook export, so there is no telemetry to check |
 
+## Driving style
+
+Column `driving_style`. Derived from how the delivery was actually driven, never
+chosen in advance, so it can be worked out again for any past delivery from its
+recording. It sorts deliveries into groups worth comparing with each other and
+has no effect on the verdict.
+
+| Value | Meaning |
+|---|---|
+| `clean` | No fines, under 5% of driving time clearly over the limit, fewer than 3 collisions |
+| `race` | Anything else |
+
+"Clearly over" means more than 10 km/h above the posted limit, stored separately
+as `hard_speeding_share`. Drifting a few km/h over is not what anyone means by
+driving like a pirate, so it does not count here; `speeding_share` remains the
+strict measure of any excess at all. Collisions barely enter into it, since one
+bad moment on a long haul says nothing about how someone drives.
+
 ## Validation flags
 
 Column `validation_flags`, comma separated. Three of them reject; the rest are
