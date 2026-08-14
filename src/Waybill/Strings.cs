@@ -54,6 +54,7 @@ public static class Strings {
         ["menu.folder.sessions"] = "Priečinok s nahrávkami",
 
         // tabs and toolbar
+        ["tab.live"] = "Aktuálna zákazka",
         ["tab.deliveries"] = "Zásielky",
         ["tab.stats"] = "Štatistiky",
         ["search.placeholder"] = "hľadať mesto / náklad / ťahač...",
@@ -217,6 +218,7 @@ public static class Strings {
         ["menu.folder.backups"] = "Backups folder",
         ["menu.folder.sessions"] = "Recordings folder",
 
+        ["tab.live"] = "Current job",
         ["tab.deliveries"] = "Deliveries",
         ["tab.stats"] = "Statistics",
         ["search.placeholder"] = "search city / cargo / truck...",

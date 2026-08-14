@@ -277,6 +277,10 @@ ui.Start();
 ui.Join();
 
 void RunWindow() {
+    // Before any window exists: it decides which theme the system draws scrollbars
+    // and other non-client parts in for this process.
+    MainForm.UseDarkAppMode();
+
     // Registered here rather than next to the AppDomain handler: this one applies
     // to whichever thread adds it, so on the main thread it would never fire for
     // anything thrown inside the message loop.

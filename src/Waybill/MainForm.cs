@@ -103,7 +103,13 @@ public class MainForm : Form {
 
         BuildLayout();
 
-        Load += (_, _) => { UseDarkTitleBar(); StartEngine(); };
+        Load += (_, _) => {
+            UseDarkTitleBar();
+            UseDarkScrollbars(this);
+            StartEngine();
+        };
+        // Rebuilt controls are new windows, so they need asking again.
+        Shown += (_, _) => UseDarkScrollbars(this);
         FormClosing += (_, _) => _engine?.Dispose();
 
         var timer = new System.Windows.Forms.Timer { Interval = 500 };
@@ -123,20 +129,19 @@ public class MainForm : Form {
 
         var content = BuildContent();
         var sidebar = BuildSidebar();
-        var live = BuildLivePanel();
         var menu = BuildMenu();
 
         // Docked children stack in reverse order of adding, so the filling one goes
         // in first and the outermost edges last.
         Controls.Add(content);
         Controls.Add(sidebar);
-        Controls.Add(live);
         Controls.Add(menu);
         MainMenuStrip = menu;
 
         ReloadHistory();
         ReloadStats();
         ShowPage(_page);
+        UseDarkScrollbars(this);
     }
 
     // ---------- sidebar ----------
@@ -151,6 +156,7 @@ public class MainForm : Form {
         // Added bottom-up so the first entry ends up on top.
         bar.Controls.Add(NavButton("stats", Strings.T("tab.stats")));
         bar.Controls.Add(NavButton("deliveries", Strings.T("tab.deliveries")));
+        bar.Controls.Add(NavButton("live", Strings.T("tab.live")));
         bar.Controls.Add(edge);
         return bar;
     }
@@ -200,11 +206,14 @@ public class MainForm : Form {
         _content.BackColor = Canvas;
         _content.Controls.Clear();
 
+        var live = BuildLivePage();
+        live.Tag = "live";
         var deliveries = BuildHistoryPage();
         deliveries.Tag = "deliveries";
         var stats = BuildStatsPage();
         stats.Tag = "stats";
 
+        _content.Controls.Add(live);
         _content.Controls.Add(deliveries);
         _content.Controls.Add(stats);
         return _content;
@@ -560,10 +569,15 @@ public class MainForm : Form {
 
     // ---------- live panel ----------
 
-    private Control BuildLivePanel() {
-        var panel = new Panel { Dock = DockStyle.Top, Height = 150 };
+    /// <summary>What the engine is doing right now, as a page of its own rather than a
+    /// strip above everything else. It only matters while driving, and as a permanent
+    /// header it took height from the delivery list for the sake of two empty lines
+    /// whenever no game was running.</summary>
+    private Control BuildLivePage() {
+        var page = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16), BackColor = Canvas };
+        var panel = new Panel { Dock = DockStyle.Fill };
         panel.BackColor = Surface;
-        panel.Padding = new Padding(20, 10, 20, 0);
+        panel.Padding = new Padding(24, 20, 24, 16);
 
         _status.Text = Strings.T("live.starting");
         _status.Dock = DockStyle.Top;
@@ -616,16 +630,15 @@ public class MainForm : Form {
         _log.IntegralHeight = false;
         logBox.Controls.Add(_log);
 
-        var edge = new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = Line };
-
         // Docked children stack in reverse order of adding, so add bottom-up.
         panel.Controls.Add(logBox);
         panel.Controls.Add(progressRow);
         panel.Controls.Add(_jobDetail);
         panel.Controls.Add(_jobLine);
         panel.Controls.Add(_status);
-        panel.Controls.Add(edge);
-        return panel;
+
+        page.Controls.Add(panel);
+        return page;
     }
 
     private void StartEngine() {
@@ -719,13 +732,21 @@ public class MainForm : Form {
             Padding = new Padding(0, 3, 0, 3),
         };
 
-        _search.Width = 240;
-        _search.Margin = new Padding(0, 3, 8, 3);
+        // A TextBox has no padding of its own, so its text sits hard against the
+        // border on both sides. Wrapping it in a panel that carries the background and
+        // the padding gives the text room to sit in without touching anything.
         _search.PlaceholderText = Strings.T("search.placeholder");
-        _search.BorderStyle = BorderStyle.FixedSingle;
+        _search.BorderStyle = BorderStyle.None;
         _search.BackColor = Raised;
         _search.ForeColor = Ink;
+        _search.Dock = DockStyle.Fill;
         _search.TextChanged += (_, _) => ApplyFilter();
+
+        var searchBox = new Panel {
+            Width = 260, Height = 28, Margin = new Padding(0, 3, 8, 3),
+            BackColor = Raised, Padding = new Padding(10, 6, 10, 4),
+        };
+        searchBox.Controls.Add(_search);
 
         _statusFilter.Width = 130;
         _statusFilter.Margin = new Padding(0, 3, 16, 3);
@@ -746,7 +767,7 @@ public class MainForm : Form {
         // Only what changes the view of the list. Exporting, backing up and restoring
         // used to sit here too, which put "show me fewer rows" and "replace the whole
         // database" one button apart; they live under Data now.
-        bar.Controls.Add(_search);
+        bar.Controls.Add(searchBox);
         bar.Controls.Add(_statusFilter);
         bar.Controls.Add(MakeButton(Strings.T("button.refresh"), () => { ReloadHistory(); ReloadStats(); }));
 
@@ -967,6 +988,31 @@ public class MainForm : Form {
             var on = 1;
             DwmSetWindowAttribute(Handle, 20, ref on, sizeof(int));
         } catch { /* an older Windows just keeps the light title bar */ }
+    }
+
+    // Scrollbars are drawn by the system, not by the control, so no amount of
+    // BackColor reaches them and a dark window keeps bright white bars down its
+    // side. Windows does have a dark set, reachable only through these two: an
+    // undocumented uxtheme export to put the process in dark mode, and then asking
+    // each scrolling control for the dark variant of the Explorer theme.
+    [System.Runtime.InteropServices.DllImport("uxtheme.dll", EntryPoint = "#135", SetLastError = true)]
+    private static extern int SetPreferredAppMode(int mode);
+
+    [System.Runtime.InteropServices.DllImport("uxtheme.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern int SetWindowTheme(IntPtr hwnd, string subAppName, string? subIdList);
+
+    internal static void UseDarkAppMode() {
+        try { SetPreferredAppMode(2); } catch { /* older Windows has no dark mode to ask for */ }
+    }
+
+    /// <summary>Applies the dark scrollbars to a control and everything inside it.
+    /// Handles have to exist first, so this runs once the window is up.</summary>
+    private static void UseDarkScrollbars(Control root) {
+        try {
+            if (root.IsHandleCreated) SetWindowTheme(root.Handle, "DarkMode_Explorer", null);
+        } catch { /* not worth failing over a scrollbar */ }
+
+        foreach (Control child in root.Controls) UseDarkScrollbars(child);
     }
 
     /// <summary>Statistics as a wall of tiles rather than a block of monospaced text.
