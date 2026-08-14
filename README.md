@@ -59,6 +59,9 @@ restarting the tracker mid delivery: each of these looks alarming in raw
 telemetry, and each is identified for what it is instead of counting against the
 driver.
 
+Every state, flag and anomaly is listed with its meaning in
+[`docs/reference.md`](docs/reference.md).
+
 ## Features
 
 * Detects the start and the end of a job with no manual input
