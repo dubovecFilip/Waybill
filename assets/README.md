@@ -2,7 +2,7 @@
 
 | File | Purpose |
 |---|---|
-| `logo.png` | Full resolution logo (1000x1000). Source for the application icon. |
+| `logo.png` | Full resolution logo (700x700). Source for the application icon. |
 | `logo.psd` | Layered source file for editing the logo. |
 
 The application icon `src/Waybill/waybill.ico` is generated from `logo.png` and
