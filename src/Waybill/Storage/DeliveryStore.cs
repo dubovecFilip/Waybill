@@ -521,6 +521,61 @@ public class DeliveryStore : IDisposable {
     }
 
     /// <summary>Free-text note the user can attach to a delivery (roadmap: "edit notes").</summary>
+    /// <summary>Everything about one delivery, for the detail card. The list itself
+    /// carries only what is worth scanning; the rest is fetched when one is opened.</summary>
+    public DeliveryDetail? Detail(long id) {
+        lock (_gate) {
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT started_at_ms, finished_at_ms, game, source_city, source_company,
+                       destination_city, destination_company, cargo, cargo_mass_kg,
+                       truck_make || ' ' || truck_model, COALESCE(trailer_name, ''),
+                       planned_distance_km, actual_distance_km, reported_distance_km,
+                       COALESCE(revenue, 0), offered_income, COALESCE(penalty, 0),
+                       fuel_used_l, avg_consumption_l_100km, top_speed_kmh,
+                       speeding_share, COALESCE(hard_speeding_share, 0), cruise_control_share,
+                       truck_damage_pct, trailer_damage_pct,
+                       driving_game_min, real_duration_ms, rest_stops, rest_minutes,
+                       fines_count, fines_total, collisions, tolls_paid, ferries_used, refuels,
+                       outcome, validation_status, COALESCE(validation_flags, ''),
+                       COALESCE(driving_style, ''), COALESCE(notes, ''), COALESCE(source, '')
+                FROM deliveries WHERE id = $id;
+                """;
+            cmd.Parameters.AddWithValue("$id", id);
+
+            using var r = cmd.ExecuteReader();
+            if (!r.Read()) return null;
+
+            double? Opt(int i) => r.IsDBNull(i) ? null : r.GetDouble(i);
+            double Num(int i) => r.IsDBNull(i) ? 0 : r.GetDouble(i);
+
+            return new DeliveryDetail {
+                Id = id,
+                StartedAt = DateTimeOffset.FromUnixTimeMilliseconds(r.GetInt64(0)).LocalDateTime,
+                FinishedAt = DateTimeOffset.FromUnixTimeMilliseconds(r.GetInt64(1)).LocalDateTime,
+                Game = r.GetString(2),
+                SourceCity = r.GetString(3), SourceCompany = r.IsDBNull(4) ? "" : r.GetString(4),
+                DestinationCity = r.GetString(5), DestinationCompany = r.IsDBNull(6) ? "" : r.GetString(6),
+                Cargo = r.IsDBNull(7) ? "" : r.GetString(7), CargoMassKg = Num(8),
+                Truck = r.IsDBNull(9) ? "" : r.GetString(9), Trailer = r.GetString(10),
+                PlannedDistanceKm = Num(11), DistanceKm = Num(12), ReportedDistanceKm = Opt(13),
+                Revenue = Num(14), OfferedIncome = Num(15), Penalty = Num(16),
+                FuelUsedL = Num(17), AvgConsumption = Opt(18), TopSpeedKmh = Num(19),
+                SpeedingShare = Num(20), HardSpeedingShare = Num(21), CruiseShare = Num(22),
+                TruckDamage = Num(23), TrailerDamage = Num(24),
+                DrivingGameMin = Num(25), RealDurationMs = r.IsDBNull(26) ? 0 : r.GetInt64(26),
+                RestStops = r.IsDBNull(27) ? 0 : r.GetInt32(27), RestMinutes = Num(28),
+                FinesCount = r.IsDBNull(29) ? 0 : r.GetInt32(29), FinesTotal = Num(30),
+                Collisions = r.IsDBNull(31) ? 0 : r.GetInt32(31), TollsPaid = Num(32),
+                Ferries = r.IsDBNull(33) ? 0 : r.GetInt32(33), Refuels = r.IsDBNull(34) ? 0 : r.GetInt32(34),
+                Outcome = r.IsDBNull(35) ? "" : r.GetString(35),
+                Status = r.IsDBNull(36) ? "" : r.GetString(36),
+                Flags = r.GetString(37), Style = r.GetString(38),
+                Notes = r.GetString(39), Source = r.GetString(40),
+            };
+        }
+    }
+
     public void SetNotes(long deliveryId, string notes) {
         lock (_gate) {
             using var cmd = _conn.CreateCommand();

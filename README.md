@@ -120,6 +120,11 @@ along the drive is.
 
 ![The current job page](assets/screenshot-current-job.png)
 
+Double clicking a delivery opens its own card: every figure the tracker kept about
+that drive, and what happened along the way.
+
+![A delivery on its own card](assets/screenshot-detail.png)
+
 *Statistics* is the whole logbook at a glance, on one screen with no scrolling.
 
 ![The statistics page](assets/screenshot-statistics.png)

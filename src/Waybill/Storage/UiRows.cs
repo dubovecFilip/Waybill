@@ -30,6 +30,24 @@ public class DeliveryRow {
     public string Poznamky { get; set; } = "";
 }
 
+/// <summary>Everything about one delivery, for the detail card. All distances,
+/// volumes and masses are metric as stored; the card converts for display.</summary>
+public class DeliveryDetail {
+    public long Id;
+    public DateTime StartedAt, FinishedAt;
+    public string Game = "", SourceCity = "", SourceCompany = "", DestinationCity = "", DestinationCompany = "";
+    public string Cargo = "", Truck = "", Trailer = "";
+    public double CargoMassKg, PlannedDistanceKm, DistanceKm;
+    public double? ReportedDistanceKm;
+    public double Revenue, OfferedIncome, Penalty;
+    public double FuelUsedL, TopSpeedKmh, SpeedingShare, HardSpeedingShare, CruiseShare;
+    public double? AvgConsumption;
+    public double TruckDamage, TrailerDamage, DrivingGameMin, RestMinutes, FinesTotal, TollsPaid;
+    public long RealDurationMs;
+    public int RestStops, FinesCount, Collisions, Ferries, Refuels;
+    public string Outcome = "", Status = "", Flags = "", Style = "", Notes = "", Source = "";
+}
+
 /// <summary>One row in the per-delivery event timeline.</summary>
 public class TimelineRow {
     public string Cas { get; set; } = "";

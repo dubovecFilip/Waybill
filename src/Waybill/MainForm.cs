@@ -70,12 +70,12 @@ public class MainForm : Form {
     private readonly TextBox _search = new();
     private readonly ComboBox _statusFilter = new();
     private readonly TableLayoutPanel _statsGrid = new();
-    private readonly DataGridView _timeline = new();
 
     /// <summary>Which sidebar page is showing. Kept across a language change, which
     /// rebuilds every control from scratch.</summary>
     private string _page = "deliveries";
     private readonly Panel _content = new();
+    private readonly Panel _detailPage = new();
 
     private List<DeliveryRow> _rows = new();
 
@@ -208,6 +208,12 @@ public class MainForm : Form {
 
         var live = BuildLivePage();
         live.Tag = "live";
+        _detailPage.Dock = DockStyle.Fill;
+        _detailPage.BackColor = Canvas;
+        _detailPage.Padding = new Padding(16);
+        _detailPage.AutoScroll = true;
+        _detailPage.Tag = "detail";
+        _content.Controls.Add(_detailPage);
         var deliveries = BuildHistoryPage();
         deliveries.Tag = "deliveries";
         var stats = BuildStatsPage();
@@ -792,8 +798,6 @@ public class MainForm : Form {
         // Detach before attaching: these controls are reused when the layout is
         // rebuilt for a language change, and handlers added a second time would fire
         // a second time.
-        _grid.SelectionChanged -= OnGridSelectionChanged;
-        _grid.SelectionChanged += OnGridSelectionChanged;
         _grid.DataBindingComplete -= OnGridBound;
         _grid.DataBindingComplete += OnGridBound;
         _grid.CellEndEdit -= OnGridCellEndEdit;
@@ -801,31 +805,30 @@ public class MainForm : Form {
         _grid.CellFormatting -= OnGridCellFormatting;
         _grid.CellFormatting += OnGridCellFormatting;
 
-        _timeline.Dock = DockStyle.Bottom;
-        _timeline.Height = 150;
-        _timeline.ReadOnly = true;
-        _timeline.AllowUserToAddRows = false;
-        _timeline.RowHeadersVisible = false;
-        _timeline.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        StyleGrid(_timeline);
-        _timeline.DataBindingComplete -= OnTimelineBound;
-        _timeline.DataBindingComplete += OnTimelineBound;
+        // Opening a delivery is a double click: a single one is how a row gets
+        // selected while walking the list, and it would fling the card open on every
+        // press of an arrow key.
+        _grid.CellDoubleClick -= OnGridDoubleClick;
+        _grid.CellDoubleClick += OnGridDoubleClick;
 
-        var splitLabel = new Label {
-            Dock = DockStyle.Bottom, Height = 26, Text = Strings.T("timeline.label"),
-            ForeColor = Muted, Font = new Font("Segoe UI", 8.5F, FontStyle.Bold),
-            Padding = new Padding(0, 8, 0, 0), BackColor = Canvas,
+        var hint = new Label {
+            Dock = DockStyle.Bottom, Height = 24, Text = Strings.T("list.openHint"),
+            ForeColor = Muted, Font = new Font("Segoe UI", 8.5F),
+            Padding = new Padding(2, 6, 0, 0), BackColor = Canvas,
         };
 
         page.Controls.Add(_grid);
-        page.Controls.Add(splitLabel);
-        page.Controls.Add(_timeline);
+        page.Controls.Add(hint);
         page.Controls.Add(bar);
         return page;
     }
 
+    private void OnGridDoubleClick(object? sender, DataGridViewCellEventArgs e) {
+        if (e.RowIndex < 0) return;
+        if (_grid.Rows[e.RowIndex].DataBoundItem is DeliveryRow row) ShowDetail(row.Id);
+    }
+
     private void OnFilterChanged(object? sender, EventArgs e) => ApplyFilter();
-    private void OnGridSelectionChanged(object? sender, EventArgs e) => ReloadTimeline();
 
     private void OnGridCellEndEdit(object? sender, DataGridViewCellEventArgs e) {
         if (_grid.Columns[e.ColumnIndex].DataPropertyName != nameof(DeliveryRow.Poznamky)) return;
@@ -861,18 +864,6 @@ public class MainForm : Form {
         if (identifier.Length == 0) return "";
         var translated = Strings.T("value." + identifier);
         return translated == "value." + identifier ? identifier : translated;
-    }
-
-    private void OnTimelineBound(object? sender, DataGridViewBindingCompleteEventArgs e) {
-        var captions = new Dictionary<string, string> {
-            [nameof(TimelineRow.Cas)] = Strings.T("col.time"),
-            [nameof(TimelineRow.Udalost)] = Strings.T("col.event"),
-            [nameof(TimelineRow.Hodnota)] = Strings.T("col.value"),
-            [nameof(TimelineRow.Detail)] = Strings.T("col.detail"),
-        };
-        foreach (DataGridViewColumn col in _timeline.Columns) {
-            if (captions.TryGetValue(col.DataPropertyName, out var caption)) col.HeaderText = caption;
-        }
     }
 
     /// <summary>Everything the tracker measured stays read-only; only the user's own
@@ -1086,6 +1077,196 @@ public class MainForm : Form {
         ForeColor = Ink, Font = new Font("Segoe UI", 10.5F, FontStyle.Bold),
     };
 
+    // ---------- delivery detail ----------
+
+    /// <summary>One delivery on a card of its own. The list carries what is worth
+    /// scanning down a column; everything else about a drive lives here, where it has
+    /// room to be read rather than squeezed into another column.</summary>
+    private void ShowDetail(long id) {
+        var d = _store.Detail(id);
+        if (d == null) return;
+        var u = Units.For(_settings.Units, d.Game);
+
+        _detailPage.SuspendLayout();
+        _detailPage.Controls.Clear();
+
+        // Added bottom-up, since docked children stack in reverse.
+        _detailPage.Controls.Add(DetailBody(d, u));
+        _detailPage.Controls.Add(DetailHeader(d, u));
+
+        _detailPage.ResumeLayout();
+        ShowPage("detail");
+        // Built just now, so its scrolling parts have not been asked for the dark
+        // theme yet and would come up as bright white bars.
+        UseDarkScrollbars(_detailPage);
+    }
+
+    private Control DetailHeader(DeliveryDetail d, Units u) {
+        var head = new Panel { Dock = DockStyle.Top, Height = 108, BackColor = Surface, Padding = new Padding(24, 16, 24, 12) };
+
+        var back = new Button {
+            Text = Strings.T("detail.back"), Dock = DockStyle.Right, Width = 130,
+            FlatStyle = FlatStyle.Flat, BackColor = Raised, ForeColor = Ink, Cursor = Cursors.Hand,
+        };
+        back.FlatAppearance.BorderColor = Line;
+        back.Click += (_, _) => ShowPage("deliveries");
+
+        var route = new Label {
+            Dock = DockStyle.Top, Height = 36, Text = $"{d.SourceCity}  →  {d.DestinationCity}",
+            ForeColor = Ink, Font = new Font("Segoe UI", 16F, FontStyle.Bold),
+        };
+        var sub = new Label {
+            Dock = DockStyle.Top, Height = 22, ForeColor = Muted,
+            Text = $"{d.Cargo} · {u.MassTonnes(d.CargoMassKg):0.0} {u.MassUnit} · {d.Truck}"
+                 + (d.Trailer.Length > 0 ? $" · {d.Trailer}" : ""),
+        };
+        var when = new Label {
+            Dock = DockStyle.Top, Height = 20, ForeColor = Muted, Font = new Font("Segoe UI", 8.5F),
+            Text = $"{d.StartedAt:dd.MM.yyyy HH:mm} → {d.FinishedAt:HH:mm} · {Label(d.Outcome)} · {Label(d.Status)}"
+                 + (d.Flags.Length > 0 ? $" · {d.Flags}" : ""),
+        };
+
+        head.Controls.Add(when);
+        head.Controls.Add(sub);
+        head.Controls.Add(route);
+        head.Controls.Add(back);
+        return head;
+    }
+
+    /// <summary>One fact as a line: the name of it held to the left, the value beside
+    /// it. Reads down a column, which a row of cards does not.</summary>
+    private static Control InfoRow(string label, string value, bool shaded = false) {
+        var row = new Panel {
+            Dock = DockStyle.Top, Height = 30, BackColor = shaded ? Raised : Surface,
+            Padding = new Padding(16, 6, 16, 6),
+        };
+        row.Controls.Add(new Label {
+            Dock = DockStyle.Fill, Text = value, ForeColor = Ink,
+            TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true,
+        });
+        row.Controls.Add(new Label {
+            Dock = DockStyle.Left, Width = 200, Text = label, ForeColor = Muted,
+            TextAlign = ContentAlignment.MiddleLeft,
+        });
+        return row;
+    }
+
+    private static Control CardHeading(string text) => new Label {
+        Dock = DockStyle.Top, Height = 34, Text = text.ToUpperInvariant(), BackColor = Surface,
+        ForeColor = Muted, Font = new Font("Segoe UI", 8F, FontStyle.Bold),
+        Padding = new Padding(16, 10, 0, 0),
+    };
+
+    private Control DetailBody(DeliveryDetail d, Units u) {
+        var body = new Panel { Dock = DockStyle.Fill, BackColor = Canvas, Padding = new Padding(0, 12, 0, 0), AutoScroll = true };
+
+        // Timeline and notes down the right, the facts filling the rest.
+        var side = new Panel { Dock = DockStyle.Right, Width = 430, BackColor = Canvas };
+        var timeline = new Panel { Dock = DockStyle.Fill, BackColor = Surface, AutoScroll = true };
+
+        var events = _store.TimelineRows(d.Id);
+        if (events.Count == 0) {
+            timeline.Controls.Add(new Label {
+                Dock = DockStyle.Top, Height = 30, Text = Strings.T("timeline.none"),
+                ForeColor = Muted, BackColor = Surface, Padding = new Padding(16, 6, 0, 0),
+            });
+        }
+        for (var i = events.Count - 1; i >= 0; i--) timeline.Controls.Add(EventLine(events[i], i % 2 == 1));
+        timeline.Controls.Add(CardHeading(Strings.T("detail.timeline")));
+
+        // The facts as a list rather than a wall of cards: one column, name on the
+        // left, value on the right, which is how anyone actually reads a docket.
+        var info = new Panel { Dock = DockStyle.Fill, BackColor = Surface, AutoScroll = true, Margin = new Padding(0, 0, 12, 0) };
+        var rows = new List<Control>();
+        var shade = false;
+        void Row(string label, string value) {
+            rows.Add(InfoRow(label, value, shade));
+            shade = !shade;
+        }
+        // Grouped by the question being asked rather than run as one long list: how
+        // far, what it paid, how it was driven, what state it ended in.
+        void Group(string heading) {
+            rows.Add(CardHeading(heading));
+            shade = false;
+        }
+
+        Group(Strings.T("detail.groupLoad"));
+        Row(Strings.T("col.cargo"), d.Cargo);
+        Row(Strings.T("detail.weight"), $"{u.MassTonnes(d.CargoMassKg):0.0} {u.MassUnit}");
+        Row(Strings.T("col.truck"), d.Truck);
+        if (d.Trailer.Length > 0) Row(Strings.T("detail.trailer"), d.Trailer);
+        Row(Strings.T("col.game"), d.Game);
+
+        Group(Strings.T("detail.groupDistance"));
+        Row(Strings.T("detail.driven"), u.FormatDistance(d.DistanceKm));
+        Row(Strings.T("detail.planned"), u.FormatDistance(d.PlannedDistanceKm));
+        if (d.ReportedDistanceKm is > 0) Row(Strings.T("detail.game"), u.FormatDistance(d.ReportedDistanceKm.Value));
+        Row(Strings.T("detail.timeGame"), $"{d.DrivingGameMin / 60:0.0} {Strings.T("stats.gameTime")}");
+        Row(Strings.T("detail.timeReal"), $"{d.RealDurationMs / 60000.0:0} min");
+        Row(Strings.T("detail.rest"), $"{d.RestStops}x  ·  {d.RestMinutes:0} {Strings.T("unit.gameMinutes")}");
+
+        Group(Strings.T("detail.groupMoney"));
+        Row(Strings.T("detail.pay"), d.Outcome == "delivered" ? u.FormatMoney(d.Revenue) : u.FormatMoney(-d.Penalty));
+        Row(Strings.T("detail.offered"), u.FormatMoney(d.OfferedIncome));
+        Row(Strings.T("detail.fines"), $"{u.FormatMoney(d.FinesTotal)}  ({d.FinesCount}x)");
+        Row(Strings.T("detail.tolls"), u.FormatMoney(d.TollsPaid));
+        Row(Strings.T("detail.fuel"), u.FormatVolume(d.FuelUsedL));
+        if (u.Consumption(d.AvgConsumption) is { } c) Row(Strings.T("detail.consumption"), $"{c:0.0} {u.ConsumptionUnit}");
+        Row(Strings.T("detail.refuels"), d.Refuels.ToString());
+
+        Group(Strings.T("detail.groupDriving"));
+        Row(Strings.T("col.style"), Label(d.Style));
+        Row(Strings.T("detail.topSpeed"), u.FormatSpeed(d.TopSpeedKmh));
+        Row(Strings.T("detail.speeding"), $"{d.SpeedingShare * 100:0.0} %  ·  {Strings.T("detail.clearlyOver")} {d.HardSpeedingShare * 100:0.0} %");
+        Row(Strings.T("detail.cruise"), $"{d.CruiseShare * 100:0.0} %");
+        Row(Strings.T("detail.collisions"), d.Collisions.ToString());
+        Row(Strings.T("detail.damage"), $"{d.TruckDamage * 100:0.00} %  ·  {Strings.T("detail.trailer")} {d.TrailerDamage * 100:0.00} %");
+        Row(Strings.T("detail.ferries"), d.Ferries.ToString());
+
+        // Docked children stack in reverse order of adding, so the list goes in
+        // backwards to come out in the order it was built.
+        for (var i = rows.Count - 1; i >= 0; i--) info.Controls.Add(rows[i]);
+
+        var notes = new Panel { Dock = DockStyle.Bottom, Height = 96, BackColor = Surface, Padding = new Padding(16, 12, 16, 12), Margin = new Padding(0) };
+        var notesBox = new TextBox {
+            Dock = DockStyle.Fill, Multiline = true, Text = d.Notes,
+            BorderStyle = BorderStyle.None, BackColor = Raised, ForeColor = Ink,
+        };
+        notesBox.Leave += (_, _) => { _store.SetNotes(d.Id, notesBox.Text); ReloadHistory(); };
+        notes.Controls.Add(notesBox);
+        notes.Controls.Add(new Label {
+            Dock = DockStyle.Top, Height = 20, Text = Strings.T("col.notes").ToUpperInvariant(),
+            ForeColor = Muted, Font = new Font("Segoe UI", 7.5F, FontStyle.Bold),
+        });
+
+        side.Controls.Add(timeline);
+        side.Controls.Add(notes);
+
+        body.Controls.Add(info);
+        body.Controls.Add(side);
+        return body;
+    }
+
+    /// <summary>One event as a line, not a table row: the time set away on the left,
+    /// then what happened, then the figure it carries.</summary>
+    private static Control EventLine(TimelineRow e, bool shaded) {
+        var line = new Panel {
+            Dock = DockStyle.Top, Height = 30, BackColor = shaded ? Raised : Surface,
+            Padding = new Padding(16, 6, 16, 6),
+        };
+
+        var detail = new Label { Dock = DockStyle.Fill, Text = e.Detail, ForeColor = Muted, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
+        var value = new Label { Dock = DockStyle.Right, Width = 90, Text = e.Hodnota, ForeColor = Accent, TextAlign = ContentAlignment.MiddleRight, Font = new Font("Segoe UI", 9F, FontStyle.Bold) };
+        var what = new Label { Dock = DockStyle.Left, Width = 110, Text = e.Udalost, ForeColor = Ink, TextAlign = ContentAlignment.MiddleLeft };
+        var time = new Label { Dock = DockStyle.Left, Width = 66, Text = e.Cas, ForeColor = Muted, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Consolas", 8.5F) };
+
+        line.Controls.Add(detail);
+        line.Controls.Add(value);
+        line.Controls.Add(what);
+        line.Controls.Add(time);
+        return line;
+    }
+
     // ---------- data ----------
 
     private void ReloadHistory() {
@@ -1111,19 +1292,17 @@ public class MainForm : Form {
             [nameof(DeliveryRow.Vzdialenost)] = nameof(DeliveryRow.DistanceKm),
             [nameof(DeliveryRow.Odmena)] = nameof(DeliveryRow.Zarobok),
         });
-        // Raw metric values back the formatted columns; hide them but keep them
-        // bound so sorting by distance/pay sorts numerically rather than by text.
-        foreach (var hidden in new[] { nameof(DeliveryRow.Id), nameof(DeliveryRow.DistanceKm), nameof(DeliveryRow.Zarobok) }) {
+        // Two kinds of hidden column. The raw metric values stay bound so sorting by
+        // distance or pay compares numbers rather than formatted text. The rest are
+        // simply not what a list is for: they are on the delivery's own card, where
+        // they can be read instead of squeezed into another narrow column.
+        foreach (var hidden in new[] {
+            nameof(DeliveryRow.Id), nameof(DeliveryRow.DistanceKm), nameof(DeliveryRow.Zarobok),
+            nameof(DeliveryRow.Hra), nameof(DeliveryRow.Tahac), nameof(DeliveryRow.Pokuty),
+            nameof(DeliveryRow.Kolizie), nameof(DeliveryRow.Styl), nameof(DeliveryRow.Poznamky),
+        }) {
             if (_grid.Columns[hidden] is { } col) col.Visible = false;
         }
-    }
-
-    private void ReloadTimeline() {
-        if (_grid.CurrentRow?.DataBoundItem is not DeliveryRow row) {
-            _timeline.DataSource = null;
-            return;
-        }
-        _timeline.DataSource = new SortableBindingList<TimelineRow>(_store.TimelineRows(row.Id).ToList());
     }
 
     private void ReloadStats() {
