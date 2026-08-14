@@ -15,15 +15,20 @@ public static class SessionFiles {
     /// <summary>Reads a recording whether it is compressed or not, so callers
     /// (replay, tests) never have to care which form it is in.</summary>
     public static IEnumerable<string> ReadLines(string path) {
+        // Shared for writing as well as reading: the session being recorded right now
+        // is held open by the recorder, and refusing to read it meant a rebuild
+        // skipped the current session and lost any delivery already finished in it.
+        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+
         if (path.EndsWith(CompressedExtension, StringComparison.OrdinalIgnoreCase)) {
-            using var file = File.OpenRead(path);
             using var gzip = new GZipStream(file, CompressionMode.Decompress);
             using var reader = new StreamReader(gzip);
             while (reader.ReadLine() is { } line) yield return line;
             yield break;
         }
 
-        foreach (var line in File.ReadLines(path)) yield return line;
+        using var plain = new StreamReader(file);
+        while (plain.ReadLine() is { } line) yield return line;
     }
 
     /// <summary>Gzips a finished recording and removes the original. Returns the new
