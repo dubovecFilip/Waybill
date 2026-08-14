@@ -263,4 +263,27 @@ void PrintStats(long? sinceMs) {
 Application.SetHighDpiMode(HighDpiMode.SystemAware);
 Application.EnableVisualStyles();
 Application.SetCompatibleTextRenderingDefault(false);
+
+// Anything that escapes an event handler would otherwise take the window down
+// with no explanation, or leave it wedged. Show it and write it down instead:
+// a tracker that quietly dies mid-delivery is worse than one that complains.
+Application.ThreadException += (_, e) => ReportCrash(e.Exception, fatal: false);
+AppDomain.CurrentDomain.UnhandledException += (_, e) => ReportCrash(e.ExceptionObject as Exception, fatal: true);
+
+void ReportCrash(Exception? ex, bool fatal) {
+    var text = ex?.ToString() ?? "neznáma chyba";
+    try {
+        var log = Path.Combine(DeliveryStore.DefaultDir(), "errors.log");
+        Directory.CreateDirectory(DeliveryStore.DefaultDir());
+        File.AppendAllText(log, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}  {text}{Environment.NewLine}{Environment.NewLine}");
+    } catch {
+        // Logging must never be the thing that brings the app down.
+    }
+
+    MessageBox.Show(
+        (fatal ? "Waybill musí skončiť kvôli chybe:\n\n" : "Nastala chyba:\n\n") + (ex?.Message ?? "neznáma chyba")
+        + "\n\nPodrobnosti sú v errors.log v priečinku s databázou.",
+        "Waybill", MessageBoxButtons.OK, MessageBoxIcon.Error);
+}
+
 Application.Run(new MainForm());

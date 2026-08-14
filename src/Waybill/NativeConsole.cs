@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Waybill;
 
@@ -15,7 +16,11 @@ internal static class NativeConsole {
     private static extern bool AttachConsole(int processId);
 
     public static void AttachToParent() {
-        // When stdout is already redirected - piped, or sent to a file - it is a real
+        // Slovak text is full of characters the default console code page cannot
+        // represent, and they come out as garbage without this.
+        UseUtf8();
+
+        // When stdout is already redirected, piped or sent to a file, it is a real
         // handle the caller is reading, and attaching a console over the top of it
         // would send the output to a screen buffer nobody is capturing instead.
         if (Console.IsOutputRedirected) return;
@@ -24,9 +29,18 @@ internal static class NativeConsole {
 
         // Console.Out was bound to the null device when the process started without a
         // console; rebind it to the console just attached.
-        var stdout = new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true };
+        var stdout = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true };
         Console.SetOut(stdout);
         Console.SetError(stdout);
         Console.WriteLine();
+    }
+
+    private static void UseUtf8() {
+        try {
+            Console.OutputEncoding = new UTF8Encoding(false);
+        } catch {
+            // Fails when there is no console at all; the redirected path below still
+            // writes UTF-8 through its own writer.
+        }
     }
 }

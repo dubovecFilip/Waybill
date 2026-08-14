@@ -70,7 +70,7 @@ public class TrackerEngine : IDisposable {
 
         // Recordings whose app was killed before it could pack them.
         var packed = SessionFiles.CompressOrphans(Path.GetDirectoryName(SessionPath)!, SessionPath);
-        if (packed > 0) Message?.Invoke($"Zabalenych starsich nahravok: {packed}");
+        if (packed > 0) Message?.Invoke($"{Waybill.Strings.T("msg.packedOld")}: {packed}");
 
         // Poll at 100 ms so that no gameplay event flag flip is missed.
         _telemetry = new SCSSdkTelemetry(100);
@@ -200,14 +200,14 @@ public class TrackerEngine : IDisposable {
             var ageHours = saved == null ? 0 : (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - saved.StartedAtMs) / 3600000.0;
             if (saved != null && !string.IsNullOrEmpty(saved.Fingerprint) && ageHours < 24) {
                 _tracker.PrepareResume(saved);
-                Message?.Invoke($"Nedokoncena zakazka: {saved.Job.SourceCity} -> {saved.Job.DestinationCity} ({saved.DistanceKm:0.0} km) - nadviaze sa, ak v nej budes pokracovat.");
+                Message?.Invoke($"{Waybill.Strings.T("msg.unfinishedFound")}: {saved.Job.SourceCity} -> {saved.Job.DestinationCity} ({saved.DistanceKm:0.0} km)");
             } else if (saved != null) {
-                Message?.Invoke($"Stara nedokoncena zakazka ({ageHours:0} h) sa ignoruje.");
+                Message?.Invoke($"{Waybill.Strings.T("msg.unfinishedStale")} ({ageHours:0} h)");
                 File.Delete(_inProgressPath);
             }
         } catch (Exception ex) {
             // A truncated/corrupt file must never stop the recorder from starting.
-            Message?.Invoke($"Rozpracovanu zakazku sa nepodarilo nacitat, pokracujem bez nej: {ex.Message}");
+            Message?.Invoke($"{Waybill.Strings.T("msg.unfinishedUnreadable")}: {ex.Message}");
         }
     }
 
@@ -223,7 +223,7 @@ public class TrackerEngine : IDisposable {
             File.WriteAllText(tmp, JsonConvert.SerializeObject(state));
             File.Move(tmp, _inProgressPath, overwrite: true);
         } catch (Exception ex) {
-            Message?.Invoke($"Stav zakazky sa nepodarilo ulozit: {ex.Message}");
+            Message?.Invoke($"{Waybill.Strings.T("msg.stateSaveFailed")}: {ex.Message}");
         }
     }
 

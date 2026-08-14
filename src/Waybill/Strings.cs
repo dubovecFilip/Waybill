@@ -1,0 +1,244 @@
+namespace Waybill;
+
+/// <summary>
+/// UI text in every supported language. A plain dictionary rather than .resx
+/// files: everything is visible in one place, and switching language at runtime
+/// is just a field assignment plus a redraw.
+///
+/// Adding a language means adding one dictionary and one entry in <see cref="All"/>.
+/// Any key missing from a translation falls back to Slovak, so a half finished
+/// translation shows partly translated text rather than blank labels.
+/// </summary>
+public static class Strings {
+    public static string Language = "sk";
+
+    public static readonly (string Code, string Name)[] All = {
+        ("sk", "Slovenčina"),
+        ("en", "English"),
+    };
+
+    public static string T(string key) {
+        if (Language != "sk" && Translations.TryGetValue(Language, out var table) && table.TryGetValue(key, out var text)) {
+            return text;
+        }
+        return Slovak.TryGetValue(key, out var fallback) ? fallback : key;
+    }
+
+    private static readonly Dictionary<string, string> Slovak = new() {
+        // menu
+        ["menu.play"] = "Hrať",
+        ["menu.units"] = "Jednotky",
+        ["menu.data"] = "Dáta",
+        ["menu.language"] = "Jazyk",
+        ["menu.installPlugin"] = "Nainštalovať telemetry plugin...",
+        ["menu.units.auto"] = "Podľa hry (ATS imperiálne, ETS2 metrické)",
+        ["menu.units.metric"] = "Metrické (km, l, t)",
+        ["menu.units.imperial"] = "Imperiálne (mi, gal, short t)",
+        ["menu.import"] = "Importovať históriu z TrucksBooku...",
+        ["menu.folder.db"] = "Priečinok s databázou",
+        ["menu.folder.backups"] = "Priečinok so zálohami",
+        ["menu.folder.sessions"] = "Priečinok s nahrávkami",
+
+        // tabs and toolbar
+        ["tab.deliveries"] = "Zásielky",
+        ["tab.stats"] = "Štatistiky",
+        ["search.placeholder"] = "hľadať mesto / náklad / ťahač...",
+        ["filter.all"] = "všetky",
+        ["button.refresh"] = "Obnoviť",
+        ["button.exportCsv"] = "Export CSV",
+        ["button.exportJson"] = "Export JSON",
+        ["button.backup"] = "Zálohovať",
+        ["button.restore"] = "Obnoviť zo zálohy",
+        ["timeline.label"] = "Časová os vybranej zásielky:",
+
+        // live panel
+        ["live.starting"] = "Spúšťam...",
+        ["live.waitingGame"] = "Čakám na hru...",
+        ["live.waitingJob"] = "Pripojené na hru, čakám na zákazku",
+        ["live.jobRunning"] = "Zákazka prebieha",
+        ["live.ticks"] = "tiky",
+        ["live.deliveriesThisRun"] = "zásielok tento beh",
+        ["live.reward"] = "odmena",
+
+        // columns
+        ["col.date"] = "Dátum",
+        ["col.game"] = "Hra",
+        ["col.from"] = "Odkiaľ",
+        ["col.to"] = "Kam",
+        ["col.cargo"] = "Náklad",
+        ["col.truck"] = "Ťahač",
+        ["col.distance"] = "Vzdialenosť",
+        ["col.pay"] = "Odmena",
+        ["col.fines"] = "Pokuty",
+        ["col.collisions"] = "Kolízie",
+        ["col.status"] = "Stav",
+        ["col.notes"] = "Poznámky",
+        ["col.time"] = "Čas",
+        ["col.event"] = "Udalosť",
+        ["col.value"] = "Hodnota",
+        ["col.detail"] = "Detail",
+
+        // stats
+        ["stats.deliveries"] = "zásielok spolu",
+        ["stats.distance"] = "vzdialenosť",
+        ["stats.revenue"] = "zárobok",
+        ["stats.fuel"] = "palivo",
+        ["stats.time"] = "čas za volantom",
+        ["stats.avgSpeed"] = "priemerná rýchlosť",
+        ["stats.collisions"] = "kolízie",
+        ["stats.late"] = "meškania",
+        ["stats.finesTotal"] = "pokuty spolu",
+        ["stats.favTruck"] = "obľúbený ťahač",
+        ["stats.favRoute"] = "obľúbená trasa",
+        ["stats.favCargo"] = "obľúbený náklad",
+        ["stats.realTime"] = "h reálneho",
+        ["stats.gameTime"] = "h herného",
+
+        // messages
+        ["msg.jobStart"] = "ZAČIATOK",
+        ["msg.jobResume"] = "POKRAČUJEM",
+        ["msg.jobEnd"] = "KONIEC",
+        ["msg.database"] = "Databáza",
+        ["msg.recording"] = "Nahrávka",
+        ["msg.noSharedMemory"] = "Nepodarilo sa pripojiť na zdieľanú pamäť",
+        ["msg.pluginHint"] = "Je hra spustená a je plugin v bin\\win_x64\\plugins?",
+        ["msg.packedOld"] = "Zabalených starších nahrávok",
+        ["msg.gameNotFound"] = "Hra sa nenašla v žiadnej knižnici Steamu.",
+        ["msg.noGameInstalled"] = "Nenašla sa žiadna nainštalovaná hra.",
+        ["msg.launching"] = "Spúšťam",
+        ["msg.pluginInstalled"] = "Plugin nainštalovaný",
+        ["msg.pluginMissingTitle"] = "Chýba plugin",
+        ["msg.pluginMissing"] = "nie je nainštalovaný telemetry plugin,\nbez neho hra nič neposiela a Waybill nemá čo sledovať.\n\nNainštalovať teraz?",
+        ["msg.pluginNoWrite"] = "do priečinka hry sa nedá zapisovať.\nSkopíruj scs-telemetry.dll ručne sem:",
+        ["msg.pluginDone"] = "hotovo",
+        ["msg.pickPlugin"] = "Vyber scs-telemetry.dll (Win64)",
+        ["msg.launchFailed"] = "Hru sa nepodarilo spustiť:",
+        ["msg.exported"] = "Exportované do:",
+        ["msg.backupSaved"] = "Záloha uložená:",
+        ["msg.restoreConfirm"] = "Nahradí sa aktuálna databáza zálohou.\nSúčasná databáza sa najprv odloží bokom.\n\nPokračovať?",
+        ["msg.restoreTitle"] = "Obnova zo zálohy",
+        ["msg.restoreDone"] = "Databáza obnovená.\nPôvodná odložená sem:",
+        ["msg.restartingApp"] = "Aplikácia sa reštartuje.",
+        ["msg.restoreFailed"] = "Obnova zlyhala, databáza ostala nezmenená:",
+        ["msg.importTitle"] = "Import z TrucksBooku",
+        ["msg.importPick"] = "Vyber CSV export z TrucksBooku",
+        ["msg.imported"] = "Importovaných:",
+        ["msg.alreadyThere"] = "Už v databáze:",
+        ["msg.uncredited"] = "Z toho {0} zásielok TrucksBook nezapočítal ({1}).\nWaybill ich započítava.",
+        ["msg.problems"] = "Problémy:",
+        ["msg.error"] = "Chyba",
+        ["msg.plugin"] = "Plugin",
+        ["msg.unfinishedFound"] = "Nedokončená zákazka, nadviaže sa, ak sa v nej bude pokračovať",
+        ["msg.unfinishedStale"] = "Stará nedokončená zákazka sa ignoruje",
+        ["msg.unfinishedUnreadable"] = "Rozpracovanú zákazku sa nepodarilo načítať, pokračujem bez nej",
+        ["msg.stateSaveFailed"] = "Stav zákazky sa nepodarilo uložiť",
+    };
+
+    private static readonly Dictionary<string, string> English = new() {
+        ["menu.play"] = "Play",
+        ["menu.units"] = "Units",
+        ["menu.data"] = "Data",
+        ["menu.language"] = "Language",
+        ["menu.installPlugin"] = "Install telemetry plugin...",
+        ["menu.units.auto"] = "Follow the game (ATS imperial, ETS2 metric)",
+        ["menu.units.metric"] = "Metric (km, l, t)",
+        ["menu.units.imperial"] = "Imperial (mi, gal, short t)",
+        ["menu.import"] = "Import history from TrucksBook...",
+        ["menu.folder.db"] = "Database folder",
+        ["menu.folder.backups"] = "Backups folder",
+        ["menu.folder.sessions"] = "Recordings folder",
+
+        ["tab.deliveries"] = "Deliveries",
+        ["tab.stats"] = "Statistics",
+        ["search.placeholder"] = "search city / cargo / truck...",
+        ["filter.all"] = "all",
+        ["button.refresh"] = "Refresh",
+        ["button.exportCsv"] = "Export CSV",
+        ["button.exportJson"] = "Export JSON",
+        ["button.backup"] = "Back up",
+        ["button.restore"] = "Restore backup",
+        ["timeline.label"] = "Timeline of the selected delivery:",
+
+        ["live.starting"] = "Starting...",
+        ["live.waitingGame"] = "Waiting for the game...",
+        ["live.waitingJob"] = "Connected, waiting for a job",
+        ["live.jobRunning"] = "Job in progress",
+        ["live.ticks"] = "ticks",
+        ["live.deliveriesThisRun"] = "deliveries this run",
+        ["live.reward"] = "pay",
+
+        ["col.date"] = "Date",
+        ["col.game"] = "Game",
+        ["col.from"] = "From",
+        ["col.to"] = "To",
+        ["col.cargo"] = "Cargo",
+        ["col.truck"] = "Truck",
+        ["col.distance"] = "Distance",
+        ["col.pay"] = "Pay",
+        ["col.fines"] = "Fines",
+        ["col.collisions"] = "Collisions",
+        ["col.status"] = "Status",
+        ["col.notes"] = "Notes",
+        ["col.time"] = "Time",
+        ["col.event"] = "Event",
+        ["col.value"] = "Value",
+        ["col.detail"] = "Detail",
+
+        ["stats.deliveries"] = "deliveries",
+        ["stats.distance"] = "distance",
+        ["stats.revenue"] = "earnings",
+        ["stats.fuel"] = "fuel",
+        ["stats.time"] = "time driving",
+        ["stats.avgSpeed"] = "average speed",
+        ["stats.collisions"] = "collisions",
+        ["stats.late"] = "late deliveries",
+        ["stats.finesTotal"] = "fines total",
+        ["stats.favTruck"] = "favourite truck",
+        ["stats.favRoute"] = "favourite route",
+        ["stats.favCargo"] = "favourite cargo",
+        ["stats.realTime"] = "h real",
+        ["stats.gameTime"] = "h in game",
+
+        ["msg.jobStart"] = "START",
+        ["msg.jobResume"] = "RESUMING",
+        ["msg.jobEnd"] = "FINISHED",
+        ["msg.database"] = "Database",
+        ["msg.recording"] = "Recording",
+        ["msg.noSharedMemory"] = "Could not connect to shared memory",
+        ["msg.pluginHint"] = "Is the game running and the plugin in bin\\win_x64\\plugins?",
+        ["msg.packedOld"] = "Older recordings packed",
+        ["msg.gameNotFound"] = "The game was not found in any Steam library.",
+        ["msg.noGameInstalled"] = "No installed game was found.",
+        ["msg.launching"] = "Launching",
+        ["msg.pluginInstalled"] = "Plugin installed",
+        ["msg.pluginMissingTitle"] = "Plugin missing",
+        ["msg.pluginMissing"] = "has no telemetry plugin installed.\nWithout it the game sends nothing and Waybill has nothing to track.\n\nInstall it now?",
+        ["msg.pluginNoWrite"] = "the game folder is not writable.\nCopy scs-telemetry.dll here manually:",
+        ["msg.pluginDone"] = "done",
+        ["msg.pickPlugin"] = "Select scs-telemetry.dll (Win64)",
+        ["msg.launchFailed"] = "The game could not be started:",
+        ["msg.exported"] = "Exported to:",
+        ["msg.backupSaved"] = "Backup saved:",
+        ["msg.restoreConfirm"] = "The current database will be replaced by the backup.\nIt is set aside first.\n\nContinue?",
+        ["msg.restoreTitle"] = "Restore backup",
+        ["msg.restoreDone"] = "Database restored.\nThe previous one was kept here:",
+        ["msg.restartingApp"] = "The application will restart.",
+        ["msg.restoreFailed"] = "Restore failed, the database is unchanged:",
+        ["msg.importTitle"] = "TrucksBook import",
+        ["msg.importPick"] = "Select the TrucksBook CSV export",
+        ["msg.imported"] = "Imported:",
+        ["msg.alreadyThere"] = "Already in the database:",
+        ["msg.uncredited"] = "TrucksBook credited nothing for {0} of them ({1}).\nWaybill counts them.",
+        ["msg.problems"] = "Problems:",
+        ["msg.error"] = "Error",
+        ["msg.plugin"] = "Plugin",
+        ["msg.unfinishedFound"] = "Unfinished job, it will be picked up if you continue it",
+        ["msg.unfinishedStale"] = "Ignoring a stale unfinished job",
+        ["msg.unfinishedUnreadable"] = "The unfinished job could not be read, continuing without it",
+        ["msg.stateSaveFailed"] = "The job state could not be saved",
+    };
+
+    private static readonly Dictionary<string, Dictionary<string, string>> Translations = new() {
+        ["en"] = English,
+    };
+}

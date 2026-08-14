@@ -45,14 +45,9 @@ public class MainForm : Form {
             try { Icon = new Icon(iconPath); } catch { /* a missing icon is not worth failing over */ }
         }
 
-        var tabs = BuildTabs();
-        var live = BuildLivePanel();
-        var menu = BuildMenu();
+        Strings.Language = _settings.Language;
 
-        Controls.Add(tabs);
-        Controls.Add(live);
-        Controls.Add(menu);
-        MainMenuStrip = menu;
+        BuildLayout();
 
         Load += (_, _) => StartEngine();
         FormClosing += (_, _) => _engine?.Dispose();
@@ -62,23 +57,41 @@ public class MainForm : Form {
         timer.Start();
     }
 
+    /// <summary>
+    /// Builds every control from scratch. Called again when the language changes:
+    /// column headers, placeholders and menu entries are all baked into controls at
+    /// creation time, so rebuilding is far less error prone than hunting down each
+    /// piece of text to reassign.
+    /// </summary>
+    private void BuildLayout() {
+        Controls.Clear();
+
+        var tabs = BuildTabs();
+        var live = BuildLivePanel();
+        var menu = BuildMenu();
+
+        Controls.Add(tabs);
+        Controls.Add(live);
+        Controls.Add(menu);
+        MainMenuStrip = menu;
+
+        ReloadHistory();
+        ReloadStats();
+    }
+
     // ---------- menu ----------
 
     private MenuStrip BuildMenu() {
         var menu = new MenuStrip();
-        var units = new ToolStripMenuItem("Jednotky");
+        var units = new ToolStripMenuItem(Strings.T("menu.units"));
 
         // "auto" is the default because each title has its own convention; the
         // explicit choices are for anyone who wants one system everywhere.
-        var options = new (string Key, string Label)[] {
-            ("auto", "Podla hry (ATS imperial, ETS2 metricke)"),
-            ("metric", "Metricke (km, l, t)"),
-            ("imperial", "Imperialne (mi, gal, short t)"),
-        };
+        var options = new[] { "auto", "metric", "imperial" };
 
-        foreach (var (key, label) in options) {
-            var item = new ToolStripMenuItem(label) { Tag = key, Checked = _settings.Units == key };
-            item.Click += (s, _) => {
+        foreach (var key in options) {
+            var item = new ToolStripMenuItem(Strings.T("menu.units." + key)) { Tag = key, Checked = _settings.Units == key };
+            item.Click += (_, _) => {
                 _settings.Units = key;
                 _settings.Save();
                 foreach (ToolStripMenuItem other in units.DropDownItems) {
@@ -90,20 +103,36 @@ public class MainForm : Form {
             units.DropDownItems.Add(item);
         }
 
+        var language = new ToolStripMenuItem(Strings.T("menu.language"));
+        foreach (var (code, name) in Strings.All) {
+            var item = new ToolStripMenuItem(name) { Tag = code, Checked = _settings.Language == code };
+            item.Click += (_, _) => {
+                if (_settings.Language == code) return;
+                _settings.Language = code;
+                _settings.Save();
+                Strings.Language = code;
+                // Rebuilding is deferred so the menu drop-down is gone before the
+                // controls it belongs to are disposed.
+                AfterMenuCloses(BuildLayout);
+            };
+            language.DropDownItems.Add(item);
+        }
+
         menu.Items.Add(BuildPlayMenu());
         menu.Items.Add(units);
 
         // Data lives under LocalAppData, not next to the exe, so it survives
-        // rebuilds - which also makes it hard to find by hand.
-        var data = new ToolStripMenuItem("Data");
-        var import = new ToolStripMenuItem("Importovat historiu z TrucksBooku...");
-        import.Click += (_, _) => ImportTrucksBook();
+        // rebuilds, which also makes it hard to find by hand.
+        var data = new ToolStripMenuItem(Strings.T("menu.data"));
+        var import = new ToolStripMenuItem(Strings.T("menu.import"));
+        import.Click += (_, _) => AfterMenuCloses(ImportTrucksBook);
         data.DropDownItems.Add(import);
         data.DropDownItems.Add(new ToolStripSeparator());
-        data.DropDownItems.Add(OpenFolderItem("Priecinok s databazou", DeliveryStore.DefaultDir()));
-        data.DropDownItems.Add(OpenFolderItem("Priecinok so zalohami", Path.Combine(DeliveryStore.DefaultDir(), "backups")));
-        data.DropDownItems.Add(OpenFolderItem("Priecinok s nahravkami", Path.Combine(DeliveryStore.DefaultDir(), "sessions")));
+        data.DropDownItems.Add(OpenFolderItem(Strings.T("menu.folder.db"), DeliveryStore.DefaultDir()));
+        data.DropDownItems.Add(OpenFolderItem(Strings.T("menu.folder.backups"), Path.Combine(DeliveryStore.DefaultDir(), "backups")));
+        data.DropDownItems.Add(OpenFolderItem(Strings.T("menu.folder.sessions"), Path.Combine(DeliveryStore.DefaultDir(), "sessions")));
         menu.Items.Add(data);
+        menu.Items.Add(language);
 
         return menu;
     }
@@ -112,75 +141,101 @@ public class MainForm : Form {
     /// is already recording by the time the window exists, so launching the game
     /// from here is the whole of one-click play.</summary>
     private ToolStripMenuItem BuildPlayMenu() {
-        var play = new ToolStripMenuItem("Hrat");
+        var play = new ToolStripMenuItem(Strings.T("menu.play"));
 
         foreach (var game in new[] { SimGame.Ats, SimGame.Ets2 }) {
             var installed = GameLauncher.IsInstalled(game);
             var item = new ToolStripMenuItem(GameLauncher.DisplayName(game)) { Enabled = installed };
-            if (!installed) item.ToolTipText = "Hra sa nenasla v ziadnej kniznici Steamu.";
+            if (!installed) item.ToolTipText = Strings.T("msg.gameNotFound");
 
-            item.Click += (_, _) => LaunchGame(game);
+            item.Click += (_, _) => AfterMenuCloses(() => LaunchGame(game));
             play.DropDownItems.Add(item);
         }
 
         play.DropDownItems.Add(new ToolStripSeparator());
-        var pluginItem = new ToolStripMenuItem("Nainstalovat telemetry plugin...");
-        pluginItem.Click += (_, _) => InstallPlugin();
+        var pluginItem = new ToolStripMenuItem(Strings.T("menu.installPlugin"));
+        pluginItem.Click += (_, _) => AfterMenuCloses(InstallPlugin);
         play.DropDownItems.Add(pluginItem);
 
         return play;
     }
+
+    /// <summary>
+    /// Runs an action once the menu drop-down has closed and the message loop is
+    /// back to normal. Opening a modal dialog straight from a menu click leaves the
+    /// drop-down holding the mouse capture, which can wedge input entirely: the app
+    /// stops responding and Windows logs an AppHang. Posting the work back to the
+    /// message queue lets the menu tear down first.
+    /// </summary>
+    private void AfterMenuCloses(Action action) => BeginInvoke(action);
 
     private void LaunchGame(SimGame game) {
         // The plugin is what makes any of this work, so say so before the game
         // starts rather than leaving the user watching a tracker that sees nothing.
         if (!GameLauncher.IsPluginInstalled(game)) {
             var answer = MessageBox.Show(this,
-                $"V {GameLauncher.DisplayName(game)} nie je nainstalovany telemetry plugin,\n"
-                + "bez neho hra nic neposiela a Waybill nema co sledovat.\n\nNainstalovat teraz?",
-                "Chyba plugin", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
+                $"{GameLauncher.DisplayName(game)} {Strings.T("msg.pluginMissing")}",
+                Strings.T("msg.pluginMissingTitle"), MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
 
             if (answer == DialogResult.Cancel) return;
-            if (answer == DialogResult.Yes && !InstallPluginFor(game)) return;
+            if (answer == DialogResult.Yes) {
+                var source = GameLauncher.FindBundledPlugin() ?? AskForPluginFile();
+                if (source == null) return;
+                if (InstallPluginFor(game, source) is { } problem) {
+                    MessageBox.Show(this, problem, Strings.T("msg.plugin"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+            }
         }
 
         try {
             GameLauncher.Launch(game);
-            AddLog($"Spustam {GameLauncher.DisplayName(game)}...");
+            AddLog($"{Strings.T("msg.launching")} {GameLauncher.DisplayName(game)}...");
         } catch (Exception ex) {
-            MessageBox.Show(this, "Hru sa nepodarilo spustit:\n" + ex.Message, "Chyba", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, Strings.T("msg.launchFailed") + "\n" + ex.Message, Strings.T("msg.error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
     private void InstallPlugin() {
         var choices = new[] { SimGame.Ats, SimGame.Ets2 }.Where(GameLauncher.IsInstalled).ToArray();
         if (choices.Length == 0) {
-            MessageBox.Show(this, "Nenasla sa ziadna nainstalovana hra.", "Plugin");
+            MessageBox.Show(this, Strings.T("msg.noGameInstalled"), Strings.T("msg.plugin"));
             return;
         }
-        foreach (var game in choices) InstallPluginFor(game);
+
+        // One picker at most, reused for every game, instead of a dialog per game.
+        var source = GameLauncher.FindBundledPlugin() ?? AskForPluginFile();
+        if (source == null) return;
+
+        var report = new List<string>();
+        foreach (var game in choices) report.Add(InstallPluginFor(game, source) ?? $"{GameLauncher.DisplayName(game)}: {Strings.T("msg.pluginDone")}");
+
+        MessageBox.Show(this, string.Join("\n\n", report), Strings.T("msg.plugin"));
     }
 
-    private bool InstallPluginFor(SimGame game) {
-        var plugins = GameLauncher.PluginDirectory(game);
-        if (plugins == null) {
-            MessageBox.Show(this, $"{GameLauncher.DisplayName(game)} sa nenasla.", "Plugin");
-            return false;
-        }
-
+    private string? AskForPluginFile() {
         using var dlg = new OpenFileDialog {
-            Title = $"Vyber scs-telemetry.dll (Win64) pre {GameLauncher.DisplayName(game)}",
+            Title = Strings.T("msg.pickPlugin"),
             Filter = "scs-telemetry.dll|scs-telemetry.dll|DLL|*.dll",
         };
-        if (dlg.ShowDialog(this) != DialogResult.OK) return false;
+        return dlg.ShowDialog(this) == DialogResult.OK ? dlg.FileName : null;
+    }
 
+    /// <summary>Copies the plugin into one game. Returns null on success, or a
+    /// message describing what went wrong.</summary>
+    private string? InstallPluginFor(SimGame game, string source) {
+        var plugins = GameLauncher.PluginDirectory(game, out var problem);
+        if (plugins == null) return $"{GameLauncher.DisplayName(game)}: {problem}";
+
+        var target = Path.Combine(plugins, "scs-telemetry.dll");
         try {
-            File.Copy(dlg.FileName, Path.Combine(plugins, "scs-telemetry.dll"), overwrite: true);
-            AddLog($"Plugin nainstalovany do {plugins}");
-            return true;
+            File.Copy(source, target, overwrite: true);
+            AddLog($"{Strings.T("msg.pluginInstalled")}: {target}");
+            return null;
+        } catch (UnauthorizedAccessException) {
+            return $"{GameLauncher.DisplayName(game)}: {Strings.T("msg.pluginNoWrite")}\n{plugins}";
         } catch (Exception ex) {
-            MessageBox.Show(this, "Plugin sa nepodarilo skopirovat:\n" + ex.Message, "Chyba", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return false;
+            return $"{GameLauncher.DisplayName(game)}: {ex.Message}";
         }
     }
 
@@ -204,7 +259,7 @@ public class MainForm : Form {
     private Control BuildLivePanel() {
         var panel = new Panel { Dock = DockStyle.Top, Height = 168, Padding = new Padding(12, 10, 12, 6) };
 
-        _status.Text = "Spustam...";
+        _status.Text = Strings.T("live.starting");
         _status.Dock = DockStyle.Top;
         _status.Height = 22;
         _status.Font = new Font(Font, FontStyle.Bold);
@@ -239,21 +294,21 @@ public class MainForm : Form {
     private void StartEngine() {
         _engine = new TrackerEngine(_store);
         _engine.Message += m => BeginInvoke(() => AddLog(m));
-        _engine.JobStarted += j => BeginInvoke(() => AddLog($"ZACIATOK  {j.SourceCity} -> {j.DestinationCity} ({j.Cargo})"));
-        _engine.JobResumed += j => BeginInvoke(() => AddLog($"POKRACUJEM  {j.SourceCity} -> {j.DestinationCity}"));
+        _engine.JobStarted += j => BeginInvoke(() => AddLog($"{Strings.T("msg.jobStart")}  {j.SourceCity} -> {j.DestinationCity} ({j.Cargo})"));
+        _engine.JobResumed += j => BeginInvoke(() => AddLog($"{Strings.T("msg.jobResume")}  {j.SourceCity} -> {j.DestinationCity}"));
         _engine.JobFinished += r => BeginInvoke(() => {
-            AddLog($"KONIEC  {r.SourceCity} -> {r.DestinationCity}: {r.DistanceKm:0.0} km, {r.Validation.Status}");
+            AddLog($"{Strings.T("msg.jobEnd")}  {r.SourceCity} -> {r.DestinationCity}: {r.DistanceKm:0.0} km, {r.Validation.Status}");
             ReloadHistory();
             ReloadStats();
         });
 
         if (!_engine.Start()) {
-            AddLog("Nepodarilo sa pripojit na zdielanu pamat: " + _engine.StartupError);
-            AddLog("Je hra spustena a je plugin v bin\\win_x64\\plugins ?");
+            AddLog(Strings.T("msg.noSharedMemory") + ": " + _engine.StartupError);
+            AddLog(Strings.T("msg.pluginHint"));
         }
 
-        AddLog("Nahravka: " + _engine.SessionPath);
-        AddLog("Databaza: " + _engine.DbPath);
+        AddLog(Strings.T("msg.recording") + ": " + _engine.SessionPath);
+        AddLog(Strings.T("msg.database") + ": " + _engine.DbPath);
 
         ReloadHistory();
         ReloadStats();
@@ -270,8 +325,8 @@ public class MainForm : Form {
         var job = _engine.ActiveJob;
         if (job == null) {
             _status.Text = _engine.Connected
-                ? $"Pripojene na hru - cakam na zakazku   (tiky: {_engine.TickCount})"
-                : "Cakam na hru...";
+                ? $"{Strings.T("live.waitingJob")}   ({Strings.T("live.ticks")}: {_engine.TickCount})"
+                : Strings.T("live.waitingGame");
             _jobLine.Text = "";
             _jobDetail.Text = "";
             _progress.Value = 0;
@@ -283,11 +338,11 @@ public class MainForm : Form {
         var planned = job.PlannedDistanceKm;
         var u = CurrentUnits();
 
-        _status.Text = $"Zakazka prebieha   (tiky: {_engine.TickCount}, zasielok tento beh: {_engine.DeliveriesThisRun})";
+        _status.Text = $"{Strings.T("live.jobRunning")}   ({Strings.T("live.ticks")}: {_engine.TickCount}, {Strings.T("live.deliveriesThisRun")}: {_engine.DeliveriesThisRun})";
         _jobLine.Text = $"{job.SourceCity} -> {job.DestinationCity}";
         _jobDetail.Text = $"{job.Cargo}, {u.MassTonnes(job.CargoMassKg):0.0} {u.MassUnit}   |   "
                         + $"{u.Distance(driven):0.0} / {u.Distance(planned):0} {u.DistanceUnit}   |   "
-                        + $"odmena {u.FormatMoney(job.Income)}";
+                        + $"{Strings.T("live.reward")} {u.FormatMoney(job.Income)}";
 
         // Planned distance is the game's own route length, in the same simulated km
         // the odometer counts, so this genuinely tracks progress toward the drop-off.
@@ -305,7 +360,7 @@ public class MainForm : Form {
     }
 
     private TabPage BuildHistoryTab() {
-        var page = new TabPage("Zasielky") { Padding = new Padding(8) };
+        var page = new TabPage(Strings.T("tab.deliveries")) { Padding = new Padding(8) };
 
         // Flow layout rather than fixed coordinates, so buttons size to their own
         // text and nothing gets clipped when a label changes.
@@ -319,23 +374,29 @@ public class MainForm : Form {
 
         _search.Width = 240;
         _search.Margin = new Padding(0, 3, 8, 3);
-        _search.PlaceholderText = "hladat mesto / naklad / tahac...";
+        _search.PlaceholderText = Strings.T("search.placeholder");
         _search.TextChanged += (_, _) => ApplyFilter();
 
         _statusFilter.Width = 120;
         _statusFilter.Margin = new Padding(0, 3, 16, 3);
         _statusFilter.DropDownStyle = ComboBoxStyle.DropDownList;
-        _statusFilter.Items.AddRange(new object[] { "vsetky", "accepted", "review", "rejected" });
+        // The controls are reused when the layout is rebuilt for a language change,
+        // so the old entries have to go first. Left in place they pile up and, worse,
+        // the still-selected entry is in the previous language while the filter
+        // compares against the new one, which quietly empties the list.
+        _statusFilter.Items.Clear();
+        _statusFilter.Items.AddRange(new object[] { Strings.T("filter.all"), "accepted", "review", "rejected", "imported" });
         _statusFilter.SelectedIndex = 0;
-        _statusFilter.SelectedIndexChanged += (_, _) => ApplyFilter();
+        _statusFilter.SelectedIndexChanged -= OnFilterChanged;
+        _statusFilter.SelectedIndexChanged += OnFilterChanged;
 
         bar.Controls.Add(_search);
         bar.Controls.Add(_statusFilter);
-        bar.Controls.Add(MakeButton("Obnovit", () => { ReloadHistory(); ReloadStats(); }));
-        bar.Controls.Add(MakeButton("Export CSV", () => Export("csv")));
-        bar.Controls.Add(MakeButton("Export JSON", () => Export("json")));
-        bar.Controls.Add(MakeButton("Zalohovat", DoBackup));
-        bar.Controls.Add(MakeButton("Obnovit zo zalohy", DoRestore));
+        bar.Controls.Add(MakeButton(Strings.T("button.refresh"), () => { ReloadHistory(); ReloadStats(); }));
+        bar.Controls.Add(MakeButton(Strings.T("button.exportCsv"), () => Export("csv")));
+        bar.Controls.Add(MakeButton(Strings.T("button.exportJson"), () => Export("json")));
+        bar.Controls.Add(MakeButton(Strings.T("button.backup"), DoBackup));
+        bar.Controls.Add(MakeButton(Strings.T("button.restore"), DoRestore));
 
         _grid.Dock = DockStyle.Fill;
         _grid.AllowUserToAddRows = false;
@@ -345,11 +406,72 @@ public class MainForm : Form {
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _grid.RowHeadersVisible = false;
         _grid.EditMode = DataGridViewEditMode.EditOnEnter;
-        _grid.SelectionChanged += (_, _) => ReloadTimeline();
 
-        // Everything the tracker measured stays read-only; only the user's own note
-        // is editable, and it is written straight back to the database on edit.
-        _grid.DataBindingComplete += (_, _) => {
+        // Detach before attaching: these controls are reused when the layout is
+        // rebuilt for a language change, and handlers added a second time would fire
+        // a second time.
+        _grid.SelectionChanged -= OnGridSelectionChanged;
+        _grid.SelectionChanged += OnGridSelectionChanged;
+        _grid.DataBindingComplete -= OnGridBound;
+        _grid.DataBindingComplete += OnGridBound;
+        _grid.CellEndEdit -= OnGridCellEndEdit;
+        _grid.CellEndEdit += OnGridCellEndEdit;
+        _grid.CellFormatting -= OnGridCellFormatting;
+        _grid.CellFormatting += OnGridCellFormatting;
+
+        _timeline.Dock = DockStyle.Bottom;
+        _timeline.Height = 150;
+        _timeline.ReadOnly = true;
+        _timeline.AllowUserToAddRows = false;
+        _timeline.RowHeadersVisible = false;
+        _timeline.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        _timeline.DataBindingComplete -= OnTimelineBound;
+        _timeline.DataBindingComplete += OnTimelineBound;
+
+        var splitLabel = new Label { Dock = DockStyle.Bottom, Height = 20, Text = Strings.T("timeline.label"), ForeColor = SystemColors.GrayText };
+
+        page.Controls.Add(_grid);
+        page.Controls.Add(splitLabel);
+        page.Controls.Add(_timeline);
+        page.Controls.Add(bar);
+        return page;
+    }
+
+    private void OnFilterChanged(object? sender, EventArgs e) => ApplyFilter();
+    private void OnGridSelectionChanged(object? sender, EventArgs e) => ReloadTimeline();
+
+    private void OnGridCellEndEdit(object? sender, DataGridViewCellEventArgs e) {
+        if (_grid.Columns[e.ColumnIndex].DataPropertyName != nameof(DeliveryRow.Poznamky)) return;
+        if (_grid.Rows[e.RowIndex].DataBoundItem is DeliveryRow row) _store.SetNotes(row.Id, row.Poznamky ?? "");
+    }
+
+    /// <summary>Colours the verdict so problem deliveries stand out without reading.</summary>
+    private void OnGridCellFormatting(object? sender, DataGridViewCellFormattingEventArgs e) {
+        if (_grid.Columns[e.ColumnIndex].DataPropertyName != nameof(DeliveryRow.Stav)) return;
+        e.CellStyle!.ForeColor = Convert.ToString(e.Value) switch {
+            "rejected" => Color.Firebrick,
+            "review" => Color.DarkGoldenrod,
+            "imported" => Color.SteelBlue,
+            _ => Color.ForestGreen,
+        };
+    }
+
+    private void OnTimelineBound(object? sender, DataGridViewBindingCompleteEventArgs e) {
+        var captions = new Dictionary<string, string> {
+            [nameof(TimelineRow.Cas)] = Strings.T("col.time"),
+            [nameof(TimelineRow.Udalost)] = Strings.T("col.event"),
+            [nameof(TimelineRow.Hodnota)] = Strings.T("col.value"),
+            [nameof(TimelineRow.Detail)] = Strings.T("col.detail"),
+        };
+        foreach (DataGridViewColumn col in _timeline.Columns) {
+            if (captions.TryGetValue(col.DataPropertyName, out var caption)) col.HeaderText = caption;
+        }
+    }
+
+    /// <summary>Everything the tracker measured stays read-only; only the user's own
+    /// note is editable, and it is written straight back to the database on edit.</summary>
+    private void OnGridBound(object? sender, DataGridViewBindingCompleteEventArgs e) {
+        {
             foreach (DataGridViewColumn col in _grid.Columns) {
                 col.ReadOnly = col.DataPropertyName != nameof(DeliveryRow.Poznamky);
             }
@@ -374,42 +496,33 @@ public class MainForm : Form {
                 if (weights.TryGetValue(col.DataPropertyName, out var w)) col.FillWeight = w;
             }
 
+
+            // Column captions come from the bound property names, which are fixed, so
+            // they are relabelled here from the translation table.
+            var captions = new Dictionary<string, string> {
+                [nameof(DeliveryRow.Datum)] = Strings.T("col.date"),
+                [nameof(DeliveryRow.Hra)] = Strings.T("col.game"),
+                [nameof(DeliveryRow.Odkial)] = Strings.T("col.from"),
+                [nameof(DeliveryRow.Kam)] = Strings.T("col.to"),
+                [nameof(DeliveryRow.Naklad)] = Strings.T("col.cargo"),
+                [nameof(DeliveryRow.Tahac)] = Strings.T("col.truck"),
+                [nameof(DeliveryRow.Vzdialenost)] = Strings.T("col.distance"),
+                [nameof(DeliveryRow.Odmena)] = Strings.T("col.pay"),
+                [nameof(DeliveryRow.Pokuty)] = Strings.T("col.fines"),
+                [nameof(DeliveryRow.Kolizie)] = Strings.T("col.collisions"),
+                [nameof(DeliveryRow.Stav)] = Strings.T("col.status"),
+                [nameof(DeliveryRow.Poznamky)] = Strings.T("col.notes"),
+            };
+            foreach (DataGridViewColumn col in _grid.Columns) {
+                if (captions.TryGetValue(col.DataPropertyName, out var caption)) col.HeaderText = caption;
+            }
             if (_grid.Columns[nameof(DeliveryRow.Datum)] is { } dateCol) {
                 dateCol.DefaultCellStyle.Format = "dd.MM.yy HH:mm";
             }
             foreach (var numeric in new[] { nameof(DeliveryRow.Vzdialenost), nameof(DeliveryRow.Odmena), nameof(DeliveryRow.Pokuty), nameof(DeliveryRow.Kolizie) }) {
                 if (_grid.Columns[numeric] is { } c) c.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
             }
-        };
-        _grid.CellEndEdit += (_, e) => {
-            if (_grid.Columns[e.ColumnIndex].DataPropertyName != nameof(DeliveryRow.Poznamky)) return;
-            if (_grid.Rows[e.RowIndex].DataBoundItem is DeliveryRow row) _store.SetNotes(row.Id, row.Poznamky ?? "");
-        };
-
-        // Colour the verdict so problem deliveries stand out without reading.
-        _grid.CellFormatting += (_, e) => {
-            if (_grid.Columns[e.ColumnIndex].DataPropertyName != nameof(DeliveryRow.Stav)) return;
-            e.CellStyle.ForeColor = Convert.ToString(e.Value) switch {
-                "rejected" => Color.Firebrick,
-                "review" => Color.DarkGoldenrod,
-                _ => Color.ForestGreen,
-            };
-        };
-
-        _timeline.Dock = DockStyle.Bottom;
-        _timeline.Height = 150;
-        _timeline.ReadOnly = true;
-        _timeline.AllowUserToAddRows = false;
-        _timeline.RowHeadersVisible = false;
-        _timeline.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-
-        var splitLabel = new Label { Dock = DockStyle.Bottom, Height = 20, Text = "Casova os vybranej zasielky:", ForeColor = SystemColors.GrayText };
-
-        page.Controls.Add(_grid);
-        page.Controls.Add(splitLabel);
-        page.Controls.Add(_timeline);
-        page.Controls.Add(bar);
-        return page;
+        }
     }
 
     private static Button MakeButton(string text, Action onClick) {
@@ -419,7 +532,7 @@ public class MainForm : Form {
     }
 
     private TabPage BuildStatsTab() {
-        var page = new TabPage("Statistiky") { Padding = new Padding(16) };
+        var page = new TabPage(Strings.T("tab.stats")) { Padding = new Padding(16) };
         _statsLabel.Dock = DockStyle.Fill;
         _statsLabel.Font = new Font("Consolas", 11F);
         page.Controls.Add(_statsLabel);
@@ -435,10 +548,10 @@ public class MainForm : Form {
 
     private void ApplyFilter() {
         var text = _search.Text.Trim();
-        var status = _statusFilter.SelectedItem as string ?? "vsetky";
+        var status = _statusFilter.SelectedItem as string ?? Strings.T("filter.all");
 
         IEnumerable<DeliveryRow> filtered = _rows;
-        if (status != "vsetky") filtered = filtered.Where(r => r.Stav == status);
+        if (status != Strings.T("filter.all")) filtered = filtered.Where(r => r.Stav == status);
         if (text.Length > 0) {
             filtered = filtered.Where(r =>
                 r.Odkial.Contains(text, StringComparison.OrdinalIgnoreCase) ||
@@ -473,20 +586,20 @@ public class MainForm : Form {
         var avg = gameHours > 0.01 ? s.TimedDistanceKm / gameHours : 0;
 
         _statsLabel.Text = string.Join(Environment.NewLine, new[] {
-            $"zasielok spolu     {s.TotalDeliveries}   (accepted {s.Accepted}, review {s.Review}, rejected {s.Rejected})",
-            $"vzdialenost        {u.FormatDistance(s.TotalDistanceKm)}",
-            $"zarobok            {u.FormatMoney(s.TotalRevenue)}",
-            $"palivo             {u.FormatVolume(s.TotalFuelL)}",
-            $"cas za volantom    {realHours:0.0} h realneho ({gameHours:0.0} h herneho)",
-            $"priemerna rychlost {u.FormatSpeed(avg)}",
+            $"{Strings.T("stats.deliveries"),-18} {s.TotalDeliveries}   (accepted {s.Accepted}, review {s.Review}, rejected {s.Rejected})",
+            $"{Strings.T("stats.distance"),-18} {u.FormatDistance(s.TotalDistanceKm)}",
+            $"{Strings.T("stats.revenue"),-18} {u.FormatMoney(s.TotalRevenue)}",
+            $"{Strings.T("stats.fuel"),-18} {u.FormatVolume(s.TotalFuelL)}",
+            $"{Strings.T("stats.time"),-18} {realHours:0.0} {Strings.T("stats.realTime")} ({gameHours:0.0} {Strings.T("stats.gameTime")})",
+            $"{Strings.T("stats.avgSpeed"),-18} {u.FormatSpeed(avg)}",
             "",
-            $"kolizie            {s.TotalCollisions}",
-            $"meskania           {s.LateDeliveries}",
-            $"pokuty spolu       {u.FormatMoney(s.TotalFines)}",
+            $"{Strings.T("stats.collisions"),-18} {s.TotalCollisions}",
+            $"{Strings.T("stats.late"),-18} {s.LateDeliveries}",
+            $"{Strings.T("stats.finesTotal"),-18} {u.FormatMoney(s.TotalFines)}",
             "",
-            $"oblubeny tahac     {s.FavoriteTruck ?? "-"}",
-            $"oblubena trasa     {s.FavoriteRoute ?? "-"}",
-            $"oblubeny naklad    {s.FavoriteCargo ?? "-"}",
+            $"{Strings.T("stats.favTruck"),-18} {s.FavoriteTruck ?? "?"}",
+            $"{Strings.T("stats.favRoute"),-18} {s.FavoriteRoute ?? "?"}",
+            $"{Strings.T("stats.favCargo"),-18} {s.FavoriteCargo ?? "?"}",
         });
     }
 
@@ -499,12 +612,12 @@ public class MainForm : Form {
         };
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
         _store.Export(dlg.FileName, format);
-        MessageBox.Show(this, "Exportovane do:\n" + dlg.FileName, "Export");
+        MessageBox.Show(this, Strings.T("msg.exported") + "\n" + dlg.FileName, Strings.T("msg.database"));
     }
 
     private void ImportTrucksBook() {
         using var dlg = new OpenFileDialog {
-            Title = "Vyber CSV export z TrucksBooku",
+            Title = Strings.T("msg.importPick"),
             Filter = "CSV|*.csv",
             InitialDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"),
         };
@@ -512,24 +625,24 @@ public class MainForm : Form {
 
         var result = new TrucksBookImport(_store).Import(dlg.FileName);
 
-        var message = $"Importovanych: {result.Imported}\nUz v databaze: {result.Skipped}";
+        var message = $"{Strings.T("msg.imported")} {result.Imported}\n{Strings.T("msg.alreadyThere")} {result.Skipped}";
         if (result.Uncredited > 0) {
             var u = CurrentUnits();
-            message += $"\n\nZ toho {result.Uncredited} zasielok TrucksBook nezapocital "
-                     + $"({u.FormatDistance(result.UncreditedKm, "0")}).\nWaybill ich zapocitava.";
+            message += "\n\n" + string.Format(Strings.T("msg.uncredited"), result.Uncredited,
+                u.FormatDistance(result.UncreditedKm, "0"));
         }
         if (result.Problems.Count > 0) {
-            message += "\n\nProblemy:\n" + string.Join("\n", result.Problems.Take(5));
+            message += "\n\n" + Strings.T("msg.problems") + "\n" + string.Join("\n", result.Problems.Take(5));
         }
 
-        MessageBox.Show(this, message, "Import z TrucksBooku");
+        MessageBox.Show(this, message, Strings.T("msg.importTitle"));
         ReloadHistory();
         ReloadStats();
     }
 
     private void DoBackup() {
         var path = _store.Backup();
-        MessageBox.Show(this, "Zaloha ulozena:\n" + path, "Zaloha");
+        MessageBox.Show(this, Strings.T("msg.backupSaved") + "\n" + path, Strings.T("button.backup"));
     }
 
     private void DoRestore() {

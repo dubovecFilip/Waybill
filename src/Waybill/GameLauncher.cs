@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Linq;
 using Microsoft.Win32;
 
 namespace Waybill;
@@ -49,14 +50,44 @@ public static class GameLauncher {
     }
 
     /// <summary>The game's plugin folder, creating it if the game is installed but
-    /// has never had a plugin put in it.</summary>
-    public static string? PluginDirectory(SimGame game) {
+    /// has never had a plugin put in it. Returns null with a reason rather than
+    /// throwing: this runs from a menu click, and an exception there wedges the UI.</summary>
+    public static string? PluginDirectory(SimGame game, out string problem) {
+        problem = "";
         var root = FindGameDirectory(game);
-        if (root == null) return null;
+        if (root == null) {
+            problem = $"{DisplayName(game)} sa nenašla v žiadnej knižnici Steamu.";
+            return null;
+        }
 
         var plugins = Path.Combine(root, "bin", "win_x64", "plugins");
-        Directory.CreateDirectory(plugins);
-        return plugins;
+        try {
+            Directory.CreateDirectory(plugins);
+            return plugins;
+        } catch (Exception ex) {
+            problem = $"Priečinok pre plugin sa nepodarilo vytvoriť:\n{plugins}\n\n{ex.Message}";
+            return null;
+        }
+    }
+
+    /// <summary>Looks for the telemetry plugin shipped with this project, so the
+    /// usual case needs no file picker at all. Checks next to the executable first
+    /// (published layout), then the repository's third-party folder.</summary>
+    public static string? FindBundledPlugin() {
+        var candidates = new List<string>();
+        var baseDir = AppContext.BaseDirectory;
+
+        candidates.Add(Path.Combine(baseDir, "scs-telemetry.dll"));
+        candidates.Add(Path.Combine(baseDir, "plugin", "scs-telemetry.dll"));
+
+        // Walk up from the executable towards the repository root looking for
+        // third-party/, which holds the plugin release.
+        var dir = new DirectoryInfo(baseDir);
+        for (var i = 0; i < 6 && dir != null; i++, dir = dir.Parent) {
+            candidates.Add(Path.Combine(dir.FullName, "third-party", "scs-telemetry.dll"));
+        }
+
+        return candidates.FirstOrDefault(File.Exists);
     }
 
     public static bool IsPluginInstalled(SimGame game) {

@@ -15,6 +15,14 @@ public class DeliveryStore : IDisposable {
 
     private readonly SqliteConnection _conn;
 
+    /// <summary>
+    /// One SQLite connection serves both the tracking engine (background thread,
+    /// writing finished deliveries) and the window (UI thread, reading history).
+    /// A connection is not safe to use from two threads at once, so every public
+    /// operation takes this lock.
+    /// </summary>
+    private readonly object _gate = new();
+
     public DeliveryStore(string? dbPath = null) {
         DbPath = dbPath ?? DefaultPath();
         Directory.CreateDirectory(Path.GetDirectoryName(DbPath)!);
@@ -164,6 +172,7 @@ public class DeliveryStore : IDisposable {
     }
 
     public void SaveDelivery(JobRecord r) {
+        lock (_gate) {
         using var tx = _conn.BeginTransaction();
 
         var finesTotal = r.Fines.Sum(f => f.Amount);
@@ -272,11 +281,13 @@ public class DeliveryStore : IDisposable {
         InsertTripPoints(tx, deliveryId, r);
 
         tx.Commit();
+        }
     }
 
     /// <summary>Removes deliveries this app tracked itself, leaving imported ones
     /// untouched - they have no recording to rebuild them from. Used by --rebuild.</summary>
     public int DeleteTrackedDeliveries() {
+        lock (_gate) {
         using var tx = _conn.BeginTransaction();
 
         foreach (var table in new[] { "events", "trip_points" }) {
@@ -299,13 +310,16 @@ public class DeliveryStore : IDisposable {
 
         tx.Commit();
         return removed;
+        }
     }
 
     public bool HasDelivery(string jobUid) {
-        using var cmd = _conn.CreateCommand();
-        cmd.CommandText = "SELECT 1 FROM deliveries WHERE job_uid = $uid LIMIT 1;";
-        cmd.Parameters.AddWithValue("$uid", jobUid);
-        return cmd.ExecuteScalar() != null;
+        lock (_gate) {
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = "SELECT 1 FROM deliveries WHERE job_uid = $uid LIMIT 1;";
+            cmd.Parameters.AddWithValue("$uid", jobUid);
+            return cmd.ExecuteScalar() != null;
+        }
     }
 
     /// <summary>Writes a delivery that came from an import rather than live tracking.
@@ -313,6 +327,7 @@ public class DeliveryStore : IDisposable {
     /// telemetry behind it to validate, and calling it "accepted" would put unearned
     /// confidence on a row this app never watched.</summary>
     public void InsertImported(ImportedDelivery d) {
+        lock (_gate) {
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = """
             INSERT OR IGNORE INTO deliveries (
@@ -362,126 +377,143 @@ public class DeliveryStore : IDisposable {
         cmd.Parameters.AddWithValue("$real_duration_ms", d.RealDurationMs);
 
         cmd.ExecuteNonQuery();
+        }
     }
 
     /// <summary>Deliveries as grid rows for the UI, newest first. Each row is
     /// formatted in its own game's units, so an ATS run reads in miles even when an
     /// ETS2 one sits next to it in the list.</summary>
-    public IEnumerable<DeliveryRow> RecentDeliveryRows(int limit, string unitSetting) {
-        using var cmd = _conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT id, started_at_ms, source_city, destination_city, cargo,
-                   truck_make || ' ' || truck_model, actual_distance_km,
-                   COALESCE(revenue, offered_income), fines_count, collisions,
-                   validation_status, COALESCE(notes, ''), COALESCE(game, '')
-            FROM deliveries
-            ORDER BY started_at_ms DESC
-            LIMIT $limit;
-            """;
-        cmd.Parameters.AddWithValue("$limit", limit);
+    public List<DeliveryRow> RecentDeliveryRows(int limit, string unitSetting) {
+        lock (_gate) {
+            var rows = new List<DeliveryRow>();
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT id, started_at_ms, source_city, destination_city, cargo,
+                       truck_make || ' ' || truck_model, actual_distance_km,
+                       COALESCE(revenue, offered_income), fines_count, collisions,
+                       validation_status, COALESCE(notes, ''), COALESCE(game, '')
+                FROM deliveries
+                ORDER BY started_at_ms DESC
+                LIMIT $limit;
+                """;
+            cmd.Parameters.AddWithValue("$limit", limit);
 
-        using var reader = cmd.ExecuteReader();
-        while (reader.Read()) {
-            var game = reader.GetString(12);
-            var units = Units.For(unitSetting, game);
-            var km = reader.GetDouble(6);
-            var money = reader.GetDouble(7);
-            yield return new DeliveryRow {
-                Id = reader.GetInt64(0),
-                Datum = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(1)).LocalDateTime,
-                Hra = game,
-                Odkial = reader.GetString(2),
-                Kam = reader.GetString(3),
-                Naklad = reader.GetString(4),
-                Tahac = reader.GetString(5),
-                DistanceKm = km,
-                Vzdialenost = units.FormatDistance(km),
-                Zarobok = money,
-                Odmena = units.FormatMoney(money),
-                Pokuty = reader.GetInt32(8),
-                Kolizie = reader.IsDBNull(9) ? 0 : reader.GetInt32(9),
-                Stav = reader.GetString(10),
-                Poznamky = reader.GetString(11),
-            };
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read()) {
+                var game = reader.GetString(12);
+                var units = Units.For(unitSetting, game);
+                var km = reader.GetDouble(6);
+                var money = reader.GetDouble(7);
+                rows.Add(new DeliveryRow {
+                    Id = reader.GetInt64(0),
+                    Datum = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(1)).LocalDateTime,
+                    Hra = game,
+                    Odkial = reader.GetString(2),
+                    Kam = reader.GetString(3),
+                    Naklad = reader.GetString(4),
+                    Tahac = reader.GetString(5),
+                    DistanceKm = km,
+                    Vzdialenost = units.FormatDistance(km),
+                    Zarobok = money,
+                    Odmena = units.FormatMoney(money),
+                    Pokuty = reader.GetInt32(8),
+                    Kolizie = reader.IsDBNull(9) ? 0 : reader.GetInt32(9),
+                    Stav = reader.GetString(10),
+                    Poznamky = reader.GetString(11),
+                });
+            }
+            return rows;
         }
     }
 
     /// <summary>Game of the most recent delivery - what "auto" units follow for
     /// aggregate figures that can't belong to one game.</summary>
     public string? MostRecentGame() {
-        using var cmd = _conn.CreateCommand();
-        cmd.CommandText = "SELECT game FROM deliveries ORDER BY started_at_ms DESC LIMIT 1;";
-        return cmd.ExecuteScalar() as string;
+        lock (_gate) {
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = "SELECT game FROM deliveries ORDER BY started_at_ms DESC LIMIT 1;";
+            return cmd.ExecuteScalar() as string;
+        }
     }
 
     /// <summary>The event timeline of one delivery, oldest first.</summary>
-    public IEnumerable<TimelineRow> TimelineRows(long deliveryId) {
-        using var cmd = _conn.CreateCommand();
-        // Anomalies are debugging detail about the SDK, not things the driver did,
-        // so the timeline shows only real gameplay events.
-        cmd.CommandText = """
-            SELECT at_ms, event_type, value, extra_json
-            FROM events
-            WHERE delivery_id = $id AND event_type NOT LIKE 'anomaly:%'
-            ORDER BY at_ms;
-            """;
-        cmd.Parameters.AddWithValue("$id", deliveryId);
+    public List<TimelineRow> TimelineRows(long deliveryId) {
+        lock (_gate) {
+            var rows = new List<TimelineRow>();
+            using var cmd = _conn.CreateCommand();
+            // Anomalies are debugging detail about the SDK, not things the driver did,
+            // so the timeline shows only real gameplay events.
+            cmd.CommandText = """
+                SELECT at_ms, event_type, value, extra_json
+                FROM events
+                WHERE delivery_id = $id AND event_type NOT LIKE 'anomaly:%'
+                ORDER BY at_ms;
+                """;
+            cmd.Parameters.AddWithValue("$id", deliveryId);
 
-        using var reader = cmd.ExecuteReader();
-        while (reader.Read()) {
-            var extra = reader.IsDBNull(3) ? null : reader.GetString(3);
-            string detail = "";
-            if (extra != null) {
-                try {
-                    detail = Newtonsoft.Json.Linq.JObject.Parse(extra)["Detail"]?.ToString() ?? "";
-                } catch { detail = ""; }
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read()) {
+                var extra = reader.IsDBNull(3) ? null : reader.GetString(3);
+                string detail = "";
+                if (extra != null) {
+                    try {
+                        detail = Newtonsoft.Json.Linq.JObject.Parse(extra)["Detail"]?.ToString() ?? "";
+                    } catch { detail = ""; }
+                }
+                rows.Add(new TimelineRow {
+                    Cas = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(0)).LocalDateTime.ToString("HH:mm:ss"),
+                    Udalost = reader.GetString(1),
+                    Hodnota = reader.IsDBNull(2) ? "" : reader.GetDouble(2).ToString("0.##"),
+                    Detail = detail,
+                });
             }
-            yield return new TimelineRow {
-                Cas = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(0)).LocalDateTime.ToString("HH:mm:ss"),
-                Udalost = reader.GetString(1),
-                Hodnota = reader.IsDBNull(2) ? "" : reader.GetDouble(2).ToString("0.##"),
-                Detail = detail,
-            };
+            return rows;
         }
     }
 
     /// <summary>Free-text note the user can attach to a delivery (roadmap: "edit notes").</summary>
     public void SetNotes(long deliveryId, string notes) {
-        using var cmd = _conn.CreateCommand();
-        cmd.CommandText = "UPDATE deliveries SET notes = $notes WHERE id = $id;";
-        cmd.Parameters.AddWithValue("$notes", notes);
-        cmd.Parameters.AddWithValue("$id", deliveryId);
-        cmd.ExecuteNonQuery();
+        lock (_gate) {
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = "UPDATE deliveries SET notes = $notes WHERE id = $id;";
+            cmd.Parameters.AddWithValue("$notes", notes);
+            cmd.Parameters.AddWithValue("$id", deliveryId);
+            cmd.ExecuteNonQuery();
+        }
     }
 
     /// <summary>One compact line per delivery, newest first - for `--list`. Each line
     /// is in its own game's units.</summary>
-    public IEnumerable<string> RecentDeliveries(int limit, string unitSetting) {
-        using var cmd = _conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT started_at_ms, source_city, destination_city, cargo,
-                   actual_distance_km, revenue, offered_income, validation_status,
-                   validation_flags, COALESCE(game, '')
-            FROM deliveries
-            ORDER BY started_at_ms DESC
-            LIMIT $limit;
-            """;
-        cmd.Parameters.AddWithValue("$limit", limit);
+    public List<string> RecentDeliveries(int limit, string unitSetting) {
+        lock (_gate) {
+            var lines = new List<string>();
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT started_at_ms, source_city, destination_city, cargo,
+                       actual_distance_km, revenue, offered_income, validation_status,
+                       validation_flags, COALESCE(game, '')
+                FROM deliveries
+                ORDER BY started_at_ms DESC
+                LIMIT $limit;
+                """;
+            cmd.Parameters.AddWithValue("$limit", limit);
 
-        using var reader = cmd.ExecuteReader();
-        while (reader.Read()) {
-            var startedAt = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(0)).LocalDateTime;
-            var source = reader.GetString(1);
-            var dest = reader.GetString(2);
-            var cargo = reader.GetString(3);
-            var units = Units.For(unitSetting, reader.GetString(9));
-            var distance = units.Distance(reader.GetDouble(4));
-            var revenue = reader.IsDBNull(5) ? reader.GetDouble(6) : reader.GetDouble(5);
-            var status = reader.GetString(7);
-            var flags = reader.GetString(8);
-            var flagsSuffix = string.IsNullOrEmpty(flags) ? "" : $" [{flags}]";
-            yield return $"{startedAt:yyyy-MM-dd HH:mm}  {source,-15} -> {dest,-15}  {cargo,-20}  "
-                       + $"{distance,7:0.0} {units.DistanceUnit,-3} {revenue,7:0} {units.Currency,-3} {status}{flagsSuffix}";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read()) {
+                var startedAt = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(0)).LocalDateTime;
+                var source = reader.GetString(1);
+                var dest = reader.GetString(2);
+                var cargo = reader.GetString(3);
+                var units = Units.For(unitSetting, reader.GetString(9));
+                var distance = units.Distance(reader.GetDouble(4));
+                var revenue = reader.IsDBNull(5) ? reader.GetDouble(6) : reader.GetDouble(5);
+                var status = reader.GetString(7);
+                var flags = reader.GetString(8);
+                var flagsSuffix = string.IsNullOrEmpty(flags) ? "" : $" [{flags}]";
+                lines.Add($"{startedAt:yyyy-MM-dd HH:mm}  {source,-15} -> {dest,-15}  {cargo,-20}  "
+                        + $"{distance,7:0.0} {units.DistanceUnit,-3} {revenue,7:0} {units.Currency,-3} {status}{flagsSuffix}");
+            }
+            return lines;
         }
     }
 
@@ -548,19 +580,24 @@ public class DeliveryStore : IDisposable {
     /// <summary>All trip points for one delivery, in order - the raw material for a
     /// future route replay/map view. Coordinates are the SDK's raw world-space
     /// units, not GPS; no map projection exists yet (see project_vision memory).</summary>
-    public IEnumerable<(long AtMs, double X, double Y, double Z, double SpeedKmh)> TripPoints(long deliveryId) {
-        using var cmd = _conn.CreateCommand();
-        cmd.CommandText = "SELECT at_ms, x, y, z, speed_kmh FROM trip_points WHERE delivery_id = $id ORDER BY at_ms";
-        cmd.Parameters.AddWithValue("$id", deliveryId);
-        using var reader = cmd.ExecuteReader();
-        while (reader.Read()) {
-            yield return (reader.GetInt64(0), reader.GetDouble(1), reader.GetDouble(2), reader.GetDouble(3), reader.GetDouble(4));
+    public List<(long AtMs, double X, double Y, double Z, double SpeedKmh)> TripPoints(long deliveryId) {
+        lock (_gate) {
+            var points = new List<(long, double, double, double, double)>();
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = "SELECT at_ms, x, y, z, speed_kmh FROM trip_points WHERE delivery_id = $id ORDER BY at_ms";
+            cmd.Parameters.AddWithValue("$id", deliveryId);
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read()) {
+                points.Add((reader.GetInt64(0), reader.GetDouble(1), reader.GetDouble(2), reader.GetDouble(3), reader.GetDouble(4)));
+            }
+            return points;
         }
     }
 
     /// <summary>Aggregate stats for `--stats`. Pass sinceMs to scope to a window
     /// (e.g. this week); null means all-time.</summary>
     public StatsSummary GetStats(long? sinceMs = null) {
+        lock (_gate) {
         var summary = new StatsSummary();
 
         using (var cmd = _conn.CreateCommand()) {
@@ -610,6 +647,7 @@ public class DeliveryStore : IDisposable {
         summary.FavoriteCargo = TopValue("cargo", sinceMs);
 
         return summary;
+        }
     }
 
     private string? TopValue(string groupExpr, long? sinceMs) {
@@ -629,6 +667,7 @@ public class DeliveryStore : IDisposable {
     /// <summary>Dumps the deliveries table to CSV or JSON, per the roadmap's
     /// "export CSV/JSON" MVP item. Column names match the SQL schema above.</summary>
     public void Export(string path, string format) {
+        lock (_gate) {
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = "SELECT * FROM deliveries ORDER BY started_at_ms;";
         using var reader = cmd.ExecuteReader();
@@ -654,12 +693,14 @@ public class DeliveryStore : IDisposable {
             }
             writer.WriteLine(string.Join(",", cells));
         }
+        }
     }
 
     /// <summary>Writes a clean, consistent copy of the database to <paramref name="path"/>.
     /// Uses VACUUM INTO rather than a file copy so it is safe to run while the tracker
     /// is mid-delivery and holding the database open.</summary>
     public string Backup(string? path = null) {
+        lock (_gate) {
         path ??= Path.Combine(DefaultDir(), "backups", $"deliveries-{DateTime.Now:yyyyMMdd-HHmmss}.db");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         if (File.Exists(path)) File.Delete(path); // VACUUM INTO refuses an existing target
@@ -669,6 +710,7 @@ public class DeliveryStore : IDisposable {
         cmd.Parameters.AddWithValue("$path", path);
         cmd.ExecuteNonQuery();
         return path;
+        }
     }
 
     /// <summary>Replaces the live database with a backup. The current database is

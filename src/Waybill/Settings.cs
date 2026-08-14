@@ -11,6 +11,9 @@ public class Settings {
     /// <summary>"auto" (imperial for ATS, metric for ETS2), "metric", or "imperial".</summary>
     public string Units { get; set; } = "auto";
 
+    /// <summary>UI language code, see Strings.All.</summary>
+    public string Language { get; set; } = "sk";
+
     [JsonIgnore]
     public static string Path => System.IO.Path.Combine(DeliveryStore.DefaultDir(), "settings.json");
 
