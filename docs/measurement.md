@@ -1,51 +1,52 @@
-# Ako Waybill meria vzdialenosť a rýchlosť
+# How Waybill measures distance and speed
 
-Hra pracuje s dvomi sústavami jednotiek a nesmú sa miešať. Zámena jednej za
-druhú je najčastejší zdroj nezmyselných čísel, tak nech je zapísané, čo znamená
-ktorá.
+The game works in two unit systems and they must never be mixed. Swapping one
+for the other is the most common source of nonsense numbers, so here is what each
+one means.
 
-## Dve sústavy
+## The two systems
 
-| Meranie | Jedna reálna jazda | Sústava |
+| Measurement | One real drive | System |
 |---|---|---|
-| Odometer | 176,60 km | simulované km |
-| Rýchlosť krát **herný** čas | 175,62 km | simulované km |
-| `JobDelivered.DistanceKm` z hry | 176 km | simulované km |
-| Pozícia vo svete | 13,08 km | world space |
-| Rýchlosť krát **reálny** čas | 12,94 km | world space |
+| Odometer | 176.60 km | simulated km |
+| Speed times **game** time | 175.62 km | simulated km |
+| `JobDelivered.DistanceKm` from the game | 176 km | simulated km |
+| World position | 13.08 km | world space |
+| Speed times **real** time | 12.94 km | world space |
 
-Mapa je zmenšená, na meraných trasách asi 13,5x, a herný čas beží zhruba 13x
-rýchlejšie než reálny. Prvé tri riadky preto sedia navzájom a posledné dva tiež,
-ale medzi skupinami je faktor kompresie.
+The map is scaled down, by about 13.5x on the routes measured here, and the game
+clock runs roughly 13x faster than real time. The first three rows agree with
+each other and so do the last two, but between the groups sits that compression
+factor.
 
-Zásielka sa vykazuje v simulovaných km, teda v tom, čo hlási hra aj ponuka
-zákazky, takže vedie odometer. Sčítavajú sa jeho prírastky medzi tikmi, s
-odmietnutím záporných skokov a skokov nad prah, ktoré vznikajú pri teleporte
-alebo pri načítaní pozície.
+A delivery is reported in simulated km, the same figure the game and the job
+offer show, so the odometer leads. Its increments between ticks are summed, with
+negative jumps and jumps above a threshold rejected, since those come from a
+teleport or from a position being loaded.
 
-Pozícia vo svete sa ukladá zvlášť. Slúži na detekciu teleportu a do budúcna na
-kreslenie trasy, nikdy na počítanie prejdenej vzdialenosti.
+World position is stored separately. It serves teleport detection and, later on,
+drawing the route. It is never used to count distance travelled.
 
-## Priemerná rýchlosť
+## Average speed
 
-Musí deliť simulované km herným časom stráveným jazdou.
+It has to divide simulated km by the game time spent driving.
 
-* Delenie reálnym časom vykáže ako rýchlosť kompresiu času, teda okolo 770 km/h.
-* Delenie celkovým herným časom započíta aj spánok a pauzy, čím rýchlosť podstrelí.
+* Dividing by real time reports the time compression as speed, around 770 km/h.
+* Dividing by total game time counts sleep and pauses too, which understates it.
 
-Sledovaný je preto samostatný čítač herných minút, ktorý beží len počas jazdy.
-Importované zásielky ho nemajú, keďže za nimi nestojí telemetria, tak sa im
-priemerná rýchlosť nepočíta.
+A separate counter of game minutes therefore runs only while driving. Imported
+deliveries do not have one, as there is no telemetry behind them, so they get no
+average speed.
 
-## Jednotky pri ukladaní
+## Units in storage
 
-Databáza ukladá vždy metricky a prevádza sa až pri zobrazení. História preto
-nezávisí od toho, aké nastavenie platilo v čase jazdy, a prepnutie jednotiek
-prekreslí aj staré zásielky.
+The database always stores metric and converts only for display. The history
+therefore does not depend on which setting was active during the drive, and
+switching units redraws old deliveries too.
 
-## Herný čas
+## Game time
 
-Herné hodiny majú rozlíšenie jednej minúty, takže krátke úseky sú hrubé. Na
-odlíšenie pauzy od výpadku klienta to stačí: keď medzi dvomi tikmi ubehlo menej
-herných minút, než by zodpovedalo reálnemu času, hra bola pozastavená, inak
-nebežal Waybill.
+The game clock has a resolution of one minute, so short intervals are coarse.
+That is still enough to tell a pause from a client outage: if fewer game minutes
+passed between two ticks than the real time between them would imply, the game
+was paused, otherwise Waybill was not running.

@@ -1,184 +1,185 @@
 # Waybill
 
-Lokálny tracker zásielok pre **Euro Truck Simulator 2** a **American Truck
-Simulator**. Sám rozpozná začiatok a koniec zákazky, zapíše ju do lokálnej
-databázy a ukáže štatistiky. Bez účtu, bez internetu, bez druhého programu.
+A local delivery tracker for **Euro Truck Simulator 2** and **American Truck
+Simulator**. It detects the start and the end of a job on its own, writes it to a
+local database and shows statistics. No account, no internet, no second program.
 
-*Waybill* je nákladný list, teda dokument, ktorý sprevádza zásielku a nesie
-trasu, náklad a odosielateľa. Presne to, čo tento program o každej jazde uchová.
+A *waybill* is the document that travels with a shipment and carries the route,
+the cargo and the sender. That is exactly what this app keeps about every drive.
 
-![Okno aplikácie](assets/screenshot.png)
+![Application window](assets/screenshot.png)
 
-## Prečo vznikol
+## Why it exists
 
-TrucksBook zneplatní doručenie, ak bol počas neho zapnutý asistent jazdy v pruhu.
-Waybill stojí na opačnom princípe:
+TrucksBook invalidates a delivery if lane assist was switched on during it.
+Waybill takes the opposite position:
 
-> **Zásielka sa nikdy nezneplatní kvôli tomu, že vodič použil asistenta.**
+> **A delivery is never invalidated because the driver used an assist.**
 
-Asistenty, tempomat, prekračovanie rýchlosti, kolízie aj pokuty sa ukladajú ako
-metadáta a zobrazujú v štatistikách. Zamietne sa len to, čo je priamym dôkazom,
-že sa nejazdilo: teleport k cieľu, chýbajúca ukončovacia udalosť alebo prakticky
-nulová vzdialenosť. Všetko ostatné dostane príznak na prezretie, nie zákaz.
+Assists, cruise control, speeding, collisions and fines are stored as metadata
+and shown in statistics. Only direct evidence that no driving happened will
+reject a job: a teleport to the destination, a missing completion event, or a
+distance close to zero. Everything else gets flagged for review, not refused.
 
-## Čo vie
+## Features
 
-* Rozpozná začiatok aj koniec zákazky bez akéhokoľvek manuálneho zásahu
-* Meria vzdialenosť, spotrebu, rýchlosť, poškodenie, pokuty, mýto a trajekty
-* Zaznamenáva časovú os udalostí, teda kedy presne padla pokuta či nastala kolízia
-* Ukladá súradnice trasy pre budúce vykreslenie mapy
-* Po páde alebo zavretí uprostred jazdy nadviaže na rozpracovanú zákazku
-* Spustí hru priamo z okna, aj s kontrolou telemetry pluginu
-* Naimportuje históriu z TrucksBooku
-* Ukladá do SQLite, exportuje do CSV a JSON, zálohuje a obnovuje
+* Detects the start and the end of a job with no manual input
+* Measures distance, fuel, speed, damage, fines, tolls and ferries
+* Records an event timeline, so the exact moment of a fine or a collision is kept
+* Stores route coordinates for a map view later on
+* Resumes an interrupted job after a crash or after quitting mid drive
+* Launches the game from the window, including a telemetry plugin check
+* Imports history from TrucksBook
+* Stores in SQLite, exports to CSV and JSON, backs up and restores
+* Interface in English and Slovak
 
-## Čo je potrebné
+## Requirements
 
 * Windows
-* [.NET 9 SDK](https://dotnet.microsoft.com/download) na zostavenie zo zdrojákov
-* Telemetry plugin od RenCloud, priložený v [`third-party/`](third-party/README.md)
+* [.NET 9 SDK](https://dotnet.microsoft.com/download) to build from source
+* The RenCloud telemetry plugin, bundled in [`third-party/`](third-party/README.md)
 
-## Inštalácia
+## Installation
 
-Zostavenie zo zdrojákov:
+Build from source:
 
 ```bash
 dotnet build src/Waybill
 ```
 
-Aplikácia sa spustí súborom `Waybill.exe` v priečinku
+The app then starts from `Waybill.exe` in
 `src/Waybill/bin/Debug/net9.0-windows/`.
 
-Prvý krok po spustení vedie do menu *Hrať → Nainštalovať telemetry plugin*, kde
-stačí ukázať na `Win64/scs-telemetry.dll` z priečinka `third-party/`. Bez pluginu
-hra telemetriu neposiela a Waybill nemá čo sledovať.
+The first step after launching is *Play → Install telemetry plugin*, which asks
+for `Win64/scs-telemetry.dll` from `third-party/`. Without the plugin the game
+publishes no telemetry and Waybill has nothing to track.
 
-### Samostatný .exe
+### Standalone .exe
 
-Z koreňového priečinka repozitára, keďže cesty v príkaze sú relatívne:
+Run from the repository root, since the paths in the command are relative:
 
 ```bash
 dotnet publish src/Waybill -c Release -r win-x64 -p:PublishSingleFile=true -o dist
 ```
 
-Výsledkom je jediný súbor `dist\Waybill.exe` s veľkosťou okolo 50 MB, ktorý beží
-aj na počítači bez nainštalovaného .NET. Dá sa presunúť kamkoľvek, databáza aj
-nahrávky sú v `%LOCALAPPDATA%\Waybill\` nezávisle od jeho umiestnenia.
+The result is a single `dist\Waybill.exe` of about 50 MB that runs on a machine
+without .NET installed. It can be moved anywhere: the database and the recordings
+live in `%LOCALAPPDATA%\Waybill\`, independent of where the exe sits.
 
-## Používanie
+## Usage
 
-Poradie spustenia nehrá rolu, aplikácia sa na hru napojí sama, keď ju nájde.
-Zákazky sa rozpoznajú a uložia bez zásahu.
+Start order does not matter, the app connects to the game as soon as it finds it.
+Jobs are detected and saved without any input.
 
-Horná časť okna ukazuje priebeh aktuálnej zákazky, karta *Zásielky* obsahuje
-históriu s vyhľadávaním, filtrom a poznámkami, karta *Štatistiky* súhrn.
+The top of the window shows the job in progress, the *Deliveries* tab holds the
+history with search, filter and notes, and the *Statistics* tab holds the summary.
 
-## Príkazový riadok
+## Command line
 
-Okno je bežný spôsob použitia, ale všetko funguje aj zo skriptu:
+The window is the usual way to use it, but everything also works from a script:
 
 ```bash
-Waybill.exe --list [n]                  # posledné zásielky
-Waybill.exe --stats [dni]               # súhrn celkovo alebo za obdobie
-Waybill.exe --export csv|json [cesta]   # export histórie
-Waybill.exe --import-trucksbook <csv>   # import histórie z TrucksBooku
-Waybill.exe --backup [cesta]            # záloha databázy
-Waybill.exe --restore <cesta>           # obnova zo zálohy
-Waybill.exe --rebuild                   # prepočíta zásielky z nahrávok
-Waybill.exe --replay <nahrávka>         # prehrá starú nahrávku
-Waybill.exe --test-resume <nahrávka> <riadok>   # test obnovy po reštarte
+Waybill.exe --list [n]                  # recent deliveries
+Waybill.exe --stats [days]              # summary, overall or for a period
+Waybill.exe --export csv|json [path]    # export the history
+Waybill.exe --import-trucksbook <csv>   # import history from TrucksBook
+Waybill.exe --backup [path]             # back up the database
+Waybill.exe --restore <path>            # restore from a backup
+Waybill.exe --rebuild                   # recompute deliveries from recordings
+Waybill.exe --replay <recording>        # replay an old recording
+Waybill.exe --test-resume <recording> <line>   # test resume after a restart
 ```
 
-## Kde sú dáta
+## Where the data lives
 
-Všetko je v `%LOCALAPPDATA%\Waybill\`, teda mimo priečinka projektu, takže
-prebuildovanie ani `dotnet clean` o nič nepríde.
+Everything sits in `%LOCALAPPDATA%\Waybill\`, outside the project folder, so a
+rebuild or a `dotnet clean` cannot take any of it with it.
 
-| Čo | Kde |
+| What | Where |
 |---|---|
-| Databáza zásielok | `deliveries.db` |
-| Zálohy | `backups/` |
-| Surové nahrávky telemetrie | `sessions/` |
-| Rozpracovaná zákazka | `in-progress.json` |
-| Nastavenia | `settings.json` |
+| Delivery database | `deliveries.db` |
+| Backups | `backups/` |
+| Raw telemetry recordings | `sessions/` |
+| Job in progress | `in-progress.json` |
+| Settings | `settings.json` |
 
-Nahrávky sa po ukončení automaticky zabalia do `.gz`, čo je asi 13x menej miesta.
-Nemažú sa, slúžia ako podklad pre `--rebuild` a `--replay`, ktoré ich čítajú
-zabalené aj nezabalené.
+Recordings are packed into `.gz` once a session ends, roughly 13x less space.
+They are never deleted: they are the input for `--rebuild` and `--replay`, both
+of which read them packed or unpacked.
 
-## Jednotky
+## Units
 
-Predvolene sa riadia hrou. ATS používa imperiálne (mi, gal, mph, $), ETS2
-metrické (km, l, km/h, €). V menu *Jednotky* sa dá vynútiť jeden systém.
+By default they follow the game. ATS uses imperial (mi, gal, mph, $) and ETS2
+metric (km, l, km/h, €). The *Units* menu forces one system for both.
 
-Databáza ukladá vždy metricky a prevádza sa až pri zobrazení. História preto
-nezávisí od toho, aké nastavenie platilo v čase jazdy, a prepnutie prekreslí aj
-staré zásielky.
+The database always stores metric and converts only for display. The history
+therefore does not depend on which setting was active during the drive, and
+switching redraws old deliveries too.
 
-## Ako sa meria vzdialenosť
+## How distance is measured
 
-Vzdialenosť vedie odometer, teda tá istá sústava, v akej hlási čísla samotná hra
-aj ponuka zákazky. Pozícia vo svete sa ukladá zvlášť, na detekciu teleportu a do
-budúcna na kreslenie trasy. Podrobne v
-[`docs/measurement.md`](docs/measurement.md).
+Distance follows the odometer, the same unit system the game itself and the job
+offer report. World position is stored separately, for teleport detection and for
+drawing the route later. Details in [`docs/measurement.md`](docs/measurement.md).
 
-## Import z TrucksBooku
+## Importing from TrucksBook
 
-*Data → Importovať históriu z TrucksBooku* a vybrať CSV export. Import je
-idempotentný, kľúčom je TrucksBookID, takže ten istý súbor sa dá pustiť
-opakovane bez duplikátov.
+*Data → Import history from TrucksBook*, then pick the CSV export. The import is
+idempotent and keyed on the TrucksBookID, so the same file can be run repeatedly
+without producing duplicates.
 
-Export je v jednotkách daného profilu a hodnoty si nesú jednotku so sebou
-(`157 mi`, `5.9 mpg`), takže sa prevádza podľa toho, čo je naozaj v súbore.
-Importované zásielky dostanú stav `imported`, pretože za nimi nestojí telemetria,
-ktorú by bolo možné overiť.
+The export uses the units of that profile and every value carries its unit with
+it (`157 mi`, `5.9 mpg`), so conversion follows what is actually in the file.
+Imported deliveries get the `imported` status, because there is no telemetry
+behind them to verify.
 
-Zásielky, ktoré má TrucksBook so započítanou vzdialenosťou 0, teda tie neuznané,
-sa importujú s plánovanou vzdialenosťou a poznámkou. Waybill ich započíta.
+Deliveries that TrucksBook counted as 0 distance, meaning the ones it refused,
+are imported with their planned distance and a note. Waybill counts them.
 
-## Vývoj
+## Development
 
-Nahrávky v `sessions/` slúžia ako regresné testy. Po zmene v trackeri:
+The recordings in `sessions/` double as regression tests. After a change in the
+tracker:
 
 ```bash
-Waybill.exe --replay <nahrávka>
+Waybill.exe --replay <recording>
 ```
 
-a porovnať, či čísla sedia. `--test-resume` navyše simuluje reštart uprostred
-jazdy a porovná výsledok s jedným súvislým behom.
+and compare the numbers. `--test-resume` additionally simulates a restart in the
+middle of a drive and compares the result against one continuous run.
 
-Príkaz `--rebuild` sa hodí po každej oprave detekcie, pretože staré záznamy si
-inak natrvalo nesú verdikt vydaný vtedajšou verziou. Je bezstratový, keďže za
-každou sledovanou zásielkou stojí nahrávka. Importované riadky sa nedotkne, tie
-nemá z čoho prepočítať.
+`--rebuild` is worth running after every detection fix, because old rows
+otherwise keep the verdict issued by the version current at the time. It is
+lossless, since every tracked delivery has a recording behind it. Imported rows
+are left alone, as there is nothing to recompute them from.
 
-## Štruktúra
+## Layout
 
 ```
 src/Waybill/
-├── Tracking/       stavový automat zákazky, adaptér SDK, engine, formátovanie
-├── Storage/        SQLite (deliveries, events, trip_points), import z TrucksBooku
-├── SCSSdkClient/   vendorovaný C# klient SDK (MIT, s lokálnymi opravami)
-├── GameLauncher.cs hľadanie a spúšťanie hier cez Steam
-├── MainForm.cs     okno
-└── Program.cs      CLI a vstupný bod
-assets/             logo a zdroj ikony
-docs/               vízia, plán a technické poznámky
-third-party/        telemetry plugin do hry
-archive/            odložené, už nepoužívané
+├── Tracking/       job state machine, SDK adapter, engine, formatting
+├── Storage/        SQLite (deliveries, events, trip_points), TrucksBook import
+├── SCSSdkClient/   vendored C# SDK client (MIT, with local fixes)
+├── GameLauncher.cs finding and launching the games through Steam
+├── MainForm.cs     the window
+└── Program.cs      CLI and entry point
+assets/             logo and icon source
+docs/               vision, roadmap and technical notes
+third-party/        telemetry plugin for the game
+archive/            retired, no longer used
 ```
 
-## Stav
+## Status
 
-Funguje automatické sledovanie a ukladanie, spustenie hry z aplikácie, obnova po
-reštarte, história s vyhľadávaním a poznámkami, štatistiky, časová os udalostí,
-import z TrucksBooku, export a zálohy.
+Working: automatic tracking and saving, launching the game from the app, resume
+after a restart, history with search and notes, statistics, event timeline,
+TrucksBook import, export and backups.
 
-Chýba mapa a prehrávanie trasy, hoci súradnice sa už zbierajú, ďalej
-achievementy a štatistiky za celé herné sedenie. Podrobnosti v
+Missing: the map and route replay, although the coordinates are already being
+collected, plus achievements and whole session statistics. Details in
 [`docs/roadmap.md`](docs/roadmap.md).
 
-## Licencia
+## Licence
 
-[MIT](LICENSE). Vendorovaný SDK klient aj plugin od RenCloud sú tiež MIT, takže
-celý projekt je pod jednou licenciou.
+[MIT](LICENSE). The vendored SDK client and the RenCloud plugin are MIT as well,
+so the whole project sits under one licence.

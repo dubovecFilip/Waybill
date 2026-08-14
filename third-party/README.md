@@ -2,7 +2,7 @@
 
 ## `rencloud-scs-telemetry-v1.12.1.zip`
 
-Release build of the **SCS SDK telemetry plugin** by RenCloud — the piece that
+Release build of the **SCS SDK telemetry plugin** by RenCloud, the piece that
 exposes ETS2/ATS telemetry through shared memory. Without it the game publishes
 nothing and this app has nothing to read.
 
