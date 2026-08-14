@@ -817,7 +817,13 @@ public class JobTracker {
             if (ratio < 0.8 || ratio > 1.25) flags.Add("distance_mismatch");
         }
 
-        var hard = new[] { "teleport_detected", "no_completion_event", "distance_too_short", "odometer_manipulation" };
+        // A job that simply stopped existing is not evidence of anything being faked.
+        // It happens whenever a drive is abandoned: another profile is loaded, the
+        // game is quit, it crashes. Rejection is for a delivery being claimed without
+        // the driving behind it, and this claims nothing - the outcome is not
+        // "delivered" and there is no payout on it to inflate. So it stays visible as
+        // a flag and lands in review, without calling an honest drive a fake.
+        var hard = new[] { "teleport_detected", "distance_too_short", "odometer_manipulation" };
         // A job that went away with a loaded save was never completed and is not a
         // delivery anyone is claiming, so there is nothing here to reject. Whatever
         // was flagged stays visible, it just cannot invalidate a drive that the game
