@@ -132,6 +132,11 @@ public class MainForm : Form {
         var import = new ToolStripMenuItem(Strings.T("menu.import"));
         import.Click += (_, _) => AfterMenuCloses(ImportTrucksBook);
         data.DropDownItems.Add(import);
+
+        var rebuild = new ToolStripMenuItem(Strings.T("menu.rebuild"));
+        rebuild.Click += (_, _) => AfterMenuCloses(RebuildFromRecordings);
+        data.DropDownItems.Add(rebuild);
+
         data.DropDownItems.Add(new ToolStripSeparator());
         data.DropDownItems.Add(OpenFolderItem(Strings.T("menu.folder.db"), DeliveryStore.DefaultDir()));
         data.DropDownItems.Add(OpenFolderItem(Strings.T("menu.folder.backups"), Path.Combine(DeliveryStore.DefaultDir(), "backups")));
@@ -199,6 +204,38 @@ public class MainForm : Form {
         paths.DropDownItems.Add(auto);
 
         return paths;
+    }
+
+    /// <summary>Re-derives the tracked deliveries from their recordings. Worth having
+    /// on a menu rather than only behind --rebuild: it is what puts a history back
+    /// after a detection fix, or after the database and the recordings have drifted
+    /// apart, and neither is a moment to send someone to a terminal.</summary>
+    private void RebuildFromRecordings() {
+        var answer = MessageBox.Show(this, Strings.T("msg.rebuildConfirm"), Strings.T("msg.rebuildTitle"),
+            MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
+        if (answer != DialogResult.OK) return;
+
+        try {
+            Cursor = Cursors.WaitCursor;
+            var result = Tracking.Rebuild.Run(_store);
+
+            var report = $"{Strings.T("msg.rebuildDone")}\n\n"
+                + $"{Strings.T("msg.rebuildRecordings")}: {result.Recordings}\n"
+                + $"{Strings.T("msg.rebuildDeliveries")}: {result.Deliveries}\n"
+                + $"{Strings.T("msg.backupSaved")} {result.BackupPath}";
+            if (result.Skipped.Count > 0) {
+                report += $"\n\n{Strings.T("msg.rebuildSkipped")}\n" + string.Join("\n", result.Skipped);
+            }
+
+            AddLog($"{Strings.T("msg.rebuildDone")}: {result.Deliveries}");
+            ReloadHistory();
+            ReloadStats();
+            MessageBox.Show(this, report, Strings.T("msg.rebuildTitle"));
+        } catch (Exception ex) {
+            MessageBox.Show(this, ex.Message, Strings.T("msg.error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+        } finally {
+            Cursor = Cursors.Default;
+        }
     }
 
     private void PickGameFolder(SimGame game) {

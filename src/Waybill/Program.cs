@@ -106,44 +106,12 @@ if (args.Length >= 1 && args[0] == "--stats") {
 // are left alone, since nothing can regenerate those.
 if (args.Length >= 1 && args[0] == "--rebuild") {
     using var rebuildStore = new DeliveryStore();
-    var backupPath = rebuildStore.Backup();
-    Console.WriteLine($"Zaloha pred prestavbou: {backupPath}");
-
-    var removed = rebuildStore.DeleteTrackedDeliveries();
-    Console.WriteLine($"Zmazanych sledovanych zaznamov: {removed}");
-
-    var sessionDir = Path.Combine(DeliveryStore.DefaultDir(), "sessions");
-    var recordings = Directory.Exists(sessionDir)
-        ? Directory.GetFiles(sessionDir).Where(f => f.EndsWith(".jsonl") || f.EndsWith(".jsonl.gz")).OrderBy(f => f).ToArray()
-        : Array.Empty<string>();
-
-    var rebuilt = 0;
-    foreach (var recording in recordings) {
-        rebuilt += ReplayInto(recording, rebuildStore);
-    }
-    Console.WriteLine($"Prestavanych z {recordings.Length} nahravok: {rebuilt} zasielok");
+    var result = Rebuild.Run(rebuildStore);
+    Console.WriteLine($"Zaloha pred prestavbou: {result.BackupPath}");
+    Console.WriteLine($"Zmazanych sledovanych zaznamov: {result.Removed}");
+    Console.WriteLine($"Prestavanych z {result.Recordings} nahravok: {result.Deliveries} zasielok");
+    foreach (var skipped in result.Skipped) Console.WriteLine($"Necitatelna nahravka: {skipped}");
     return;
-}
-
-int ReplayInto(string path, DeliveryStore store) {
-    var tracker = new JobTracker();
-    var saved = 0;
-    foreach (var raw in SessionFiles.ReadLines(path)) {
-        if (string.IsNullOrWhiteSpace(raw)) continue;
-        Newtonsoft.Json.Linq.JObject parsed;
-        try { parsed = Newtonsoft.Json.Linq.JObject.Parse(raw); } catch { continue; }
-        var ts = (long?)parsed["t"] ?? 0;
-        var kind = (string?)parsed["kind"] ?? "tick";
-        if (parsed["d"] is not Newtonsoft.Json.Linq.JObject d) continue;
-
-        foreach (var ev in tracker.Update(Adapter.FromRecordedJson(d, kind), ts)) {
-            if (ev.Type == TrackerEventType.JobFinished && ev.Record != null) {
-                store.SaveDelivery(ev.Record);
-                saved++;
-            }
-        }
-    }
-    return saved;
 }
 
 // `Waybill.exe --import-trucksbook <export.csv>`
