@@ -75,10 +75,18 @@ public static class Adapter {
             },
 
             Trailer = new TrailerInfo {
+                Present = trailer != null,
                 Attached = trailer?.Attached ?? false,
                 Name = trailer == null ? "" : (!string.IsNullOrEmpty(trailer.Name) ? trailer.Name : (trailer.Id ?? "")),
                 TrailerId = trailer?.Id ?? "",
-                Wear = TrailerWear(trailer),
+                // Doubles and triples are one unit as far as the game is concerned:
+                // they cannot be uncoupled separately and the damage shown is for the
+                // set, so the worst of them is the set's condition.
+                Wear = (d.TrailerValues ?? Array.Empty<SCSTelemetry.Trailer>())
+                    .Where(t => t.Attached)
+                    .Select(TrailerWear)
+                    .DefaultIfEmpty(TrailerWear(trailer))
+                    .Max(),
                 CargoDamage = trailer?.DamageValues?.Cargo ?? 0,
             },
 
@@ -245,6 +253,7 @@ public static class Adapter {
 
             Trailer = new TrailerInfo {
                 Attached = B(trailer?["Attached"]),
+                Present = trailer != null,
                 Name = trailer == null ? "" : (S(trailer["Name"]) is { Length: > 0 } n ? n : S(trailer["Id"])),
                 TrailerId = S(trailer?["Id"]),
                 Wear = TrailerWearJson(trailer?["DamageValues"]),

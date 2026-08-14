@@ -253,6 +253,16 @@ void ReportCrash(Exception? ex, bool fatal) {
         "Waybill", MessageBoxButtons.OK, MessageBoxIcon.Error);
 }
 
+// One window at a time. Two of them poll the same shared memory and both record
+// and save, and since each invents its own id for a job, the same drive lands in
+// the database twice as two unrelated rows. The mutex is machine wide and the
+// handle lives as long as the process, so it is released even on a hard kill.
+using var single = new Mutex(initiallyOwned: true, "Waybill.SingleInstance", out var isOnly);
+if (!isOnly) {
+    MessageBox.Show(Strings.T("msg.alreadyRunning"), "Waybill", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    return;
+}
+
 // The window has to run on a single threaded COM apartment. Every file dialog is
 // a shell COM object, and on a multithreaded apartment showing one disables the
 // owner window and then never returns: no dialog ever appears, the message loop

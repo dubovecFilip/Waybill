@@ -148,7 +148,9 @@ public static class Strings {
         ["msg.error"] = "Chyba",
         ["msg.plugin"] = "Plugin",
         ["msg.unfinishedFound"] = "Nedokončená zákazka, nadviaže sa, ak sa v nej bude pokračovať",
-        ["msg.unfinishedStale"] = "Stará nedokončená zákazka sa ignoruje",
+        ["msg.unfinishedStale"] = "Nedokončená zákazka po termíne sa zapísala ako zrušená",
+        ["msg.alreadyRunning"] = "Waybill už beží.\n\nNaraz môže bežať iba jedno okno, inak by sa každá zákazka uložila dvakrát.",
+        ["msg.startedAfterGame"] = "Hra už beží. Waybill počíta len to, čo vidí, takže ak máš rozjazdenú zákazku, chýbajúce kilometre sa nedopočítajú.\n\nNabudúce spusti Waybill pred hrou.",
         ["msg.unfinishedUnreadable"] = "Rozpracovanú zákazku sa nepodarilo načítať, pokračujem bez nej",
         ["msg.stateSaveFailed"] = "Stav zákazky sa nepodarilo uložiť",
     };
@@ -271,7 +273,9 @@ public static class Strings {
         ["msg.error"] = "Error",
         ["msg.plugin"] = "Plugin",
         ["msg.unfinishedFound"] = "Unfinished job, it will be picked up if you continue it",
-        ["msg.unfinishedStale"] = "Ignoring a stale unfinished job",
+        ["msg.unfinishedStale"] = "An unfinished job past its window was written off as cancelled",
+        ["msg.alreadyRunning"] = "Waybill is already running.\n\nOnly one window at a time, otherwise every delivery would be saved twice.",
+        ["msg.startedAfterGame"] = "The game is already running. Waybill counts only what it sees, so if a job is under way, the distance so far cannot be recovered.\n\nStart Waybill before the game next time.",
         ["msg.unfinishedUnreadable"] = "The unfinished job could not be read, continuing without it",
         ["msg.stateSaveFailed"] = "The job state could not be saved",
     };

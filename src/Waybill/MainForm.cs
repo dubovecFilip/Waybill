@@ -449,6 +449,18 @@ public class MainForm : Form {
         AddLog(Strings.T("msg.recording") + ": " + _engine.SessionPath);
         AddLog(Strings.T("msg.database") + ": " + _engine.DbPath);
 
+        // Waybill only counts what it sees. Started after the game, it misses however
+        // far the current job has already come, and the delivery ends up shorter than
+        // the one the game reports. A restart mid drive is fine and says nothing, so
+        // this only fires when there is no unfinished job waiting to be picked up.
+        var running = new[] { SimGame.Ats, SimGame.Ets2 }.Where(GameLauncher.IsRunning).ToArray();
+        if (running.Length > 0 && !_engine.HasPendingResume) {
+            AddLog(Strings.T("msg.startedAfterGame"));
+            MessageBox.Show(this,
+                $"{GameLauncher.DisplayName(running[0])}\n\n{Strings.T("msg.startedAfterGame")}",
+                "Waybill", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+
         ReloadHistory();
         ReloadStats();
     }

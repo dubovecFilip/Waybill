@@ -42,6 +42,11 @@ public class TrackerEngine : IDisposable {
     public JobState? ActiveState => _tracker.ActiveState;
     public string? StartupError { get; private set; }
 
+    /// <summary>An unfinished job was found on disk and is waiting to be picked back
+    /// up. Distinguishes a restart mid delivery, where nothing is missed, from a first
+    /// start with the game already running, where the drive so far is already lost.</summary>
+    public bool HasPendingResume { get; private set; }
+
     /// <summary>True once the game has actually pushed telemetry through.</summary>
     public bool Connected { get; private set; }
 
@@ -193,16 +198,24 @@ public class TrackerEngine : IDisposable {
         if (!File.Exists(_inProgressPath)) return;
         try {
             var saved = JsonConvert.DeserializeObject<JobState>(File.ReadAllText(_inProgressPath));
-            // The fingerprint match in the tracker is the real guard, but an ancient
-            // file is dropped outright: a job abandoned days ago is not one being
-            // continued, and this removes any chance of it latching onto a
-            // coincidentally identical job offer much later.
+            // The fingerprint match in the tracker is the real guard, but a job left
+            // hanging for long enough is not one being continued, and this removes any
+            // chance of it latching onto a coincidentally identical offer much later.
+            // A week is long enough to come back to a delivery after a crash or a
+            // break, and short enough that the offer it belongs to is gone.
             var ageHours = saved == null ? 0 : (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - saved.StartedAtMs) / 3600000.0;
-            if (saved != null && !string.IsNullOrEmpty(saved.Fingerprint) && ageHours < 24) {
+            if (saved != null && !string.IsNullOrEmpty(saved.Fingerprint) && ageHours < JobTracker.ResumeMaxAgeHours) {
                 _tracker.PrepareResume(saved);
+                HasPendingResume = true;
                 Message?.Invoke($"{Waybill.Strings.T("msg.unfinishedFound")}: {saved.Job.SourceCity} -> {saved.Job.DestinationCity} ({saved.DistanceKm:0.0} km)");
             } else if (saved != null) {
-                Message?.Invoke($"{Waybill.Strings.T("msg.unfinishedStale")} ({ageHours:0} h)");
+                // Written to the history as cancelled rather than quietly dropped. The
+                // driving happened, and a delivery that simply disappears is worse
+                // than one that says plainly it was never finished.
+                var record = JobTracker.CloseAbandoned(saved, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                _store.SaveDelivery(record);
+                Message?.Invoke($"{Waybill.Strings.T("msg.unfinishedStale")} ({ageHours / 24:0} d): {saved.Job.SourceCity} -> {saved.Job.DestinationCity}");
+                JobFinished?.Invoke(record);
                 File.Delete(_inProgressPath);
             }
         } catch (Exception ex) {

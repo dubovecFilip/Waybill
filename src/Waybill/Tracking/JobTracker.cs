@@ -288,6 +288,68 @@ public class JobTracker {
     public (double DistanceKm, double PlannedDistanceKm)? Progress() =>
         _current == null ? null : (_current.DistanceKm, _current.Job.PlannedDistanceKm);
 
+    /// <summary>How long an unfinished job stays resumable. A week covers coming back
+    /// to a delivery after a crash, a reinstall or simply a break; past that the offer
+    /// it belongs to is long gone and the job is written off.</summary>
+    public const double ResumeMaxAgeHours = 24 * 7;
+
+    /// <summary>Closes a job that was left hanging past the resume window, from the
+    /// state persisted on disk alone. There is no final snapshot to measure against,
+    /// so what was accumulated before the interruption is what gets reported: the
+    /// distance is real driving and belongs in the history, it simply never arrived.</summary>
+    public static JobRecord CloseAbandoned(JobState j, long nowMs) {
+        var record = new JobRecord {
+            JobUid = j.JobUid,
+            Outcome = "cancelled",
+            Game = j.Game,
+            GameVersion = j.GameVersion,
+            StartedAtMs = j.StartedAtMs,
+            FinishedAtMs = nowMs,
+            RealDurationMs = j.DrivingMs,
+            GameDurationMin = Math.Round(j.DrivingGameMinutes, 1),
+            SourceCity = j.Job.SourceCity,
+            SourceCompany = j.Job.SourceCompany,
+            DestinationCity = j.Job.DestinationCity,
+            DestinationCompany = j.Job.DestinationCompany,
+            Cargo = j.Job.Cargo,
+            CargoId = j.Job.CargoId,
+            CargoMassKg = j.Job.CargoMassKg,
+            PlannedDistanceKm = j.Job.PlannedDistanceKm,
+            OfferedIncome = j.Job.Income,
+            TruckMake = j.TruckMake,
+            TruckModel = j.TruckModel,
+            TruckId = j.TruckId,
+            TrailerName = j.TrailerName,
+            TrailerId = j.TrailerId,
+            DistanceKm = Math.Round(j.DistanceKm, 3),
+            WorldDistanceKm = Math.Round(j.WorldDistanceKm, 3),
+            SimSpeedDistanceKm = Math.Round(j.SimSpeedDistanceKm, 3),
+            DrivingGameMinutes = Math.Round(j.DrivingGameMinutes, 1),
+            FuelUsedL = Math.Round(j.FuelUsedL, 2),
+            AvgConsumptionLper100 = j.DistanceKm > 0.1 ? Math.Round(j.FuelUsedL / j.DistanceKm * 100, 2) : null,
+            TopSpeedKmh = Math.Round(j.TopSpeedKmh, 1),
+            DrivingMs = j.DrivingMs,
+            PausedMs = j.PausedMs,
+            SpeedingShare = j.DrivingMs > 0 ? Math.Round((double)j.SpeedingMs / j.DrivingMs, 4) : 0,
+            Fines = j.Fines,
+            TollsPaid = j.Tolls,
+            FerriesUsed = j.Ferries,
+            Refuels = j.Refuels,
+            Collisions = j.Collisions,
+            RestStops = j.RestStops,
+            RestMinutes = Math.Round(j.RestMinutes, 1),
+            CruiseControlShare = j.DrivingMs > 0 ? Math.Round((double)j.CruiseControlMs / j.DrivingMs, 4) : 0,
+            Anomalies = j.Anomalies,
+            Timeline = j.Timeline,
+            TripPoints = j.TripPoints,
+        };
+        record.Anomalies.Add(new Anomaly { AtMs = nowMs, Code = "abandoned" });
+        // Not rejected: nothing here suggests the driving was faked, only that it was
+        // never finished, which the cancelled outcome already says.
+        record.Validation = new Validation { Flags = { "abandoned" }, Status = "review" };
+        return record;
+    }
+
     /// <summary>What to call a job that disappeared without a completion event. A save
     /// loaded moments earlier explains it: that save predates the job being accepted,
     /// so in the game's own history the delivery no longer exists. Nothing was skipped
@@ -528,7 +590,14 @@ public class JobTracker {
         // counted and shown. Warmup and vehicle swaps return earlier, so the big
         // artificial damage steps those cause never reach this.
         var truckDamageStep = snap.Truck.Wear.Total() - prev.Truck.Wear.Total();
-        var trailerDamageStep = snap.Trailer.Wear - prev.Trailer.Wear;
+
+        // Only when a trailer was reported on both sides. It vanishes from telemetry
+        // during a loading screen, and a missing trailer reads as undamaged, so its
+        // return looked like an impact worth 0.14% and was counted as a collision
+        // that never happened.
+        var trailerDamageStep = snap.Trailer.Present && prev.Trailer.Present
+            ? snap.Trailer.Wear - prev.Trailer.Wear
+            : 0;
         var damageStep = Math.Max(truckDamageStep, trailerDamageStep);
         if (damageStep > _config.CollisionDamageStep) {
             j.Collisions += 1;

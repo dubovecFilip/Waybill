@@ -74,6 +74,10 @@ public class TrailerInfo {
     public bool Attached;
     public string Name = "";
     public string TrailerId = "";
+    /// <summary>Whether telemetry reported a trailer at all on this snapshot. During
+    /// a loading screen the trailer drops out of the data entirely, and reading the
+    /// missing one as undamaged then makes its return look like a fresh impact.</summary>
+    public bool Present;
     public double Wear;
     public double CargoDamage;
 }
