@@ -224,3 +224,9 @@ collected, plus achievements and whole session statistics. Details in
 
 [MIT](LICENSE). The vendored SDK client and the RenCloud plugin are MIT as well,
 so the whole project sits under one licence.
+
+Waybill is not affiliated with TrucksBook, endorsed by it, or a continuation of
+it. The name appears here only to refer to the service whose CSV exports the
+import reads, and to explain what this project does differently. Euro Truck
+Simulator 2 and American Truck Simulator are the property of SCS Software, who
+are likewise not involved in this project.
