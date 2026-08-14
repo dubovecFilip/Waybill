@@ -317,6 +317,10 @@ Add comparison dashboards:
 - Replay
 - Filters
 
+Licensing note: existing map projects such as TruckNav-Sim are GPL 3.0, which
+would force GPL on all of Waybill. Waybill is MIT, so map rendering has to be
+written from scratch rather than adapted.
+
 ## Phase 4 — Cloud sync
 
 - Accounts

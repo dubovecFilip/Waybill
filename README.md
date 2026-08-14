@@ -55,24 +55,15 @@ hra telemetriu neposiela a Waybill nemá čo sledovať.
 
 ### Samostatný .exe
 
-Príkaz sa spúšťa **z koreňového priečinka repozitára**, teda odtiaľ, kde leží
-`README.md`. Cesty v ňom sú relatívne, takže z iného miesta nebude fungovať.
+Z koreňového priečinka repozitára, keďže cesty v príkaze sú relatívne:
 
 ```bash
 dotnet publish src/Waybill -c Release -r win-x64 -p:PublishSingleFile=true -o dist
 ```
 
 Výsledkom je jediný súbor `dist\Waybill.exe` s veľkosťou okolo 50 MB, ktorý beží
-aj na počítači bez nainštalovaného .NET. Dá sa presunúť alebo skopírovať kamkoľvek,
-databáza aj nahrávky sú v `%LOCALAPPDATA%\Waybill\` nezávisle od jeho umiestnenia.
-
-Priečinok `dist/` je v `.gitignore`, takže sa nedostane do repozitára. Vzniká
-v ňom aj `Waybill.pdb` so symbolmi na ladenie. Na rozdávanie ho netreba a dá sa
-vypnúť pridaním `-p:DebugType=none`.
-
-Nastavenia pre publish sú v `Waybill.csproj` schválne podmienené, pretože ako
-obyčajné vlastnosti by zasiahli aj bežný `dotnet build` a presunuli jeho výstup
-do podpriečinka.
+aj na počítači bez nainštalovaného .NET. Dá sa presunúť kamkoľvek, databáza aj
+nahrávky sú v `%LOCALAPPDATA%\Waybill\` nezávisle od jeho umiestnenia.
 
 ## Používanie
 
@@ -111,9 +102,9 @@ prebuildovanie ani `dotnet clean` o nič nepríde.
 | Rozpracovaná zákazka | `in-progress.json` |
 | Nastavenia | `settings.json` |
 
-Nahrávky sa po ukončení automaticky zabalia do `.gz`. Komprimujú sa asi 13x,
-napríklad 9,9 MB nahrávka na 750 kB, takže sa nemusí nič mazať. Prehrávanie ich
-číta zabalené aj nezabalené.
+Nahrávky sa po ukončení automaticky zabalia do `.gz`, čo je asi 13x menej miesta.
+Nemažú sa, slúžia ako podklad pre `--rebuild` a `--replay`, ktoré ich čítajú
+zabalené aj nezabalené.
 
 ## Jednotky
 
@@ -126,25 +117,10 @@ staré zásielky.
 
 ## Ako sa meria vzdialenosť
 
-Táto časť býva zdrojom omylov, tak nech je zapísaná. Hra pracuje s dvomi
-sústavami jednotiek a nesmú sa miešať.
-
-| Meranie | Jedna reálna jazda | Sústava |
-|---|---|---|
-| Odometer | 176,60 km | simulované km |
-| Rýchlosť krát **herný** čas | 175,62 km | simulované km |
-| `JobDelivered.DistanceKm` z hry | 176 km | simulované km |
-| Pozícia vo svete | 13,08 km | world space |
-| Rýchlosť krát **reálny** čas | 12,94 km | world space |
-
-Mapa je zmenšená, na meraných trasách asi 13,5x, a herný čas beží zhruba 13x
-rýchlejšie. Zásielka sa vykazuje v simulovaných km, teda v tom, čo hlási hra aj
-ponuka zákazky, takže vedie odometer. Pozícia sa ukladá zvlášť, na detekciu
-teleportu a do budúcna na kreslenie trasy.
-
-Priemerná rýchlosť musí deliť simulované km herným časom stráveným jazdou.
-Delenie reálnym časom vykáže ako rýchlosť kompresiu času, teda okolo 770 km/h,
-a delenie celkovým herným časom zase započíta aj spánok.
+Vzdialenosť vedie odometer, teda tá istá sústava, v akej hlási čísla samotná hra
+aj ponuka zákazky. Pozícia vo svete sa ukladá zvlášť, na detekciu teleportu a do
+budúcna na kreslenie trasy. Podrobne v
+[`docs/measurement.md`](docs/measurement.md).
 
 ## Import z TrucksBooku
 
@@ -187,7 +163,7 @@ src/Waybill/
 ├── MainForm.cs     okno
 └── Program.cs      CLI a vstupný bod
 assets/             logo a zdroj ikony
-docs/roadmap.md     vízia a plán
+docs/               vízia, plán a technické poznámky
 third-party/        telemetry plugin do hry
 archive/            odložené, už nepoužívané
 ```
@@ -206,7 +182,3 @@ achievementy a štatistiky za celé herné sedenie. Podrobnosti v
 
 [MIT](LICENSE). Vendorovaný SDK klient aj plugin od RenCloud sú tiež MIT, takže
 celý projekt je pod jednou licenciou.
-
-Pri preberaní cudzieho kódu treba dávať pozor: projekty pod GPL 3.0, napríklad
-TruckNav-Sim, ktorý by sa hodil pri mape, by vynútili GPL na celom Waybille. Ak
-má zostať MIT, takú funkciu treba napísať po svojom.
