@@ -112,8 +112,8 @@ live in `%LOCALAPPDATA%\Waybill\`, independent of where the exe sits.
 Start order does not matter, the app connects to the game as soon as it finds it.
 Jobs are detected and saved without any input.
 
-Three pages down the left. *Deliveries* is the history, with search, a filter, the
-verdict on each drive and its event timeline underneath.
+Three pages down the left. *Deliveries* is the history, with search, a filter and
+the verdict on each drive.
 
 *Current job* is what the engine sees right now: the route, the cargo, and how far
 along the drive is.
