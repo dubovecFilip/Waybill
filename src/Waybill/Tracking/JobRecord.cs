@@ -42,11 +42,11 @@ public class TripPoint {
     public double SpeedKmh;
 }
 
-/// <summary>Result of one finished (delivered/cancelled/unresolved) job - what gets
-/// written to the database and shown in the history.</summary>
+/// <summary>Result of one finished (delivered/cancelled/unresolved/reloaded) job - what
+/// gets written to the database and shown in the history.</summary>
 public class JobRecord {
     public string JobUid = "";
-    public string Outcome = ""; // delivered | cancelled | unresolved
+    public string Outcome = ""; // delivered | cancelled | unresolved | reloaded
     public string Game = "";
     public string GameVersion = "";
     public long StartedAtMs;

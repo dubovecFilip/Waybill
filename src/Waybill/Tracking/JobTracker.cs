@@ -45,6 +45,11 @@ public class TrackerConfig {
     // falsely-rejected "unresolved" job. Wait this long for the proper event
     // before giving up and closing it as unresolved for real.
     public double MissingJobGraceMs = 3000;
+    // Loading a save from before the job was accepted makes the job data vanish
+    // a moment after the load, with no cancellation event behind it. Within this
+    // window of a load, a job going missing is the load's doing rather than a
+    // completion event that failed to arrive.
+    public double SaveLoadWindowMs = 10000;
 }
 
 public enum TrackerEventType { JobStarted, JobResumed, JobFinished }
@@ -99,6 +104,9 @@ public class JobState {
     public List<JobEvent> Timeline = new();
     public List<TripPoint> TripPoints = new();
     public long? MissingJobSinceMs;
+    /// <summary>When an earlier save was last loaded, so a job that disappears in the
+    /// wake of one is recognised as gone with the save rather than unresolved.</summary>
+    public long? SaveLoadedAtMs;
     /// <summary>Last odometer reading seen. The odometer is absolute and cumulative,
     /// so on resume the difference against it recovers everything driven while the
     /// app was closed - without it a restart silently loses that distance.</summary>
@@ -161,12 +169,24 @@ public class JobTracker {
         var gap = dtMs > _config.MaxTickMs;
         var fp = Fingerprint(snap.Job);
 
+        // Loading an earlier save is the one thing that moves the game clock
+        // backwards. Time never runs backwards while driving, and a teleport does
+        // not touch the clock at all, which makes the sign of this delta the way
+        // to tell an honest reload from the position jump it otherwise looks
+        // exactly like. Both readings have to be real: the clock reads 0 until the
+        // world finishes loading, and a 0 would look like an enormous rewind.
+        // Detected here rather than in Accumulate() because a save from before the
+        // job was accepted takes the job data with it, and that path never reaches
+        // accumulation.
+        var reloaded = prev.GameTimeMin > 0 && snap.GameTimeMin > 0 && snap.GameTimeMin < prev.GameTimeMin;
+        if (reloaded && _current != null) _current.SaveLoadedAtMs = nowMs;
+
         // A finished job wins over everything else this tick.
         var delivered = snap.Events.JobDelivered;
         var cancelled = snap.Events.JobCancelled;
 
         if (_current != null && (delivered != null || cancelled != null)) {
-            Accumulate(snap, prev, dtMs, gap, nowMs);
+            Accumulate(snap, prev, dtMs, gap, reloaded, nowMs);
             var record = Close(snap, delivered != null ? "delivered" : "cancelled",
                 delivered != null ? (object)delivered : cancelled!, nowMs);
             outEvents.Add(new TrackerEvent { Type = TrackerEventType.JobFinished, Record = record });
@@ -179,7 +199,7 @@ public class JobTracker {
         if (fp != null && fp != _current?.Fingerprint) {
             if (_current != null) {
                 // The old job vanished without an event. Close it as unresolved and flag it.
-                var record = Close(prev, "unresolved", null, nowMs);
+                var record = Close(prev, LostOutcome(nowMs), null, nowMs);
                 outEvents.Add(new TrackerEvent { Type = TrackerEventType.JobFinished, Record = record });
             }
 
@@ -229,7 +249,7 @@ public class JobTracker {
             if (nowMs - _current.MissingJobSinceMs.Value < _config.MissingJobGraceMs) {
                 return outEvents;
             }
-            var record = Close(prev, "unresolved", null, nowMs);
+            var record = Close(prev, LostOutcome(nowMs), null, nowMs);
             outEvents.Add(new TrackerEvent { Type = TrackerEventType.JobFinished, Record = record });
             _state = State.Idle;
             _current = null;
@@ -239,7 +259,7 @@ public class JobTracker {
         if (_current == null) return outEvents;
 
         _current.MissingJobSinceMs = null;
-        Accumulate(snap, prev, dtMs, gap, nowMs);
+        Accumulate(snap, prev, dtMs, gap, reloaded, nowMs);
 
         if (_state == State.Accepted && _current.DistanceKm > 0.05) {
             _state = State.Driving;
@@ -251,6 +271,16 @@ public class JobTracker {
     /// <summary>Distance covered so far and the job's planned distance, for a live progress display. Null when no job is active.</summary>
     public (double DistanceKm, double PlannedDistanceKm)? Progress() =>
         _current == null ? null : (_current.DistanceKm, _current.Job.PlannedDistanceKm);
+
+    /// <summary>What to call a job that disappeared without a completion event. A save
+    /// loaded moments earlier explains it: that save predates the job being accepted,
+    /// so in the game's own history the delivery no longer exists. Nothing was skipped
+    /// and nothing failed to arrive, which is why this must not be reported as a
+    /// missing completion event and rejected as one.</summary>
+    private string LostOutcome(long nowMs) =>
+        _current?.SaveLoadedAtMs is long at && nowMs - at < _config.SaveLoadWindowMs
+            ? "reloaded"
+            : "unresolved";
 
     private static string? Fingerprint(JobInfo? job) {
         if (job == null) return null;
@@ -290,12 +320,59 @@ public class JobTracker {
         _current.TripPoints.Add(new TripPoint { AtMs = nowMs, X = snap.PosX, Y = snap.PosY, Z = snap.PosZ, SpeedKmh = snap.Truck.SpeedKmh });
     }
 
-    private List<Anomaly> Accumulate(Snapshot snap, Snapshot prev, long dtMs, bool gap, long nowMs) {
+    private List<Anomaly> Accumulate(Snapshot snap, Snapshot prev, long dtMs, bool gap, bool reloaded, long nowMs) {
         var j = _current!;
         var found = new List<Anomaly>();
 
         if (snap.Paused) {
             j.PausedMs += dtMs;
+            return found;
+        }
+
+        // An earlier save was loaded (see the clock check in Update). The truck is
+        // back at a point it already passed, so everything between there and here is
+        // about to be driven a second time. Wind the counters back by as much as the
+        // game wound the truck back, and the delivery ends up reporting the distance
+        // the game itself will report on arrival instead of counting that stretch
+        // twice. Nothing here is treated as cheating: reloading is ordinary single
+        // player play, and the position jump it causes is the reason the teleport
+        // check must not see this tick.
+        if (reloaded) {
+            var rewindMin = prev.GameTimeMin - snap.GameTimeMin;
+            var rewindKm = Math.Max(0, prev.Truck.OdometerKm - snap.Truck.OdometerKm);
+
+            // Both series are in simulated km and Validate() cross-checks one against
+            // the other, so they have to be wound back together or the check would
+            // fire on the discrepancy the rewind itself created.
+            j.DistanceKm = Math.Max(0, j.DistanceKm - rewindKm);
+            j.SimSpeedDistanceKm = Math.Max(0, j.SimSpeedDistanceKm - rewindKm);
+            j.DrivingGameMinutes = Math.Max(0, j.DrivingGameMinutes - rewindMin);
+
+            // The save gives the fuel back along with the distance. Leaving it spent
+            // while its kilometres are gone would report the whole rewound stretch as
+            // consumption with nothing driven for it, which shows up as a consumption
+            // figure the truck never had.
+            j.FuelUsedL = Math.Max(0, j.FuelUsedL - Math.Max(0, snap.Truck.FuelL - prev.Truck.FuelL));
+
+            // Damage is reported against the state at job start, so a save from before
+            // an impact leaves the truck less damaged than it started and the delivery
+            // reports a negative figure. Lower the baseline to what the save actually
+            // shows: the damage reported is then the damage the truck really carries.
+            j.StartTruckWear = Math.Min(j.StartTruckWear, snap.Truck.Wear.Total());
+            j.StartTrailerWear = Math.Min(j.StartTrailerWear, snap.Trailer.Wear);
+
+            // A save can carry a different truck than the one being driven a moment
+            // ago, and the record would otherwise keep naming the old one.
+            if (snap.Truck.Make != prev.Truck.Make || snap.Truck.Model != prev.Truck.Model) {
+                j.TruckMake = snap.Truck.Make;
+                j.TruckModel = snap.Truck.Model;
+                j.TruckId = snap.Truck.TruckId;
+            }
+
+            j.LastOdometerKm = snap.Truck.OdometerKm;
+            found.Add(new Anomaly { Code = "save_loaded", Delta = Math.Round(rewindKm, 3), DtMs = (long)rewindMin });
+            j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "save_loaded", Value = Math.Round(rewindMin, 0), Detail = "hernych minut spat" });
+            Record(found, j, nowMs);
             return found;
         }
 
@@ -617,7 +694,11 @@ public class JobTracker {
         }
 
         var hard = new[] { "teleport_detected", "no_completion_event", "distance_too_short", "odometer_manipulation" };
-        var rejected = flags.Any(hard.Contains);
+        // A job that went away with a loaded save was never completed and is not a
+        // delivery anyone is claiming, so there is nothing here to reject. Whatever
+        // was flagged stays visible, it just cannot invalidate a drive that the game
+        // itself has already erased from its own history.
+        var rejected = record.Outcome != "reloaded" && flags.Any(hard.Contains);
 
         return new Validation {
             Flags = flags,
