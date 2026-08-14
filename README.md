@@ -17,9 +17,47 @@ Waybill takes the opposite position:
 > **A delivery is never invalidated because the driver used an assist.**
 
 Assists, cruise control, speeding, collisions and fines are stored as metadata
-and shown in statistics. Only direct evidence that no driving happened will
-reject a job: a teleport to the destination, a missing completion event, or a
-distance close to zero. Everything else gets flagged for review, not refused.
+and shown in statistics, never as grounds for refusing a delivery.
+
+## How a delivery is judged
+
+Every finished delivery gets one of three states.
+
+| State | Meaning |
+|---|---|
+| `accepted` | Nothing unusual was found |
+| `review` | Something is worth a look, but nothing suggests the driving was faked |
+| `rejected` | Direct evidence that the driving did not happen |
+
+**Rejection is reserved for a delivery being claimed without the driving behind
+it.** There are three such cases, and no others:
+
+* a teleport, meaning a jump across the map that no vehicle could have driven
+* an odometer that moved further in one instant than driving can account for
+* a distance of essentially zero
+
+Everything else is a flag. A flag is visible on the row and says what it is,
+and that is all it does: the delivery keeps its distance, its payout and its
+place in the statistics, which count every row whatever its state. Reaching
+review costs nothing.
+
+What lands in review is, for instance, a job that stopped existing without
+ending, one abandoned past its window, a top speed no truck reaches, or the two
+independent distance measurements disagreeing with each other or with the figure
+the game reports on arrival.
+
+The distinction that matters: **not finishing a delivery is not cheating**.
+Switching to another profile, quitting the game and never coming back, a crash
+mid drive: none of that claims a delivery, so none of it is refused. It is
+recorded for what it is, an unfinished drive, with the kilometres actually
+driven kept.
+
+The other half of the same idea is that ordinary play is recognised rather than
+punished. Pausing into a menu or photo mode, sleeping in the cab, taking a ferry,
+loading an earlier save, being teleported into a company truck by a quick job,
+restarting the tracker mid delivery: each of these looks alarming in raw
+telemetry, and each is identified for what it is instead of counting against the
+driver.
 
 ## Features
 
