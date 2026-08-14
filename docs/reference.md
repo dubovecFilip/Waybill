@@ -38,14 +38,15 @@ has no effect on the verdict.
 
 | Value | Meaning |
 |---|---|
-| `clean` | No fines, under 5% of driving time clearly over the limit, fewer than 3 collisions |
-| `race` | Anything else |
+| `clean` | Under 5% of driving time clearly over the limit, fewer than 3 fines, fewer than 3 collisions |
+| `spirited` | Anything else |
 
 "Clearly over" means more than 10 km/h above the posted limit, stored separately
 as `hard_speeding_share`. Drifting a few km/h over is not what anyone means by
-driving like a pirate, so it does not count here; `speeding_share` remains the
-strict measure of any excess at all. Collisions barely enter into it, since one
-bad moment on a long haul says nothing about how someone drives.
+driving hard, so it does not count here; `speeding_share` remains the strict
+measure of any excess at all. Single fines and collisions barely enter into it,
+since one bad moment on a long haul says nothing about how someone drives; it
+takes a handful of them before the pattern means anything.
 
 ## Validation flags
 

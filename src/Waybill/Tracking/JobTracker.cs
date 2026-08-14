@@ -23,6 +23,9 @@ public class TrackerConfig {
     // Collisions barely enter into it: one bad moment on a long haul says nothing
     // about how someone drives. Only a run of them does.
     public int StyleCollisionsMax = 3;
+    // Same reasoning for fines. One is a moment of inattention on a long run, not a
+    // way of driving, so it takes a handful of them to say anything.
+    public int StyleFinesMax = 3;
     // A job shorter than this is almost certainly a bug or an abuse attempt.
     public double MinPlausibleDistanceKm = 0.5;
     // The odometer counts simulated km at the game's compressed time rate, so at
@@ -357,9 +360,9 @@ public class JobTracker {
             Timeline = j.Timeline,
             TripPoints = j.TripPoints,
         };
-        record.DrivingStyle = j.Fines.Count == 0
+        record.DrivingStyle = j.Fines.Count < 3
             && record.HardSpeedingShare < 0.05
-            && j.Collisions < 3 ? "clean" : "race";
+            && j.Collisions < 3 ? "clean" : "spirited";
         record.Anomalies.Add(new Anomaly { AtMs = nowMs, Code = "abandoned" });
         // Not rejected: nothing here suggests the driving was faked, only that it was
         // never finished, which the cancelled outcome already says.
@@ -807,10 +810,10 @@ public class JobTracker {
     /// Read from what was measured rather than declared up front, which means it can
     /// be derived again for every past delivery from its recording.</summary>
     private string Style(JobRecord record, int fines, int collisions) {
-        var clean = fines == 0
+        var clean = fines < _config.StyleFinesMax
             && record.HardSpeedingShare < _config.StyleSpeedingShareMax
             && collisions < _config.StyleCollisionsMax;
-        return clean ? "clean" : "race";
+        return clean ? "clean" : "spirited";
     }
 
     /// <summary>
