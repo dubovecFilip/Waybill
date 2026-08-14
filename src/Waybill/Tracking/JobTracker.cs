@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 
 namespace Waybill.Tracking;
 
@@ -480,7 +480,7 @@ public class JobTracker {
 
             j.LastOdometerKm = snap.Truck.OdometerKm;
             found.Add(new Anomaly { Code = "save_loaded", Delta = Math.Round(rewindKm, 3), DtMs = (long)rewindMin });
-            j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "save_loaded", Value = Math.Round(rewindMin, 0), Detail = "hernych minut spat" });
+            j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "save_loaded", Value = Math.Round(rewindMin, 0), Detail = Waybill.Strings.T("unit.gameMinutes") });
             Record(found, j, nowMs);
             return found;
         }
@@ -597,7 +597,7 @@ public class JobTracker {
             if (!isTransport) {
                 j.RestStops += 1;
                 j.RestMinutes += jumpedMin;
-                j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = Math.Round(jumpedMin, 1), Detail = "hernych minut" });
+                j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = Math.Round(jumpedMin, 1), Detail = Waybill.Strings.T("unit.gameMinutes") });
             }
         }
 
@@ -622,7 +622,7 @@ public class JobTracker {
         if (damageStep > _config.CollisionDamageStep) {
             j.Collisions += 1;
             found.Add(new Anomaly { Code = "collision", Delta = damageStep });
-            j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "collision", Value = Math.Round(damageStep * 100, 3), Detail = "% poskodenia" });
+            j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "collision", Value = Math.Round(damageStep * 100, 3), Detail = Waybill.Strings.T("unit.damagePercent") });
         }
 
         // Fuel. An increase means a refuel, not negative consumption.
@@ -668,7 +668,7 @@ public class JobTracker {
                 if (!isTransport) {
                     j.RestStops += 1;
                     j.RestMinutes += gameMinutesPassed;
-                    j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = Math.Round(gameMinutesPassed, 1), Detail = "hernych minut" });
+                    j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = Math.Round(gameMinutesPassed, 1), Detail = Waybill.Strings.T("unit.gameMinutes") });
                 }
             } else {
                 found.Add(new Anomaly { Code = wasPaused ? "paused_gap" : "client_gap", DtMs = dtMs });
@@ -875,3 +875,4 @@ public class JobTracker {
         };
     }
 }
+

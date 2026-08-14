@@ -7,11 +7,21 @@ using Waybill.Tracking;
 namespace Waybill;
 
 /// <summary>
-/// The whole UI: a live panel on top (what the engine is doing right now) and
-/// tabs below for delivery history, statistics and the event timeline. The
-/// engine runs in this same process, so starting the app is all the user does.
+/// The whole UI: a live panel on top (what the engine is doing right now), a
+/// sidebar to choose between the delivery history and the statistics, and the
+/// chosen page filling the rest. The engine runs in this same process, so
+/// starting the app is all the user does.
 /// </summary>
 public class MainForm : Form {
+    // One palette for the whole window, so nothing has to invent a colour inline.
+    private static readonly Color Ink = Color.FromArgb(28, 33, 40);
+    private static readonly Color Muted = Color.FromArgb(122, 132, 145);
+    private static readonly Color Line = Color.FromArgb(226, 230, 235);
+    private static readonly Color Surface = Color.White;
+    private static readonly Color Canvas = Color.FromArgb(245, 247, 249);
+    private static readonly Color Accent = Color.FromArgb(0, 120, 190);
+    private static readonly Color AccentSoft = Color.FromArgb(228, 240, 249);
+
     private readonly DeliveryStore _store = new();
     private readonly Settings _settings = Settings.Load();
     private TrackerEngine? _engine;
@@ -19,14 +29,22 @@ public class MainForm : Form {
     private readonly Label _status = new();
     private readonly Label _jobLine = new();
     private readonly Label _jobDetail = new();
-    private readonly ProgressBar _progress = new();
+    private Panel? _progressRow;
+    private readonly Panel _progressTrack = new();
+    private readonly Panel _progressFill = new();
+    private readonly Label _progressText = new();
     private readonly ListBox _log = new();
 
     private readonly DataGridView _grid = new();
     private readonly TextBox _search = new();
     private readonly ComboBox _statusFilter = new();
-    private readonly Label _statsLabel = new();
+    private readonly FlowLayoutPanel _statsFlow = new();
     private readonly DataGridView _timeline = new();
+
+    /// <summary>Which sidebar page is showing. Kept across a language change, which
+    /// rebuilds every control from scratch.</summary>
+    private string _page = "deliveries";
+    private readonly Panel _content = new();
 
     private List<DeliveryRow> _rows = new();
 
@@ -70,18 +88,95 @@ public class MainForm : Form {
     /// </summary>
     private void BuildLayout() {
         Controls.Clear();
+        BackColor = Canvas;
 
-        var tabs = BuildTabs();
+        var content = BuildContent();
+        var sidebar = BuildSidebar();
         var live = BuildLivePanel();
         var menu = BuildMenu();
 
-        Controls.Add(tabs);
+        // Docked children stack in reverse order of adding, so the filling one goes
+        // in first and the outermost edges last.
+        Controls.Add(content);
+        Controls.Add(sidebar);
         Controls.Add(live);
         Controls.Add(menu);
         MainMenuStrip = menu;
 
         ReloadHistory();
         ReloadStats();
+        ShowPage(_page);
+    }
+
+    // ---------- sidebar ----------
+
+    /// <summary>Deliveries and statistics used to be tabs. As a sidebar they read as
+    /// two places in the app rather than two folders inside one, and the labels get
+    /// room to be words instead of cramped tab strips.</summary>
+    private Panel BuildSidebar() {
+        var bar = new Panel { Dock = DockStyle.Left, Width = 176, BackColor = Surface, Padding = new Padding(12, 16, 12, 12) };
+        var edge = new Panel { Dock = DockStyle.Right, Width = 1, BackColor = Line };
+
+        // Added bottom-up so the first entry ends up on top.
+        bar.Controls.Add(NavButton("stats", Strings.T("tab.stats")));
+        bar.Controls.Add(NavButton("deliveries", Strings.T("tab.deliveries")));
+        bar.Controls.Add(edge);
+        return bar;
+    }
+
+    private Button NavButton(string page, string label) {
+        var selected = _page == page;
+        var b = new Button {
+            Text = "   " + label,
+            Dock = DockStyle.Top,
+            Height = 38,
+            Margin = new Padding(0, 0, 0, 6),
+            TextAlign = ContentAlignment.MiddleLeft,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = selected ? AccentSoft : Surface,
+            ForeColor = selected ? Accent : Ink,
+            Font = new Font("Segoe UI", 10F, selected ? FontStyle.Bold : FontStyle.Regular),
+            Cursor = Cursors.Hand,
+            Tag = page,
+        };
+        b.FlatAppearance.BorderSize = 0;
+        b.FlatAppearance.MouseOverBackColor = selected ? AccentSoft : Canvas;
+        b.Click += (_, _) => ShowPage(page);
+        return b;
+    }
+
+    private void ShowPage(string page) {
+        _page = page;
+
+        foreach (Control c in _content.Controls) {
+            c.Visible = (string?)c.Tag == page;
+        }
+
+        // The buttons carry their own selected styling, so they are restyled rather
+        // than rebuilt, which would lose the click that is still being handled.
+        foreach (var b in Controls.OfType<Panel>().SelectMany(p => p.Controls.OfType<Button>())) {
+            if (b.Tag is not string tag) continue;
+            var selected = tag == page;
+            b.BackColor = selected ? AccentSoft : Surface;
+            b.ForeColor = selected ? Accent : Ink;
+            b.Font = new Font("Segoe UI", 10F, selected ? FontStyle.Bold : FontStyle.Regular);
+            b.FlatAppearance.MouseOverBackColor = selected ? AccentSoft : Canvas;
+        }
+    }
+
+    private Panel BuildContent() {
+        _content.Dock = DockStyle.Fill;
+        _content.BackColor = Canvas;
+        _content.Controls.Clear();
+
+        var deliveries = BuildHistoryPage();
+        deliveries.Tag = "deliveries";
+        var stats = BuildStatsPage();
+        stats.Tag = "stats";
+
+        _content.Controls.Add(deliveries);
+        _content.Controls.Add(stats);
+        return _content;
     }
 
     // ---------- menu ----------
@@ -396,37 +491,70 @@ public class MainForm : Form {
     // ---------- live panel ----------
 
     private Control BuildLivePanel() {
-        var panel = new Panel { Dock = DockStyle.Top, Height = 168, Padding = new Padding(12, 10, 12, 6) };
+        var panel = new Panel { Dock = DockStyle.Top, Height = 150 };
+        panel.BackColor = Surface;
+        panel.Padding = new Padding(20, 10, 20, 0);
 
         _status.Text = Strings.T("live.starting");
         _status.Dock = DockStyle.Top;
-        _status.Height = 22;
-        _status.Font = new Font(Font, FontStyle.Bold);
+        _status.Height = 20;
+        _status.ForeColor = Muted;
+        _status.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
 
+        // The route is the one thing worth reading from across the room.
         _jobLine.Dock = DockStyle.Top;
-        _jobLine.Height = 24;
-        _jobLine.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+        _jobLine.Height = 32;
+        _jobLine.ForeColor = Ink;
+        _jobLine.Font = new Font("Segoe UI", 15F, FontStyle.Bold);
 
         _jobDetail.Dock = DockStyle.Top;
-        _jobDetail.Height = 20;
-        _jobDetail.ForeColor = SystemColors.GrayText;
+        _jobDetail.Height = 22;
+        _jobDetail.ForeColor = Muted;
 
-        _progress.Dock = DockStyle.Top;
-        _progress.Height = 20;
-        _progress.Maximum = 1000; // finer resolution than whole percent
+        // A drawn bar rather than a ProgressBar: the stock one is a thick block with
+        // a fixed colour and no room for the figure that belongs beside it.
+        // Hidden until there is a job: an empty track sitting there permanently reads
+        // as a broken widget rather than as nothing to report.
+        var progressRow = new Panel { Dock = DockStyle.Top, Height = 22, Padding = new Padding(0, 6, 0, 0), Visible = false };
+        _progressRow = progressRow;
+        _progressText.Dock = DockStyle.Right;
+        _progressText.Width = 130;
+        _progressText.TextAlign = ContentAlignment.MiddleRight;
+        _progressText.ForeColor = Muted;
+        _progressText.Font = new Font("Segoe UI", 8.5F);
 
+        _progressTrack.Dock = DockStyle.Fill;
+        _progressTrack.Height = 8;
+        _progressTrack.BackColor = Line;
+        _progressTrack.Padding = new Padding(0);
+        _progressTrack.Margin = new Padding(0);
+
+        _progressFill.Dock = DockStyle.Left;
+        _progressFill.Width = 0;
+        _progressFill.BackColor = Accent;
+        _progressTrack.Controls.Add(_progressFill);
+
+        progressRow.Controls.Add(_progressTrack);
+        progressRow.Controls.Add(_progressText);
+
+        var logBox = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 10, 0, 8) };
         _log.Dock = DockStyle.Fill;
         _log.BorderStyle = BorderStyle.None;
-        _log.BackColor = SystemColors.Control;
-        _log.ForeColor = SystemColors.GrayText;
+        _log.BackColor = Surface;
+        _log.ForeColor = Muted;
+        _log.Font = new Font("Consolas", 8.5F);
         _log.IntegralHeight = false;
+        logBox.Controls.Add(_log);
+
+        var edge = new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = Line };
 
         // Docked children stack in reverse order of adding, so add bottom-up.
-        panel.Controls.Add(_log);
-        panel.Controls.Add(_progress);
+        panel.Controls.Add(logBox);
+        panel.Controls.Add(progressRow);
         panel.Controls.Add(_jobDetail);
         panel.Controls.Add(_jobLine);
         panel.Controls.Add(_status);
+        panel.Controls.Add(edge);
         return panel;
     }
 
@@ -475,12 +603,15 @@ public class MainForm : Form {
 
         var job = _engine.ActiveJob;
         if (job == null) {
-            _status.Text = _engine.Connected
+            _status.Text = (_engine.Connected
                 ? $"{Strings.T("live.waitingJob")}   ({Strings.T("live.ticks")}: {_engine.TickCount})"
-                : Strings.T("live.waitingGame");
-            _jobLine.Text = "";
+                : Strings.T("live.waitingGame")).ToUpperInvariant();
+            _jobLine.Text = Strings.T("live.noJob");
+            _jobLine.ForeColor = Muted;
             _jobDetail.Text = "";
-            _progress.Value = 0;
+            _progressText.Text = "";
+            _progressFill.Width = 0;
+            if (_progressRow != null) _progressRow.Visible = false;
             return;
         }
 
@@ -489,29 +620,24 @@ public class MainForm : Form {
         var planned = job.PlannedDistanceKm;
         var u = CurrentUnits();
 
-        _status.Text = $"{Strings.T("live.jobRunning")}   ({Strings.T("live.ticks")}: {_engine.TickCount}, {Strings.T("live.deliveriesThisRun")}: {_engine.DeliveriesThisRun})";
-        _jobLine.Text = $"{job.SourceCity} -> {job.DestinationCity}";
-        _jobDetail.Text = $"{job.Cargo}, {u.MassTonnes(job.CargoMassKg):0.0} {u.MassUnit}   |   "
-                        + $"{u.Distance(driven):0.0} / {u.Distance(planned):0} {u.DistanceUnit}   |   "
-                        + $"{Strings.T("live.reward")} {u.FormatMoney(job.Income)}";
+        _status.Text = $"{Strings.T("live.jobRunning")}   ({Strings.T("live.ticks")}: {_engine.TickCount}, {Strings.T("live.deliveriesThisRun")}: {_engine.DeliveriesThisRun})".ToUpperInvariant();
+        _jobLine.Text = $"{job.SourceCity}  →  {job.DestinationCity}";
+        _jobLine.ForeColor = Ink;
+        _jobDetail.Text = $"{job.Cargo} · {u.MassTonnes(job.CargoMassKg):0.0} {u.MassUnit}"
+                        + $"   ·   {Strings.T("live.reward")} {u.FormatMoney(job.Income)}";
 
         // Planned distance is the game's own route length, in the same simulated km
         // the odometer counts, so this genuinely tracks progress toward the drop-off.
         var ratio = planned > 0 ? Math.Clamp(driven / planned, 0, 1) : 0;
-        _progress.Value = (int)(ratio * _progress.Maximum);
+        if (_progressRow != null) _progressRow.Visible = true;
+        _progressFill.Width = (int)(_progressTrack.ClientSize.Width * ratio);
+        _progressText.Text = $"{u.Distance(driven):0.0} / {u.Distance(planned):0} {u.DistanceUnit}   ·   {ratio * 100:0} %";
     }
 
     // ---------- tabs ----------
 
-    private Control BuildTabs() {
-        var tabs = new TabControl { Dock = DockStyle.Fill };
-        tabs.TabPages.Add(BuildHistoryTab());
-        tabs.TabPages.Add(BuildStatsTab());
-        return tabs;
-    }
-
-    private TabPage BuildHistoryTab() {
-        var page = new TabPage(Strings.T("tab.deliveries")) { Padding = new Padding(8) };
+    private Panel BuildHistoryPage() {
+        var page = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16), BackColor = Canvas };
 
         // Flow layout rather than fixed coordinates, so buttons size to their own
         // text and nothing gets clipped when a label changes.
@@ -553,9 +679,15 @@ public class MainForm : Form {
         _grid.AllowUserToDeleteRows = false;
         _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _grid.MultiSelect = false;
-        _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        // Fixed widths and a horizontal scrollbar rather than columns that redistribute
+        // themselves every time the window is resized: a column should stay where the
+        // eye last found it, and narrowing the window should not squeeze fourteen of
+        // them into unreadable slivers.
+        _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+        _grid.ScrollBars = ScrollBars.Both;
         _grid.RowHeadersVisible = false;
         _grid.EditMode = DataGridViewEditMode.EditOnEnter;
+        StyleGrid(_grid);
 
         // Detach before attaching: these controls are reused when the layout is
         // rebuilt for a language change, and handlers added a second time would fire
@@ -575,10 +707,15 @@ public class MainForm : Form {
         _timeline.AllowUserToAddRows = false;
         _timeline.RowHeadersVisible = false;
         _timeline.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        StyleGrid(_timeline);
         _timeline.DataBindingComplete -= OnTimelineBound;
         _timeline.DataBindingComplete += OnTimelineBound;
 
-        var splitLabel = new Label { Dock = DockStyle.Bottom, Height = 20, Text = Strings.T("timeline.label"), ForeColor = SystemColors.GrayText };
+        var splitLabel = new Label {
+            Dock = DockStyle.Bottom, Height = 26, Text = Strings.T("timeline.label"),
+            ForeColor = Muted, Font = new Font("Segoe UI", 8.5F, FontStyle.Bold),
+            Padding = new Padding(0, 8, 0, 0), BackColor = Canvas,
+        };
 
         page.Controls.Add(_grid);
         page.Controls.Add(splitLabel);
@@ -595,15 +732,35 @@ public class MainForm : Form {
         if (_grid.Rows[e.RowIndex].DataBoundItem is DeliveryRow row) _store.SetNotes(row.Id, row.Poznamky ?? "");
     }
 
-    /// <summary>Colours the verdict so problem deliveries stand out without reading.</summary>
+    /// <summary>Colours the verdict so problem deliveries stand out without reading,
+    /// and turns the stored identifiers into words. The bound value stays the
+    /// identifier, which is what the filter compares and what the data actually is;
+    /// only what reaches the screen is translated.</summary>
     private void OnGridCellFormatting(object? sender, DataGridViewCellFormattingEventArgs e) {
-        if (_grid.Columns[e.ColumnIndex].DataPropertyName != nameof(DeliveryRow.Stav)) return;
-        e.CellStyle!.ForeColor = Convert.ToString(e.Value) switch {
-            "rejected" => Color.Firebrick,
-            "review" => Color.DarkGoldenrod,
-            "imported" => Color.SteelBlue,
-            _ => Color.ForestGreen,
-        };
+        var column = _grid.Columns[e.ColumnIndex].DataPropertyName;
+        var raw = Convert.ToString(e.Value) ?? "";
+
+        if (column == nameof(DeliveryRow.Stav)) {
+            e.CellStyle!.ForeColor = raw switch {
+                "rejected" => Color.Firebrick,
+                "review" => Color.DarkGoldenrod,
+                "imported" => Color.SteelBlue,
+                _ => Color.ForestGreen,
+            };
+        }
+
+        if (column is nameof(DeliveryRow.Stav) or nameof(DeliveryRow.Vysledok) or nameof(DeliveryRow.Styl)) {
+            e.Value = Label(raw);
+            e.FormattingApplied = true;
+        }
+    }
+
+    /// <summary>A stored identifier as a word, capitalised, in the chosen language.
+    /// Anything without a translation is shown as it is rather than hidden.</summary>
+    private static string Label(string identifier) {
+        if (identifier.Length == 0) return "";
+        var translated = Strings.T("value." + identifier);
+        return translated == "value." + identifier ? identifier : translated;
     }
 
     private void OnTimelineBound(object? sender, DataGridViewBindingCompleteEventArgs e) {
@@ -635,15 +792,18 @@ public class MainForm : Form {
                 [nameof(DeliveryRow.Kam)] = 105,
                 [nameof(DeliveryRow.Naklad)] = 130,
                 [nameof(DeliveryRow.Tahac)] = 115,
-                [nameof(DeliveryRow.Vzdialenost)] = 75,
-                [nameof(DeliveryRow.Odmena)] = 75,
-                [nameof(DeliveryRow.Pokuty)] = 50,
-                [nameof(DeliveryRow.Kolizie)] = 50,
-                [nameof(DeliveryRow.Stav)] = 80,
-                [nameof(DeliveryRow.Poznamky)] = 120,
+                [nameof(DeliveryRow.Vzdialenost)] = 95,
+                [nameof(DeliveryRow.Odmena)] = 90,
+                [nameof(DeliveryRow.Pokuty)] = 70,
+                [nameof(DeliveryRow.Kolizie)] = 70,
+                [nameof(DeliveryRow.Vysledok)] = 90,
+                [nameof(DeliveryRow.Styl)] = 80,
+                [nameof(DeliveryRow.Stav)] = 90,
+                [nameof(DeliveryRow.Poznamky)] = 160,
             };
             foreach (DataGridViewColumn col in _grid.Columns) {
-                if (weights.TryGetValue(col.DataPropertyName, out var w)) col.FillWeight = w;
+                if (weights.TryGetValue(col.DataPropertyName, out var w)) col.Width = (int)w;
+                else col.Width = 90;
             }
 
 
@@ -677,18 +837,91 @@ public class MainForm : Form {
         }
     }
 
+    /// <summary>Shared look for both grids: no gridlines to speak of, a quiet header,
+    /// and rows with enough height to breathe.</summary>
+    private static void StyleGrid(DataGridView g) {
+        g.BackgroundColor = Surface;
+        g.BorderStyle = BorderStyle.None;
+        g.EnableHeadersVisualStyles = false;
+        g.GridColor = Line;
+        g.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+        g.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
+        g.ColumnHeadersHeight = 34;
+        g.ColumnHeadersDefaultCellStyle.BackColor = Surface;
+        g.ColumnHeadersDefaultCellStyle.ForeColor = Muted;
+        g.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
+        g.ColumnHeadersDefaultCellStyle.Padding = new Padding(6, 0, 6, 0);
+        g.DefaultCellStyle.BackColor = Surface;
+        g.DefaultCellStyle.ForeColor = Ink;
+        g.DefaultCellStyle.SelectionBackColor = AccentSoft;
+        g.DefaultCellStyle.SelectionForeColor = Ink;
+        g.DefaultCellStyle.Padding = new Padding(6, 0, 6, 0);
+        g.RowTemplate.Height = 30;
+        g.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(250, 251, 252);
+    }
+
     private static Button MakeButton(string text, Action onClick) {
         var b = new Button { Text = text, AutoSize = true, Height = 26, Margin = new Padding(0, 3, 6, 3), Padding = new Padding(8, 0, 8, 0) };
         b.Click += (_, _) => onClick();
         return b;
     }
 
-    private TabPage BuildStatsTab() {
-        var page = new TabPage(Strings.T("tab.stats")) { Padding = new Padding(16) };
-        _statsLabel.Dock = DockStyle.Fill;
-        _statsLabel.Font = new Font("Consolas", 11F);
-        page.Controls.Add(_statsLabel);
+    /// <summary>Statistics as a wall of tiles rather than a block of monospaced text.
+    /// Each figure gets its own card, so the eye can land on one number instead of
+    /// reading a column of them.</summary>
+    private Panel BuildStatsPage() {
+        var page = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16), BackColor = Canvas, AutoScroll = true };
+        _statsFlow.Dock = DockStyle.Fill;
+        _statsFlow.AutoScroll = true;
+        _statsFlow.BackColor = Canvas;
+        _statsFlow.FlowDirection = FlowDirection.LeftToRight;
+        _statsFlow.WrapContents = true;
+        page.Controls.Add(_statsFlow);
         return page;
+    }
+
+    /// <summary>One figure: the number large enough to read at a glance, the caption
+    /// under it out of the way.</summary>
+    private static Control StatTile(string caption, string value, string? note = null, int width = 210) {
+        var card = new Panel {
+            Width = width,
+            Height = 96,
+            Margin = new Padding(0, 0, 12, 12),
+            BackColor = Surface,
+            Padding = new Padding(16, 12, 16, 12),
+        };
+
+        var captionLabel = new Label {
+            Dock = DockStyle.Top, Height = 18, Text = caption.ToUpperInvariant(),
+            ForeColor = Muted, Font = new Font("Segoe UI", 7.5F, FontStyle.Bold),
+        };
+        // A truck name is far longer than a number and would be cut off at the size a
+        // figure wants, so the type steps down rather than the text disappearing.
+        var size = value.Length > 22 ? 11F : value.Length > 13 ? 13.5F : 17F;
+        var valueLabel = new Label {
+            Dock = DockStyle.Top, Height = 34, Text = value,
+            ForeColor = Ink, Font = new Font("Segoe UI", size, FontStyle.Bold),
+            AutoEllipsis = true,
+        };
+        var noteLabel = new Label {
+            Dock = DockStyle.Top, Height = 18, Text = note ?? "",
+            ForeColor = Muted, Font = new Font("Segoe UI", 8F), AutoEllipsis = true,
+        };
+
+        card.Controls.Add(noteLabel);
+        card.Controls.Add(valueLabel);
+        card.Controls.Add(captionLabel);
+        return card;
+    }
+
+    /// <summary>A heading that forces the flow onto a new line.</summary>
+    private Control StatHeading(string text) {
+        var wrap = new Panel { Width = _statsFlow.ClientSize.Width - 24, Height = 40, Margin = new Padding(0, 4, 0, 4), BackColor = Canvas };
+        wrap.Controls.Add(new Label {
+            Dock = DockStyle.Bottom, Height = 22, Text = text,
+            ForeColor = Ink, Font = new Font("Segoe UI", 11F, FontStyle.Bold),
+        });
+        return wrap;
     }
 
     // ---------- data ----------
@@ -737,22 +970,35 @@ public class MainForm : Form {
         // hours would report the time-compression factor as speed (~770 km/h).
         var avg = gameHours > 0.01 ? s.TimedDistanceKm / gameHours : 0;
 
-        _statsLabel.Text = string.Join(Environment.NewLine, new[] {
-            $"{Strings.T("stats.deliveries"),-18} {s.TotalDeliveries}   (accepted {s.Accepted}, review {s.Review}, rejected {s.Rejected})",
-            $"{Strings.T("stats.distance"),-18} {u.FormatDistance(s.TotalDistanceKm)}",
-            $"{Strings.T("stats.revenue"),-18} {u.FormatMoney(s.TotalRevenue)}",
-            $"{Strings.T("stats.fuel"),-18} {u.FormatVolume(s.TotalFuelL)}",
-            $"{Strings.T("stats.time"),-18} {realHours:0.0} {Strings.T("stats.realTime")} ({gameHours:0.0} {Strings.T("stats.gameTime")})",
-            $"{Strings.T("stats.avgSpeed"),-18} {u.FormatSpeed(avg)}",
-            "",
-            $"{Strings.T("stats.collisions"),-18} {s.TotalCollisions}",
-            $"{Strings.T("stats.late"),-18} {s.LateDeliveries}",
-            $"{Strings.T("stats.finesTotal"),-18} {u.FormatMoney(s.TotalFines)}",
-            "",
-            $"{Strings.T("stats.favTruck"),-18} {s.FavoriteTruck ?? "?"}",
-            $"{Strings.T("stats.favRoute"),-18} {s.FavoriteRoute ?? "?"}",
-            $"{Strings.T("stats.favCargo"),-18} {s.FavoriteCargo ?? "?"}",
-        });
+        _statsFlow.SuspendLayout();
+        _statsFlow.Controls.Clear();
+
+        _statsFlow.Controls.Add(StatHeading(Strings.T("stats.headingOverall")));
+        _statsFlow.Controls.Add(StatTile(Strings.T("stats.deliveries"), s.TotalDeliveries.ToString(),
+            $"{s.Accepted} accepted · {s.Review} review · {s.Rejected} rejected"));
+        _statsFlow.Controls.Add(StatTile(Strings.T("stats.distance"), u.FormatDistance(s.TotalDistanceKm)));
+        _statsFlow.Controls.Add(StatTile(Strings.T("stats.revenue"), u.FormatMoney(s.TotalRevenue),
+            s.TotalPenalties > 0 ? $"{Strings.T("stats.penalties")} {u.FormatMoney(s.TotalPenalties)}" : null));
+        _statsFlow.Controls.Add(StatTile(Strings.T("stats.fuel"), u.FormatVolume(s.TotalFuelL)));
+
+        _statsFlow.Controls.Add(StatHeading(Strings.T("stats.headingDriving")));
+        _statsFlow.Controls.Add(StatTile(Strings.T("stats.time"), $"{gameHours:0.0} {Strings.T("stats.gameTime")}",
+            $"{realHours:0.0} {Strings.T("stats.realTime")}"));
+        _statsFlow.Controls.Add(StatTile(Strings.T("stats.avgSpeed"), u.FormatSpeed(avg)));
+        _statsFlow.Controls.Add(StatTile(Strings.T("stats.style"), $"{s.Clean} / {s.Spirited}",
+            $"{Strings.T("stats.styleClean")} / {Strings.T("stats.styleSpirited")}"));
+
+        _statsFlow.Controls.Add(StatHeading(Strings.T("stats.headingIncidents")));
+        _statsFlow.Controls.Add(StatTile(Strings.T("stats.collisions"), s.TotalCollisions.ToString()));
+        _statsFlow.Controls.Add(StatTile(Strings.T("stats.finesTotal"), u.FormatMoney(s.TotalFines)));
+        _statsFlow.Controls.Add(StatTile(Strings.T("stats.late"), s.LateDeliveries.ToString()));
+
+        _statsFlow.Controls.Add(StatHeading(Strings.T("stats.headingFavourites")));
+        _statsFlow.Controls.Add(StatTile(Strings.T("stats.favTruck"), s.FavoriteTruck ?? "?", null, 290));
+        _statsFlow.Controls.Add(StatTile(Strings.T("stats.favRoute"), s.FavoriteRoute ?? "?", null, 290));
+        _statsFlow.Controls.Add(StatTile(Strings.T("stats.favCargo"), s.FavoriteCargo ?? "?", null, 290));
+
+        _statsFlow.ResumeLayout();
     }
 
     // ---------- actions ----------

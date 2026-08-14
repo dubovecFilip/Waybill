@@ -475,9 +475,13 @@ public class DeliveryStore : IDisposable {
                         detail = Newtonsoft.Json.Linq.JObject.Parse(extra)["Detail"]?.ToString() ?? "";
                     } catch { detail = ""; }
                 }
+                // Stored event types are identifiers, deliberately: they are data, and
+                // they outlive whatever language the window happens to be in. The
+                // reading of them belongs here, at the point they are shown.
+                var type = reader.GetString(1);
                 rows.Add(new TimelineRow {
                     Cas = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(0)).LocalDateTime.ToString("HH:mm:ss"),
-                    Udalost = reader.GetString(1),
+                    Udalost = Strings.T("event." + type) is var t && t != "event." + type ? t : type,
                     Hodnota = reader.IsDBNull(2) ? "" : reader.GetDouble(2).ToString("0.##"),
                     Detail = detail,
                 });
@@ -624,6 +628,12 @@ public class DeliveryStore : IDisposable {
                     SUM(CASE WHEN validation_status = 'rejected' THEN 1 ELSE 0 END),
                     COALESCE(SUM(actual_distance_km), 0),
                     COALESCE(SUM(revenue), 0),
+                    -- What the deliveries that never arrived cost, kept apart from
+                    -- revenue rather than netted off it: they are two different
+                    -- things and burying one inside the other hides both.
+                    COALESCE(SUM(penalty), 0),
+                    SUM(CASE WHEN driving_style = 'clean' THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN driving_style = 'spirited' THEN 1 ELSE 0 END),
                     COALESCE(SUM(fuel_used_l), 0),
                     COALESCE(SUM(driving_ms), 0),
                     COALESCE(SUM(driving_game_min), 0),
@@ -647,18 +657,21 @@ public class DeliveryStore : IDisposable {
                 summary.Rejected = reader.IsDBNull(3) ? 0 : reader.GetInt32(3);
                 summary.TotalDistanceKm = reader.GetDouble(4);
                 summary.TotalRevenue = reader.GetDouble(5);
-                summary.TotalFuelL = reader.GetDouble(6);
-                summary.TotalDrivingMs = reader.GetInt64(7);
-                summary.TotalGameMinutes = reader.GetDouble(8);
-                summary.TotalCollisions = reader.GetInt32(9);
-                summary.LateDeliveries = reader.GetInt32(10);
-                summary.TotalFines = reader.GetDouble(11);
-                summary.TimedDistanceKm = reader.GetDouble(12);
+                summary.TotalPenalties = reader.GetDouble(6);
+                summary.Clean = reader.IsDBNull(7) ? 0 : reader.GetInt32(7);
+                summary.Spirited = reader.IsDBNull(8) ? 0 : reader.GetInt32(8);
+                summary.TotalFuelL = reader.GetDouble(9);
+                summary.TotalDrivingMs = reader.GetInt64(10);
+                summary.TotalGameMinutes = reader.GetDouble(11);
+                summary.TotalCollisions = reader.GetInt32(12);
+                summary.LateDeliveries = reader.GetInt32(13);
+                summary.TotalFines = reader.GetDouble(14);
+                summary.TimedDistanceKm = reader.GetDouble(15);
             }
         }
 
         summary.FavoriteTruck = TopValue("truck_make || ' ' || truck_model", sinceMs);
-        summary.FavoriteRoute = TopValue("source_city || ' -> ' || destination_city", sinceMs);
+        summary.FavoriteRoute = TopValue("source_city || ' → ' || destination_city", sinceMs);
         summary.FavoriteCargo = TopValue("cargo", sinceMs);
 
         return summary;
@@ -774,6 +787,11 @@ public class StatsSummary {
     public int Rejected;
     public double TotalDistanceKm;
     public double TotalRevenue;
+    /// <summary>What the cancelled deliveries cost. Kept apart from revenue rather
+    /// than subtracted from it: netting them hides both figures.</summary>
+    public double TotalPenalties;
+    public int Clean;
+    public int Spirited;
     public double TotalFuelL;
     public long TotalDrivingMs;
     /// <summary>In-game minutes elapsed across all deliveries. Distances are in
