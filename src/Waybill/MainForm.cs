@@ -86,8 +86,61 @@ public class MainForm : Form {
 
     // ---------- menu ----------
 
+    /// <summary>Three menus, grouped by what they are for: starting the game,
+    /// everything that touches the database, and preferences. Units and language
+    /// used to sit as top level menus of their own, which put two rarely used
+    /// settings on the same footing as the whole data section.</summary>
     private MenuStrip BuildMenu() {
         var menu = new MenuStrip();
+        menu.Items.Add(BuildPlayMenu());
+        menu.Items.Add(BuildDataMenu());
+        menu.Items.Add(BuildSettingsMenu());
+        return menu;
+    }
+
+    /// <summary>Everything that moves data in or out of the database, in one place:
+    /// what comes in, what goes out, what protects it, and where it lives. These were
+    /// spread between a menu and a row of buttons above the delivery list, where they
+    /// sat next to searching and filtering and looked like the same kind of thing.</summary>
+    private ToolStripMenuItem BuildDataMenu() {
+        var data = new ToolStripMenuItem(Strings.T("menu.data"));
+
+        data.DropDownItems.Add(MenuAction(Strings.T("menu.import"), ImportTrucksBook));
+        data.DropDownItems.Add(MenuAction(Strings.T("menu.rebuild"), RebuildFromRecordings));
+        data.DropDownItems.Add(new ToolStripSeparator());
+
+        data.DropDownItems.Add(MenuAction(Strings.T("menu.exportCsv"), () => Export("csv")));
+        data.DropDownItems.Add(MenuAction(Strings.T("menu.exportJson"), () => Export("json")));
+        data.DropDownItems.Add(new ToolStripSeparator());
+
+        data.DropDownItems.Add(MenuAction(Strings.T("menu.backup"), DoBackup));
+        data.DropDownItems.Add(MenuAction(Strings.T("menu.restore"), DoRestore));
+        data.DropDownItems.Add(new ToolStripSeparator());
+
+        // Data lives under LocalAppData, not next to the exe, so it survives
+        // rebuilds, which also makes it hard to find by hand.
+        data.DropDownItems.Add(OpenFolderItem(Strings.T("menu.folder.db"), DeliveryStore.DefaultDir()));
+        data.DropDownItems.Add(OpenFolderItem(Strings.T("menu.folder.backups"), Path.Combine(DeliveryStore.DefaultDir(), "backups")));
+        data.DropDownItems.Add(OpenFolderItem(Strings.T("menu.folder.sessions"), Path.Combine(DeliveryStore.DefaultDir(), "sessions")));
+        return data;
+    }
+
+    /// <summary>Preferences about how the same data is presented, so they belong
+    /// together rather than one menu each.</summary>
+    private ToolStripMenuItem BuildSettingsMenu() {
+        var settings = new ToolStripMenuItem(Strings.T("menu.settings"));
+        settings.DropDownItems.Add(BuildUnitsMenu());
+        settings.DropDownItems.Add(BuildLanguageMenu());
+        return settings;
+    }
+
+    private ToolStripMenuItem MenuAction(string label, Action action) {
+        var item = new ToolStripMenuItem(label);
+        item.Click += (_, _) => AfterMenuCloses(action);
+        return item;
+    }
+
+    private ToolStripMenuItem BuildUnitsMenu() {
         var units = new ToolStripMenuItem(Strings.T("menu.units"));
 
         // "auto" is the default because each title has its own convention; the
@@ -108,6 +161,10 @@ public class MainForm : Form {
             units.DropDownItems.Add(item);
         }
 
+        return units;
+    }
+
+    private ToolStripMenuItem BuildLanguageMenu() {
         var language = new ToolStripMenuItem(Strings.T("menu.language"));
         foreach (var (code, name) in Strings.All) {
             var item = new ToolStripMenuItem(name) { Tag = code, Checked = _settings.Language == code };
@@ -123,28 +180,7 @@ public class MainForm : Form {
             language.DropDownItems.Add(item);
         }
 
-        menu.Items.Add(BuildPlayMenu());
-        menu.Items.Add(units);
-
-        // Data lives under LocalAppData, not next to the exe, so it survives
-        // rebuilds, which also makes it hard to find by hand.
-        var data = new ToolStripMenuItem(Strings.T("menu.data"));
-        var import = new ToolStripMenuItem(Strings.T("menu.import"));
-        import.Click += (_, _) => AfterMenuCloses(ImportTrucksBook);
-        data.DropDownItems.Add(import);
-
-        var rebuild = new ToolStripMenuItem(Strings.T("menu.rebuild"));
-        rebuild.Click += (_, _) => AfterMenuCloses(RebuildFromRecordings);
-        data.DropDownItems.Add(rebuild);
-
-        data.DropDownItems.Add(new ToolStripSeparator());
-        data.DropDownItems.Add(OpenFolderItem(Strings.T("menu.folder.db"), DeliveryStore.DefaultDir()));
-        data.DropDownItems.Add(OpenFolderItem(Strings.T("menu.folder.backups"), Path.Combine(DeliveryStore.DefaultDir(), "backups")));
-        data.DropDownItems.Add(OpenFolderItem(Strings.T("menu.folder.sessions"), Path.Combine(DeliveryStore.DefaultDir(), "sessions")));
-        menu.Items.Add(data);
-        menu.Items.Add(language);
-
-        return menu;
+        return language;
     }
 
     /// <summary>One click from "app open" to "playing with tracking on": the engine
@@ -493,13 +529,12 @@ public class MainForm : Form {
         _statusFilter.SelectedIndexChanged -= OnFilterChanged;
         _statusFilter.SelectedIndexChanged += OnFilterChanged;
 
+        // Only what changes the view of the list. Exporting, backing up and restoring
+        // used to sit here too, which put "show me fewer rows" and "replace the whole
+        // database" one button apart; they live under Data now.
         bar.Controls.Add(_search);
         bar.Controls.Add(_statusFilter);
         bar.Controls.Add(MakeButton(Strings.T("button.refresh"), () => { ReloadHistory(); ReloadStats(); }));
-        bar.Controls.Add(MakeButton(Strings.T("button.exportCsv"), () => Export("csv")));
-        bar.Controls.Add(MakeButton(Strings.T("button.exportJson"), () => Export("json")));
-        bar.Controls.Add(MakeButton(Strings.T("button.backup"), DoBackup));
-        bar.Controls.Add(MakeButton(Strings.T("button.restore"), DoRestore));
 
         _grid.Dock = DockStyle.Fill;
         _grid.AllowUserToAddRows = false;
