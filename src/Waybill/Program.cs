@@ -46,7 +46,7 @@ if (args.Length >= 3 && args[0] == "--test-resume") {
 }
 
 void TestResume(string path, int splitIdx) {
-    var lines = File.ReadAllLines(path).Where(l => !string.IsNullOrWhiteSpace(l)).ToArray();
+    var lines = SessionFiles.ReadLines(path).Where(l => !string.IsNullOrWhiteSpace(l)).ToArray();
 
     JobRecord? Run(IEnumerable<string> rows, JobTracker t) {
         JobRecord? last = null;
@@ -99,6 +99,65 @@ if (args.Length >= 1 && args[0] == "--stats") {
     return;
 }
 
+// `Waybill.exe --rebuild` re-derives every tracked delivery from its recording.
+// Detection improves over time (the odometer units, the pause-vs-gap distinction),
+// and rows written by an older build keep their old verdict forever otherwise.
+// Lossless because every tracked delivery has a recording behind it; imported rows
+// are left alone, since nothing can regenerate those.
+if (args.Length >= 1 && args[0] == "--rebuild") {
+    using var rebuildStore = new DeliveryStore();
+    var backupPath = rebuildStore.Backup();
+    Console.WriteLine($"Zaloha pred prestavbou: {backupPath}");
+
+    var removed = rebuildStore.DeleteTrackedDeliveries();
+    Console.WriteLine($"Zmazanych sledovanych zaznamov: {removed}");
+
+    var sessionDir = Path.Combine(DeliveryStore.DefaultDir(), "sessions");
+    var recordings = Directory.Exists(sessionDir)
+        ? Directory.GetFiles(sessionDir).Where(f => f.EndsWith(".jsonl") || f.EndsWith(".jsonl.gz")).OrderBy(f => f).ToArray()
+        : Array.Empty<string>();
+
+    var rebuilt = 0;
+    foreach (var recording in recordings) {
+        rebuilt += ReplayInto(recording, rebuildStore);
+    }
+    Console.WriteLine($"Prestavanych z {recordings.Length} nahravok: {rebuilt} zasielok");
+    return;
+}
+
+int ReplayInto(string path, DeliveryStore store) {
+    var tracker = new JobTracker();
+    var saved = 0;
+    foreach (var raw in SessionFiles.ReadLines(path)) {
+        if (string.IsNullOrWhiteSpace(raw)) continue;
+        Newtonsoft.Json.Linq.JObject parsed;
+        try { parsed = Newtonsoft.Json.Linq.JObject.Parse(raw); } catch { continue; }
+        var ts = (long?)parsed["t"] ?? 0;
+        var kind = (string?)parsed["kind"] ?? "tick";
+        if (parsed["d"] is not Newtonsoft.Json.Linq.JObject d) continue;
+
+        foreach (var ev in tracker.Update(Adapter.FromRecordedJson(d, kind), ts)) {
+            if (ev.Type == TrackerEventType.JobFinished && ev.Record != null) {
+                store.SaveDelivery(ev.Record);
+                saved++;
+            }
+        }
+    }
+    return saved;
+}
+
+// `Waybill.exe --import-trucksbook <export.csv>`
+if (args.Length >= 2 && args[0] == "--import-trucksbook") {
+    using var importStore = new DeliveryStore();
+    var result = new TrucksBookImport(importStore).Import(args[1]);
+    Console.WriteLine($"Importovanych: {result.Imported}   uz existovalo: {result.Skipped}");
+    if (result.Uncredited > 0) {
+        Console.WriteLine($"Z toho {result.Uncredited} zasielok TrucksBook nezapocital ({result.UncreditedKm:0} km) - Waybill ich zapocitava.");
+    }
+    foreach (var problem in result.Problems) Console.WriteLine("  ! " + problem);
+    return;
+}
+
 // `Waybill.exe --backup [path]` / `--restore <path>`
 if (args.Length >= 1 && args[0] == "--backup") {
     using var backupStore = new DeliveryStore();
@@ -132,7 +191,7 @@ void ReplayFile(string path, bool save) {
     using var saveStore = save ? new DeliveryStore() : null;
     var replayTracker = new JobTracker();
     var finished = 0;
-    foreach (var raw in File.ReadLines(path)) {
+    foreach (var raw in SessionFiles.ReadLines(path)) {
         if (string.IsNullOrWhiteSpace(raw)) continue;
         Newtonsoft.Json.Linq.JObject parsed;
         try {
@@ -187,7 +246,7 @@ void PrintStats(long? sinceMs) {
     // Distances are simulated km, so they pair with game hours - dividing by real
     // hours would report the time-compression factor as speed (~770 km/h).
     if (gameHours > 0.01) {
-        Console.WriteLine($"priemerna rychlost: {u.FormatSpeed(s.TotalDistanceKm / gameHours)}");
+        Console.WriteLine($"priemerna rychlost: {u.FormatSpeed(s.TimedDistanceKm / gameHours)}");
     }
 
     Console.WriteLine($"kolizie: {s.TotalCollisions}   meskania: {s.LateDeliveries}   pokuty spolu: {u.FormatMoney(s.TotalFines)}");

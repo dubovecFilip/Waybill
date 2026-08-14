@@ -22,18 +22,31 @@ zákaz.
 
 ## Ako to spustiť
 
-1. **Nainštaluj telemetry plugin** do hry — pozri
-   [`third-party/README.md`](third-party/README.md).
-2. **Zbuilduj a spusti:**
+1. **Zbuilduj:**
    ```bash
    dotnet build src/Waybill
    ```
-   Potom spusti `Waybill.exe` z `src/Waybill/bin/Debug/net9.0-windows/`.
-3. **Hraj.** Appku môžeš zapnúť pred hrou aj po nej, poradie nehrá rolu. Zákazky
-   sa rozpoznajú a uložia samé.
+   Spusti `Waybill.exe` z `src/Waybill/bin/Debug/net9.0-windows/`.
+2. **Nainštaluj telemetry plugin** — v menu *Hrať → Nainštalovať telemetry plugin*
+   a ukáž na `Win64/scs-telemetry.dll` zo
+   [`third-party/`](third-party/README.md). Bez neho hra nič neposiela.
+3. **Hraj** — v menu *Hrať* spusti ATS alebo ETS2 priamo z appky. Hry sa hľadajú
+   vo všetkých knižniciach Steamu a spúšťajú cezeň, takže overlay aj cloud save
+   fungujú normálne.
 
-Ak appku zavrieš uprostred jazdy (alebo spadne), pri ďalšom spustení na tú istú
-zákazku nadviaže — vrátane kilometrov najazdených, kým nebežala.
+Poradie nehrá rolu — appku môžeš zapnúť pred hrou aj po nej. Ak ju zavrieš
+uprostred jazdy (alebo spadne), pri ďalšom spustení na tú istú zákazku nadviaže,
+vrátane kilometrov najazdených, kým nebežala.
+
+### Samostatný .exe
+
+```bash
+dotnet publish src/Waybill -c Release -r win-x64 -p:PublishSingleFile=true -o dist
+```
+
+Vyrobí jediný `dist/Waybill.exe` (~50 MB), ktorý beží aj tam, kde .NET nie je
+nainštalovaný. Nastavenia pre publish sú v `Waybill.csproj` schválne podmienené —
+inak by zasiahli aj bežný `dotnet build` a presunuli jeho výstup inam.
 
 ## Príkazový riadok
 
@@ -43,11 +56,18 @@ Okno je bežný spôsob použitia, ale všetko sa dá aj zo skriptu:
 Waybill.exe --list [n]                  # posledné zásielky
 Waybill.exe --stats [dni]               # súhrn (celkovo alebo za obdobie)
 Waybill.exe --export csv|json [cesta]   # export histórie
+Waybill.exe --import-trucksbook <csv>   # import histórie z TrucksBooku
 Waybill.exe --backup [cesta]            # záloha databázy
 Waybill.exe --restore <cesta>           # obnova zo zálohy
-Waybill.exe --replay <súbor.jsonl>      # prehrá starú nahrávku
-Waybill.exe --test-resume <súbor> <riadok>   # test obnovy po reštarte
+Waybill.exe --rebuild                   # prepočíta zásielky z nahrávok
+Waybill.exe --replay <nahrávka>         # prehrá starú nahrávku
+Waybill.exe --test-resume <nahrávka> <riadok>   # test obnovy po reštarte
 ```
+
+`--rebuild` sa hodí po každej oprave detekcie: staré záznamy si inak natrvalo
+nesú verdikt, ktorý vydala vtedajšia verzia. Je to bezstratové, lebo za každou
+sledovanou zásielkou stojí nahrávka — importované riadky sa nedotkne, tie
+prepočítať nemá z čoho.
 
 ## Kde sú dáta
 
@@ -61,6 +81,10 @@ prebuildovanie ani `dotnet clean` o nič nepríde:
 | Surové nahrávky telemetrie | `sessions/` |
 | Rozpracovaná zákazka | `in-progress.json` |
 | Nastavenia | `settings.json` |
+
+Nahrávky sa po ukončení automaticky zabalia do `.gz` — komprimujú sa asi **13×**
+(9,9 MB nahrávka → 750 kB), takže sa nič nemusí mazať. Prehrávanie ich číta
+zabalené aj nezabalené.
 
 ## Jednotky
 
@@ -98,10 +122,12 @@ celkovým herným časom zas počíta aj spánok.
 ```
 src/Waybill/
 ├── Tracking/       stavový automat zákazky, adaptér SDK, engine, formátovanie
-├── Storage/        SQLite (deliveries, events, trip_points)
+├── Storage/        SQLite (deliveries, events, trip_points), import z TrucksBooku
 ├── SCSSdkClient/   vendorovaný C# klient SDK (MIT, s lokálnymi opravami)
+├── GameLauncher.cs hľadanie a spúšťanie hier cez Steam
 ├── MainForm.cs     okno
 └── Program.cs      CLI + vstupný bod
+assets/             logo a zdroj ikony
 docs/roadmap.md     vízia a plán
 third-party/        telemetry plugin do hry
 archive/            odložené, už nepoužívané
@@ -118,17 +144,35 @@ Waybill.exe --replay <stará-nahrávka.jsonl>
 a porovnaj, či čísla sedia. `--test-resume` navyše simuluje reštart uprostred
 jazdy a porovná výsledok s jedným súvislým behom.
 
+## Import z TrucksBooku
+
+*Data → Importovať históriu z TrucksBooku* a vyber CSV export. Import je
+idempotentný (kľúčom je TrucksBookID), takže ten istý súbor sa dá pustiť
+opakovane bez duplikátov.
+
+Export je v jednotkách daného profilu a hodnoty si nesú jednotku so sebou
+(`157 mi`, `5.9 mpg`), takže sa prevádza podľa toho, čo je naozaj v súbore.
+Importované zásielky dostanú stav `imported` — nemá za nimi telemetriu, ktorú by
+šlo overiť, a tvrdiť o nich `accepted` by znamenalo dať im dôveru, ktorú si
+nezaslúžili.
+
+Zásielky, ktoré má TrucksBook so započítanou vzdialenosťou 0 (tie, čo neuznal),
+sa importujú s plánovanou vzdialenosťou a poznámkou — Waybill ich započíta.
+
 ## Stav
 
-Funguje: automatické sledovanie a ukladanie, obnova po reštarte, história s
-hľadaním a poznámkami, štatistiky, časová os udalostí, export, zálohy.
+Funguje: automatické sledovanie a ukladanie, spustenie hry z appky, obnova po
+reštarte, história s hľadaním a poznámkami, štatistiky, časová os udalostí,
+import z TrucksBooku, export, zálohy.
 
 Chýba: mapa a prehrávanie trasy (súradnice sa už zbierajú), achievementy,
-štatistiky za herné sedenie, detekcia spustenia hry, import z TrucksBooku.
-Podrobnosti v [`docs/roadmap.md`](docs/roadmap.md).
+štatistiky za herné sedenie. Podrobnosti v [`docs/roadmap.md`](docs/roadmap.md).
 
-## Licencie
+## Licencia
 
-Vendorovaný SDK klient a plugin sú MIT (RenCloud). Licenciu vlastného kódu si
-ešte zvoľ — ak by si niekedy preberal kód z projektov ako TruckNav-Sim (GPL-3.0),
-vynúti si to GPL-3.0 na celom projekte.
+[MIT](LICENSE). Vendorovaný SDK klient aj plugin od RenCloud sú tiež MIT, takže
+celý projekt je pod jednou licenciou.
+
+Pozor pri preberaní cudzieho kódu: projekty pod GPL 3.0 (napríklad TruckNav-Sim,
+ktorý by sa hodil pri mape) by vynútili GPL na celom Waybille. Ak má zostať MIT,
+takú funkciu treba napísať po svojom.

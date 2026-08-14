@@ -22,6 +22,50 @@ public class DeliveryStore : IDisposable {
         _conn = new SqliteConnection($"Data Source={DbPath}");
         _conn.Open();
         CreateSchema();
+        MigrateSchema();
+    }
+
+    /// <summary>
+    /// `CREATE TABLE IF NOT EXISTS` does nothing to a table that already exists, so
+    /// columns added later would silently be missing on any database created before
+    /// them. Adding whatever the current schema expects and the file doesn't have
+    /// keeps old databases working without anyone having to delete their history.
+    /// </summary>
+    private void MigrateSchema() {
+        var expected = new (string Table, string Column, string Definition)[] {
+            ("deliveries", "world_distance_km", "REAL"),
+            ("deliveries", "sim_speed_distance_km", "REAL"),
+            ("deliveries", "driving_game_min", "REAL"),
+            ("deliveries", "delivery_time_min", "REAL"),
+            ("deliveries", "collisions", "INTEGER"),
+            ("deliveries", "late_delivery", "INTEGER"),
+            ("deliveries", "minutes_late", "REAL"),
+            ("deliveries", "cruise_control_share", "REAL"),
+            ("deliveries", "rest_stops", "INTEGER"),
+            ("deliveries", "rest_minutes", "REAL"),
+            ("deliveries", "notes", "TEXT DEFAULT ''"),
+            // Where the row came from: this app's own tracking, or an import.
+            ("deliveries", "source", "TEXT DEFAULT 'waybill'"),
+            ("deliveries", "xp", "INTEGER"),
+            ("deliveries", "job_type", "TEXT"),
+        };
+
+        foreach (var group in expected.GroupBy(e => e.Table)) {
+            var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using (var info = _conn.CreateCommand()) {
+                info.CommandText = $"PRAGMA table_info({group.Key});";
+                using var reader = info.ExecuteReader();
+                while (reader.Read()) existing.Add(reader.GetString(1));
+            }
+            if (existing.Count == 0) continue; // table doesn't exist yet; CreateSchema owns it
+
+            foreach (var (table, column, definition) in group) {
+                if (existing.Contains(column)) continue;
+                using var alter = _conn.CreateCommand();
+                alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition};";
+                alter.ExecuteNonQuery();
+            }
+        }
     }
 
     public static string DefaultDir() =>
@@ -87,6 +131,9 @@ public class DeliveryStore : IDisposable {
                 real_duration_ms        INTEGER,
                 game_duration_min       REAL,
                 notes                   TEXT DEFAULT '',
+                source                  TEXT DEFAULT 'waybill',
+                xp                      INTEGER,
+                job_type                TEXT,
                 created_at              TEXT DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -225,6 +272,96 @@ public class DeliveryStore : IDisposable {
         InsertTripPoints(tx, deliveryId, r);
 
         tx.Commit();
+    }
+
+    /// <summary>Removes deliveries this app tracked itself, leaving imported ones
+    /// untouched - they have no recording to rebuild them from. Used by --rebuild.</summary>
+    public int DeleteTrackedDeliveries() {
+        using var tx = _conn.BeginTransaction();
+
+        foreach (var table in new[] { "events", "trip_points" }) {
+            using var child = _conn.CreateCommand();
+            child.Transaction = tx;
+            child.CommandText = $"""
+                DELETE FROM {table} WHERE delivery_id IN (
+                    SELECT id FROM deliveries WHERE source IS NULL OR source = 'waybill'
+                );
+                """;
+            child.ExecuteNonQuery();
+        }
+
+        int removed;
+        using (var cmd = _conn.CreateCommand()) {
+            cmd.Transaction = tx;
+            cmd.CommandText = "DELETE FROM deliveries WHERE source IS NULL OR source = 'waybill';";
+            removed = cmd.ExecuteNonQuery();
+        }
+
+        tx.Commit();
+        return removed;
+    }
+
+    public bool HasDelivery(string jobUid) {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "SELECT 1 FROM deliveries WHERE job_uid = $uid LIMIT 1;";
+        cmd.Parameters.AddWithValue("$uid", jobUid);
+        return cmd.ExecuteScalar() != null;
+    }
+
+    /// <summary>Writes a delivery that came from an import rather than live tracking.
+    /// Marked source='trucksbook' and given the "imported" verdict - there is no
+    /// telemetry behind it to validate, and calling it "accepted" would put unearned
+    /// confidence on a row this app never watched.</summary>
+    public void InsertImported(ImportedDelivery d) {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT OR IGNORE INTO deliveries (
+                job_uid, game, outcome, validation_status, validation_flags, source,
+                truck_make, truck_model, cargo, cargo_mass_kg,
+                source_city, source_company, destination_city, destination_company,
+                planned_distance_km, actual_distance_km,
+                offered_income, revenue, fuel_used_l, avg_consumption_l_100km,
+                top_speed_kmh, cargo_damage_pct, fines_count, fines_total,
+                xp, job_type, notes,
+                started_at_ms, finished_at_ms, real_duration_ms
+            ) VALUES (
+                $job_uid, $game, 'delivered', 'imported', '', 'trucksbook',
+                $truck_make, $truck_model, $cargo, $cargo_mass_kg,
+                $source_city, $source_company, $destination_city, $destination_company,
+                $planned_distance_km, $actual_distance_km,
+                $revenue, $revenue, $fuel_used_l, $avg_consumption,
+                $top_speed_kmh, $cargo_damage, 0, $fines_total,
+                $xp, $job_type, $notes,
+                $started_at_ms, $finished_at_ms, $real_duration_ms
+            );
+            """;
+
+        cmd.Parameters.AddWithValue("$job_uid", d.JobUid);
+        cmd.Parameters.AddWithValue("$game", d.Game);
+        cmd.Parameters.AddWithValue("$truck_make", d.TruckMake);
+        cmd.Parameters.AddWithValue("$truck_model", d.TruckModel);
+        cmd.Parameters.AddWithValue("$cargo", d.Cargo);
+        cmd.Parameters.AddWithValue("$cargo_mass_kg", d.CargoMassKg);
+        cmd.Parameters.AddWithValue("$source_city", d.SourceCity);
+        cmd.Parameters.AddWithValue("$source_company", d.SourceCompany);
+        cmd.Parameters.AddWithValue("$destination_city", d.DestinationCity);
+        cmd.Parameters.AddWithValue("$destination_company", d.DestinationCompany);
+        cmd.Parameters.AddWithValue("$planned_distance_km", d.PlannedKm);
+        cmd.Parameters.AddWithValue("$actual_distance_km", d.ActualKm);
+        cmd.Parameters.AddWithValue("$revenue", d.Revenue);
+        cmd.Parameters.AddWithValue("$fuel_used_l", d.FuelUsedL);
+        cmd.Parameters.AddWithValue("$avg_consumption", d.AvgConsumption);
+        cmd.Parameters.AddWithValue("$top_speed_kmh", d.TopSpeedKmh);
+        cmd.Parameters.AddWithValue("$cargo_damage", d.CargoDamage);
+        cmd.Parameters.AddWithValue("$fines_total", d.FinesTotal);
+        cmd.Parameters.AddWithValue("$xp", d.Xp);
+        cmd.Parameters.AddWithValue("$job_type", d.JobType);
+        cmd.Parameters.AddWithValue("$notes", d.Notes);
+        cmd.Parameters.AddWithValue("$started_at_ms", d.StartedAtMs);
+        cmd.Parameters.AddWithValue("$finished_at_ms", d.StartedAtMs + d.RealDurationMs);
+        cmd.Parameters.AddWithValue("$real_duration_ms", d.RealDurationMs);
+
+        cmd.ExecuteNonQuery();
     }
 
     /// <summary>Deliveries as grid rows for the UI, newest first. Each row is
@@ -440,7 +577,12 @@ public class DeliveryStore : IDisposable {
                     COALESCE(SUM(driving_game_min), 0),
                     COALESCE(SUM(collisions), 0),
                     COALESCE(SUM(late_delivery), 0),
-                    COALESCE(SUM(fines_total), 0)
+                    COALESCE(SUM(fines_total), 0),
+                    -- Distance of rows that also have game time, so average speed
+                    -- divides two figures that describe the same drives. Imported
+                    -- rows carry distance but no game clock, and mixing them in
+                    -- inflated the average to hundreds of km/h.
+                    COALESCE(SUM(CASE WHEN driving_game_min > 0 THEN actual_distance_km ELSE 0 END), 0)
                 FROM deliveries
                 WHERE $since IS NULL OR started_at_ms >= $since;
                 """;
@@ -459,6 +601,7 @@ public class DeliveryStore : IDisposable {
                 summary.TotalCollisions = reader.GetInt32(9);
                 summary.LateDeliveries = reader.GetInt32(10);
                 summary.TotalFines = reader.GetDouble(11);
+                summary.TimedDistanceKm = reader.GetDouble(12);
             }
         }
 
@@ -579,6 +722,10 @@ public class StatsSummary {
     /// <summary>In-game minutes elapsed across all deliveries. Distances are in
     /// simulated km, so average speed must divide by this, never by real time.</summary>
     public double TotalGameMinutes;
+    /// <summary>Distance of the deliveries that also have game time behind them.
+    /// Pair this with TotalGameMinutes for average speed - TotalDistanceKm includes
+    /// imported rows that have no game clock.</summary>
+    public double TimedDistanceKm;
     public int TotalCollisions;
     public int LateDeliveries;
     public double TotalFines;

@@ -475,7 +475,18 @@ public class JobTracker {
             }
         }
 
-        if (gap) found.Add(new Anomaly { Code = "client_gap", DtMs = dtMs });
+        if (gap) {
+            // No ticks are written while the game is paused (the SDK stops updating
+            // its timestamp), so opening the map or a menu leaves exactly the same
+            // hole in the recording as the app freezing would. The game clock tells
+            // them apart: it keeps running during a real client gap and stands still
+            // during a pause. Measured across 24 gaps in two recordings, 22 were
+            // pauses - flagging those as an unstable client made almost every honest
+            // delivery land in "review".
+            var gameMinutesPassed = snap.GameTimeMin - prev.GameTimeMin;
+            var wasPaused = gameMinutesPassed < dtMs / 60000.0; // slower than real time = clock stopped
+            found.Add(new Anomaly { Code = wasPaused ? "paused_gap" : "client_gap", DtMs = dtMs });
+        }
 
         Record(found, j, nowMs);
         return found;

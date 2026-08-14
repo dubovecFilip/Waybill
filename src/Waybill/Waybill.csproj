@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <!-- WinExe so double-clicking opens the window with no console behind it.
@@ -9,11 +9,36 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <ApplicationIcon>waybill.ico</ApplicationIcon>
+
+    <AssemblyTitle>Waybill</AssemblyTitle>
+    <Product>Waybill</Product>
+    <Description>Delivery tracker for Euro Truck Simulator 2 and American Truck Simulator</Description>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <!-- Publish settings only. Setting RuntimeIdentifier as a plain property would
+       apply to ordinary `dotnet build` too, moving its output into a win-x64
+       subfolder and making every debug build self-contained; these only take
+       effect when publishing (see the publish command in README.md).
+       Trimming stays off deliberately: the SDK client and the SQLite provider
+       both use reflection, which a trimmer cannot follow. -->
+  <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <PublishTrimmed>false</PublishTrimmed>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Copied next to the exe as well as embedded, because the window loads it at
+         runtime to set its own icon (Content alone does not copy anything). -->
+    <Content Include="waybill.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -68,6 +68,10 @@ public class TrackerEngine : IDisposable {
     public bool Start() {
         LoadInProgress();
 
+        // Recordings whose app was killed before it could pack them.
+        var packed = SessionFiles.CompressOrphans(Path.GetDirectoryName(SessionPath)!, SessionPath);
+        if (packed > 0) Message?.Invoke($"Zabalenych starsich nahravok: {packed}");
+
         // Poll at 100 ms so that no gameplay event flag flip is missed.
         _telemetry = new SCSSdkTelemetry(100);
         if (_telemetry.Error != null) {
@@ -231,6 +235,9 @@ public class TrackerEngine : IDisposable {
         lock (_gate) SaveInProgress(force: true);
         _writer.Flush();
         _writer.Dispose();
+
+        // The recording is finished now, so pack it away (see SessionFiles).
+        SessionFiles.Compress(SessionPath);
         GC.SuppressFinalize(this);
     }
 }

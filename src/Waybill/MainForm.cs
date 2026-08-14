@@ -38,6 +38,13 @@ public class MainForm : Form {
         Font = new Font("Segoe UI", 9F);
         StartPosition = FormStartPosition.CenterScreen;
 
+        // The window icon comes from the same .ico the exe is built with, so the
+        // taskbar, alt-tab and the title bar all match.
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "waybill.ico");
+        if (File.Exists(iconPath)) {
+            try { Icon = new Icon(iconPath); } catch { /* a missing icon is not worth failing over */ }
+        }
+
         var tabs = BuildTabs();
         var live = BuildLivePanel();
         var menu = BuildMenu();
@@ -83,17 +90,98 @@ public class MainForm : Form {
             units.DropDownItems.Add(item);
         }
 
+        menu.Items.Add(BuildPlayMenu());
         menu.Items.Add(units);
 
         // Data lives under LocalAppData, not next to the exe, so it survives
         // rebuilds - which also makes it hard to find by hand.
         var data = new ToolStripMenuItem("Data");
+        var import = new ToolStripMenuItem("Importovat historiu z TrucksBooku...");
+        import.Click += (_, _) => ImportTrucksBook();
+        data.DropDownItems.Add(import);
+        data.DropDownItems.Add(new ToolStripSeparator());
         data.DropDownItems.Add(OpenFolderItem("Priecinok s databazou", DeliveryStore.DefaultDir()));
         data.DropDownItems.Add(OpenFolderItem("Priecinok so zalohami", Path.Combine(DeliveryStore.DefaultDir(), "backups")));
         data.DropDownItems.Add(OpenFolderItem("Priecinok s nahravkami", Path.Combine(DeliveryStore.DefaultDir(), "sessions")));
         menu.Items.Add(data);
 
         return menu;
+    }
+
+    /// <summary>One click from "app open" to "playing with tracking on": the engine
+    /// is already recording by the time the window exists, so launching the game
+    /// from here is the whole of one-click play.</summary>
+    private ToolStripMenuItem BuildPlayMenu() {
+        var play = new ToolStripMenuItem("Hrat");
+
+        foreach (var game in new[] { SimGame.Ats, SimGame.Ets2 }) {
+            var installed = GameLauncher.IsInstalled(game);
+            var item = new ToolStripMenuItem(GameLauncher.DisplayName(game)) { Enabled = installed };
+            if (!installed) item.ToolTipText = "Hra sa nenasla v ziadnej kniznici Steamu.";
+
+            item.Click += (_, _) => LaunchGame(game);
+            play.DropDownItems.Add(item);
+        }
+
+        play.DropDownItems.Add(new ToolStripSeparator());
+        var pluginItem = new ToolStripMenuItem("Nainstalovat telemetry plugin...");
+        pluginItem.Click += (_, _) => InstallPlugin();
+        play.DropDownItems.Add(pluginItem);
+
+        return play;
+    }
+
+    private void LaunchGame(SimGame game) {
+        // The plugin is what makes any of this work, so say so before the game
+        // starts rather than leaving the user watching a tracker that sees nothing.
+        if (!GameLauncher.IsPluginInstalled(game)) {
+            var answer = MessageBox.Show(this,
+                $"V {GameLauncher.DisplayName(game)} nie je nainstalovany telemetry plugin,\n"
+                + "bez neho hra nic neposiela a Waybill nema co sledovat.\n\nNainstalovat teraz?",
+                "Chyba plugin", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
+
+            if (answer == DialogResult.Cancel) return;
+            if (answer == DialogResult.Yes && !InstallPluginFor(game)) return;
+        }
+
+        try {
+            GameLauncher.Launch(game);
+            AddLog($"Spustam {GameLauncher.DisplayName(game)}...");
+        } catch (Exception ex) {
+            MessageBox.Show(this, "Hru sa nepodarilo spustit:\n" + ex.Message, "Chyba", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void InstallPlugin() {
+        var choices = new[] { SimGame.Ats, SimGame.Ets2 }.Where(GameLauncher.IsInstalled).ToArray();
+        if (choices.Length == 0) {
+            MessageBox.Show(this, "Nenasla sa ziadna nainstalovana hra.", "Plugin");
+            return;
+        }
+        foreach (var game in choices) InstallPluginFor(game);
+    }
+
+    private bool InstallPluginFor(SimGame game) {
+        var plugins = GameLauncher.PluginDirectory(game);
+        if (plugins == null) {
+            MessageBox.Show(this, $"{GameLauncher.DisplayName(game)} sa nenasla.", "Plugin");
+            return false;
+        }
+
+        using var dlg = new OpenFileDialog {
+            Title = $"Vyber scs-telemetry.dll (Win64) pre {GameLauncher.DisplayName(game)}",
+            Filter = "scs-telemetry.dll|scs-telemetry.dll|DLL|*.dll",
+        };
+        if (dlg.ShowDialog(this) != DialogResult.OK) return false;
+
+        try {
+            File.Copy(dlg.FileName, Path.Combine(plugins, "scs-telemetry.dll"), overwrite: true);
+            AddLog($"Plugin nainstalovany do {plugins}");
+            return true;
+        } catch (Exception ex) {
+            MessageBox.Show(this, "Plugin sa nepodarilo skopirovat:\n" + ex.Message, "Chyba", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
+        }
     }
 
     private static ToolStripMenuItem OpenFolderItem(string label, string path) {
@@ -382,7 +470,7 @@ public class MainForm : Form {
         var realHours = s.TotalDrivingMs / 3600000.0;
         // Distances are simulated km, so they pair with game hours - dividing by real
         // hours would report the time-compression factor as speed (~770 km/h).
-        var avg = gameHours > 0.01 ? s.TotalDistanceKm / gameHours : 0;
+        var avg = gameHours > 0.01 ? s.TimedDistanceKm / gameHours : 0;
 
         _statsLabel.Text = string.Join(Environment.NewLine, new[] {
             $"zasielok spolu     {s.TotalDeliveries}   (accepted {s.Accepted}, review {s.Review}, rejected {s.Rejected})",
@@ -412,6 +500,31 @@ public class MainForm : Form {
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
         _store.Export(dlg.FileName, format);
         MessageBox.Show(this, "Exportovane do:\n" + dlg.FileName, "Export");
+    }
+
+    private void ImportTrucksBook() {
+        using var dlg = new OpenFileDialog {
+            Title = "Vyber CSV export z TrucksBooku",
+            Filter = "CSV|*.csv",
+            InitialDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"),
+        };
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+        var result = new TrucksBookImport(_store).Import(dlg.FileName);
+
+        var message = $"Importovanych: {result.Imported}\nUz v databaze: {result.Skipped}";
+        if (result.Uncredited > 0) {
+            var u = CurrentUnits();
+            message += $"\n\nZ toho {result.Uncredited} zasielok TrucksBook nezapocital "
+                     + $"({u.FormatDistance(result.UncreditedKm, "0")}).\nWaybill ich zapocitava.";
+        }
+        if (result.Problems.Count > 0) {
+            message += "\n\nProblemy:\n" + string.Join("\n", result.Problems.Take(5));
+        }
+
+        MessageBox.Show(this, message, "Import z TrucksBooku");
+        ReloadHistory();
+        ReloadStats();
     }
 
     private void DoBackup() {
