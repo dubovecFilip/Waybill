@@ -69,7 +69,7 @@ public class MainForm : Form {
     private readonly DataGridView _grid = new();
     private readonly TextBox _search = new();
     private readonly ComboBox _statusFilter = new();
-    private readonly FlowLayoutPanel _statsFlow = new();
+    private readonly TableLayoutPanel _statsGrid = new();
     private readonly DataGridView _timeline = new();
 
     /// <summary>Which sidebar page is showing. Kept across a language change, which
@@ -225,7 +225,21 @@ public class MainForm : Form {
         menu.Items.Add(BuildPlayMenu());
         menu.Items.Add(BuildDataMenu());
         menu.Items.Add(BuildSettingsMenu());
+        StyleMenuItems(menu.Items);
         return menu;
+    }
+
+    /// <summary>The colour table paints the menu's own surfaces, but each item still
+    /// draws its text in the system colour, which on this background is near enough
+    /// invisible. Walked recursively because submenus are items too.</summary>
+    private static void StyleMenuItems(ToolStripItemCollection items) {
+        foreach (ToolStripItem item in items) {
+            item.ForeColor = Ink;
+            item.BackColor = Surface;
+            if (item is ToolStripMenuItem menuItem && menuItem.HasDropDownItems) {
+                StyleMenuItems(menuItem.DropDownItems);
+            }
+        }
     }
 
     /// <summary>Everything that moves data in or out of the database, in one place:
@@ -958,26 +972,40 @@ public class MainForm : Form {
     /// <summary>Statistics as a wall of tiles rather than a block of monospaced text.
     /// Each figure gets its own card, so the eye can land on one number instead of
     /// reading a column of them.</summary>
+    /// <summary>Everything on one screen, no scrolling. A table rather than a flow:
+    /// the rows share out whatever height there is, so the whole set of figures stays
+    /// visible at any window size instead of the last ones falling off the bottom.</summary>
     private Panel BuildStatsPage() {
-        var page = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16), BackColor = Canvas, AutoScroll = true };
-        _statsFlow.Dock = DockStyle.Fill;
-        _statsFlow.AutoScroll = true;
-        _statsFlow.BackColor = Canvas;
-        _statsFlow.FlowDirection = FlowDirection.LeftToRight;
-        _statsFlow.WrapContents = true;
-        page.Controls.Add(_statsFlow);
+        var page = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16), BackColor = Canvas };
+        _statsGrid.Dock = DockStyle.Fill;
+        _statsGrid.BackColor = Canvas;
+        _statsGrid.ColumnCount = 4;
+        _statsGrid.RowCount = 8;
+        _statsGrid.Padding = new Padding(0);
+
+        _statsGrid.ColumnStyles.Clear();
+        for (var i = 0; i < 4; i++) _statsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+
+        // Four sections, each a heading of its own height above a row of tiles that
+        // takes an equal quarter of what is left.
+        _statsGrid.RowStyles.Clear();
+        for (var i = 0; i < 4; i++) {
+            _statsGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
+            _statsGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
+        }
+
+        page.Controls.Add(_statsGrid);
         return page;
     }
 
     /// <summary>One figure: the number large enough to read at a glance, the caption
     /// under it out of the way.</summary>
-    private static Control StatTile(string caption, string value, string? note = null, int width = 210) {
+    private static Control StatTile(string caption, string value, string? note = null) {
         var card = new Panel {
-            Width = width,
-            Height = 96,
+            Dock = DockStyle.Fill,
             Margin = new Padding(0, 0, 12, 12),
             BackColor = Surface,
-            Padding = new Padding(16, 12, 16, 12),
+            Padding = new Padding(16, 10, 16, 10),
         };
 
         var captionLabel = new Label {
@@ -1003,15 +1031,11 @@ public class MainForm : Form {
         return card;
     }
 
-    /// <summary>A heading that forces the flow onto a new line.</summary>
-    private Control StatHeading(string text) {
-        var wrap = new Panel { Width = _statsFlow.ClientSize.Width - 24, Height = 40, Margin = new Padding(0, 4, 0, 4), BackColor = Canvas };
-        wrap.Controls.Add(new Label {
-            Dock = DockStyle.Bottom, Height = 22, Text = text,
-            ForeColor = Ink, Font = new Font("Segoe UI", 11F, FontStyle.Bold),
-        });
-        return wrap;
-    }
+    private static Control StatHeading(string text) => new Label {
+        Dock = DockStyle.Fill, Text = text, TextAlign = ContentAlignment.BottomLeft,
+        Margin = new Padding(0, 4, 0, 6), BackColor = Canvas,
+        ForeColor = Ink, Font = new Font("Segoe UI", 10.5F, FontStyle.Bold),
+    };
 
     // ---------- data ----------
 
@@ -1059,35 +1083,41 @@ public class MainForm : Form {
         // hours would report the time-compression factor as speed (~770 km/h).
         var avg = gameHours > 0.01 ? s.TimedDistanceKm / gameHours : 0;
 
-        _statsFlow.SuspendLayout();
-        _statsFlow.Controls.Clear();
+        _statsGrid.SuspendLayout();
+        _statsGrid.Controls.Clear();
 
-        _statsFlow.Controls.Add(StatHeading(Strings.T("stats.headingOverall")));
-        _statsFlow.Controls.Add(StatTile(Strings.T("stats.deliveries"), s.TotalDeliveries.ToString(),
-            $"{s.Accepted} accepted · {s.Review} review · {s.Rejected} rejected"));
-        _statsFlow.Controls.Add(StatTile(Strings.T("stats.distance"), u.FormatDistance(s.TotalDistanceKm)));
-        _statsFlow.Controls.Add(StatTile(Strings.T("stats.revenue"), u.FormatMoney(s.TotalRevenue),
-            s.TotalPenalties > 0 ? $"{Strings.T("stats.penalties")} {u.FormatMoney(s.TotalPenalties)}" : null));
-        _statsFlow.Controls.Add(StatTile(Strings.T("stats.fuel"), u.FormatVolume(s.TotalFuelL)));
+        void Section(int row, string heading, params Control[] tiles) {
+            _statsGrid.Controls.Add(StatHeading(heading), 0, row);
+            _statsGrid.SetColumnSpan(_statsGrid.GetControlFromPosition(0, row)!, 4);
+            for (var i = 0; i < tiles.Length; i++) _statsGrid.Controls.Add(tiles[i], i, row + 1);
+        }
 
-        _statsFlow.Controls.Add(StatHeading(Strings.T("stats.headingDriving")));
-        _statsFlow.Controls.Add(StatTile(Strings.T("stats.time"), $"{gameHours:0.0} {Strings.T("stats.gameTime")}",
-            $"{realHours:0.0} {Strings.T("stats.realTime")}"));
-        _statsFlow.Controls.Add(StatTile(Strings.T("stats.avgSpeed"), u.FormatSpeed(avg)));
-        _statsFlow.Controls.Add(StatTile(Strings.T("stats.style"), $"{s.Clean} / {s.Spirited}",
-            $"{Strings.T("stats.styleClean")} / {Strings.T("stats.styleSpirited")}"));
+        Section(0, Strings.T("stats.headingOverall"),
+            StatTile(Strings.T("stats.deliveries"), s.TotalDeliveries.ToString(),
+                $"{s.Accepted} accepted · {s.Review} review · {s.Rejected} rejected"),
+            StatTile(Strings.T("stats.distance"), u.FormatDistance(s.TotalDistanceKm)),
+            StatTile(Strings.T("stats.revenue"), u.FormatMoney(s.TotalRevenue),
+                s.TotalPenalties > 0 ? $"{Strings.T("stats.penalties")} {u.FormatMoney(s.TotalPenalties)}" : null),
+            StatTile(Strings.T("stats.fuel"), u.FormatVolume(s.TotalFuelL)));
 
-        _statsFlow.Controls.Add(StatHeading(Strings.T("stats.headingIncidents")));
-        _statsFlow.Controls.Add(StatTile(Strings.T("stats.collisions"), s.TotalCollisions.ToString()));
-        _statsFlow.Controls.Add(StatTile(Strings.T("stats.finesTotal"), u.FormatMoney(s.TotalFines)));
-        _statsFlow.Controls.Add(StatTile(Strings.T("stats.late"), s.LateDeliveries.ToString()));
+        Section(2, Strings.T("stats.headingDriving"),
+            StatTile(Strings.T("stats.time"), $"{gameHours:0.0} {Strings.T("stats.gameTime")}",
+                $"{realHours:0.0} {Strings.T("stats.realTime")}"),
+            StatTile(Strings.T("stats.avgSpeed"), u.FormatSpeed(avg)),
+            StatTile(Strings.T("stats.style"), $"{s.Clean} / {s.Spirited}",
+                $"{Strings.T("stats.styleClean")} / {Strings.T("stats.styleSpirited")}"));
 
-        _statsFlow.Controls.Add(StatHeading(Strings.T("stats.headingFavourites")));
-        _statsFlow.Controls.Add(StatTile(Strings.T("stats.favTruck"), s.FavoriteTruck ?? "?", null, 290));
-        _statsFlow.Controls.Add(StatTile(Strings.T("stats.favRoute"), s.FavoriteRoute ?? "?", null, 290));
-        _statsFlow.Controls.Add(StatTile(Strings.T("stats.favCargo"), s.FavoriteCargo ?? "?", null, 290));
+        Section(4, Strings.T("stats.headingIncidents"),
+            StatTile(Strings.T("stats.collisions"), s.TotalCollisions.ToString()),
+            StatTile(Strings.T("stats.finesTotal"), u.FormatMoney(s.TotalFines)),
+            StatTile(Strings.T("stats.late"), s.LateDeliveries.ToString()));
 
-        _statsFlow.ResumeLayout();
+        Section(6, Strings.T("stats.headingFavourites"),
+            StatTile(Strings.T("stats.favTruck"), s.FavoriteTruck ?? "?"),
+            StatTile(Strings.T("stats.favRoute"), s.FavoriteRoute ?? "?"),
+            StatTile(Strings.T("stats.favCargo"), s.FavoriteCargo ?? "?"));
+
+        _statsGrid.ResumeLayout();
     }
 
     // ---------- actions ----------
