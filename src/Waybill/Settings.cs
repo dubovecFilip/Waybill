@@ -12,7 +12,7 @@ public class Settings {
     public string Units { get; set; } = "auto";
 
     /// <summary>UI language code, see Strings.All.</summary>
-    public string Language { get; set; } = "sk";
+    public string Language { get; set; } = "en";
 
     /// <summary>Where the games are installed, when the automatic search is wrong or
     /// finds nothing: a non Steam copy, a library the registry does not list, or the

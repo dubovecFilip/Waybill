@@ -292,6 +292,36 @@ public class DeliveryStore : IDisposable {
 
     /// <summary>Removes deliveries this app tracked itself, leaving imported ones
     /// untouched - they have no recording to rebuild them from. Used by --rebuild.</summary>
+    /// <summary>Removes the rows that came from a TrucksBook export. The mirror of
+    /// <see cref="DeleteTrackedDeliveries"/>, and the only way back out of an import:
+    /// nothing regenerates these, so once they are in, they stay until asked to go.</summary>
+    public int DeleteImportedDeliveries() {
+        lock (_gate) {
+            using var tx = _conn.BeginTransaction();
+
+            foreach (var table in new[] { "events", "trip_points" }) {
+                using var child = _conn.CreateCommand();
+                child.Transaction = tx;
+                child.CommandText = $"""
+                    DELETE FROM {table} WHERE delivery_id IN (
+                        SELECT id FROM deliveries WHERE source = 'trucksbook'
+                    );
+                    """;
+                child.ExecuteNonQuery();
+            }
+
+            int removed;
+            using (var cmd = _conn.CreateCommand()) {
+                cmd.Transaction = tx;
+                cmd.CommandText = "DELETE FROM deliveries WHERE source = 'trucksbook';";
+                removed = cmd.ExecuteNonQuery();
+            }
+
+            tx.Commit();
+            return removed;
+        }
+    }
+
     public int DeleteTrackedDeliveries() {
         lock (_gate) {
         using var tx = _conn.BeginTransaction();

@@ -10,18 +10,21 @@ namespace Waybill;
 /// translation shows partly translated text rather than blank labels.
 /// </summary>
 public static class Strings {
-    public static string Language = "sk";
+    public static string Language = "en";
 
     public static readonly (string Code, string Name)[] All = {
         ("sk", "Slovenčina"),
         ("en", "English"),
     };
 
+    /// <summary>English is the fallback because the rest of the project is English:
+    /// the code, the documentation and the stored identifiers. A key missing from a
+    /// translation shows the English wording rather than a blank or a key.</summary>
     public static string T(string key) {
-        if (Language != "sk" && Translations.TryGetValue(Language, out var table) && table.TryGetValue(key, out var text)) {
+        if (Translations.TryGetValue(Language, out var table) && table.TryGetValue(key, out var text)) {
             return text;
         }
-        return Slovak.TryGetValue(key, out var fallback) ? fallback : key;
+        return English.TryGetValue(key, out var fallback) ? fallback : key;
     }
 
     private static readonly Dictionary<string, string> Slovak = new() {
@@ -38,6 +41,9 @@ public static class Strings {
         ["menu.units.imperial"] = "Imperiálne (mi, gal, short t)",
         ["menu.import"] = "Importovať históriu z TrucksBooku...",
         ["menu.rebuild"] = "Prepočítať zásielky z nahrávok...",
+        ["menu.removeImported"] = "Odstrániť importované zásielky...",
+        ["msg.removeImportedConfirm"] = "Zmažú sa všetky zásielky importované z TrucksBooku.\nSledované zásielky zostanú.\n\nNedá sa to vrátiť inak než opätovným importom alebo zálohou, ktorá sa teraz vytvorí.\n\nPokračovať?",
+        ["msg.removed"] = "Odstránených zásielok",
         ["menu.settings"] = "Nastavenia",
         ["menu.exportCsv"] = "Exportovať do CSV...",
         ["menu.exportJson"] = "Exportovať do JSON...",
@@ -199,6 +205,9 @@ public static class Strings {
         ["menu.units.imperial"] = "Imperial (mi, gal, short t)",
         ["menu.import"] = "Import history from TrucksBook...",
         ["menu.rebuild"] = "Recompute deliveries from recordings...",
+        ["menu.removeImported"] = "Remove imported deliveries...",
+        ["msg.removeImportedConfirm"] = "Every delivery imported from TrucksBook will be deleted.\nTracked deliveries are left alone.\n\nNothing can bring them back except importing again or the backup taken now.\n\nContinue?",
+        ["msg.removed"] = "Deliveries removed",
         ["menu.settings"] = "Settings",
         ["menu.exportCsv"] = "Export to CSV...",
         ["menu.exportJson"] = "Export to JSON...",
@@ -344,5 +353,6 @@ public static class Strings {
 
     private static readonly Dictionary<string, Dictionary<string, string>> Translations = new() {
         ["en"] = English,
+        ["sk"] = Slovak,
     };
 }

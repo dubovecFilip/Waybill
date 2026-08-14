@@ -12,15 +12,46 @@ namespace Waybill;
 /// chosen page filling the rest. The engine runs in this same process, so
 /// starting the app is all the user does.
 /// </summary>
+/// <summary>Menus are drawn by the framework from a fixed colour table, so a dark
+/// window needs its own or the drop-downs stay white.</summary>
+internal class DarkMenuColours : ProfessionalColorTable {
+    private static readonly Color Bg = Color.FromArgb(30, 34, 39);
+    private static readonly Color Raised = Color.FromArgb(38, 43, 50);
+    private static readonly Color Edge = Color.FromArgb(48, 54, 62);
+    private static readonly Color Highlight = Color.FromArgb(52, 45, 33);
+
+    public override Color MenuStripGradientBegin => Bg;
+    public override Color MenuStripGradientEnd => Bg;
+    public override Color ToolStripDropDownBackground => Bg;
+    public override Color ImageMarginGradientBegin => Bg;
+    public override Color ImageMarginGradientMiddle => Bg;
+    public override Color ImageMarginGradientEnd => Bg;
+    public override Color MenuItemSelected => Highlight;
+    public override Color MenuItemSelectedGradientBegin => Highlight;
+    public override Color MenuItemSelectedGradientEnd => Highlight;
+    public override Color MenuItemPressedGradientBegin => Raised;
+    public override Color MenuItemPressedGradientMiddle => Raised;
+    public override Color MenuItemPressedGradientEnd => Raised;
+    public override Color MenuItemBorder => Edge;
+    public override Color MenuBorder => Edge;
+    public override Color SeparatorDark => Edge;
+    public override Color SeparatorLight => Edge;
+}
+
 public class MainForm : Form {
-    // One palette for the whole window, so nothing has to invent a colour inline.
-    private static readonly Color Ink = Color.FromArgb(28, 33, 40);
-    private static readonly Color Muted = Color.FromArgb(122, 132, 145);
-    private static readonly Color Line = Color.FromArgb(226, 230, 235);
-    private static readonly Color Surface = Color.White;
-    private static readonly Color Canvas = Color.FromArgb(245, 247, 249);
-    private static readonly Color Accent = Color.FromArgb(0, 120, 190);
-    private static readonly Color AccentSoft = Color.FromArgb(228, 240, 249);
+    // One dark palette for the whole window, so nothing has to invent a colour
+    // inline. There is no light variant on purpose: two of them means every control
+    // has to be checked twice and one of them is always the neglected one.
+    private static readonly Color Canvas = Color.FromArgb(22, 25, 29);
+    private static readonly Color Surface = Color.FromArgb(30, 34, 39);
+    private static readonly Color Raised = Color.FromArgb(38, 43, 50);
+    private static readonly Color Line = Color.FromArgb(48, 54, 62);
+    private static readonly Color Ink = Color.FromArgb(228, 233, 240);
+    private static readonly Color Muted = Color.FromArgb(138, 148, 163);
+    // Amber rather than blue: it is the colour of a truck's indicators and warning
+    // boards, and it stays legible on a dark ground where blue goes muddy.
+    private static readonly Color Accent = Color.FromArgb(232, 168, 74);
+    private static readonly Color AccentSoft = Color.FromArgb(52, 45, 33);
 
     private readonly DeliveryStore _store = new();
     private readonly Settings _settings = Settings.Load();
@@ -72,7 +103,7 @@ public class MainForm : Form {
 
         BuildLayout();
 
-        Load += (_, _) => StartEngine();
+        Load += (_, _) => { UseDarkTitleBar(); StartEngine(); };
         FormClosing += (_, _) => _engine?.Dispose();
 
         var timer = new System.Windows.Forms.Timer { Interval = 500 };
@@ -186,7 +217,11 @@ public class MainForm : Form {
     /// used to sit as top level menus of their own, which put two rarely used
     /// settings on the same footing as the whole data section.</summary>
     private MenuStrip BuildMenu() {
-        var menu = new MenuStrip();
+        var menu = new MenuStrip {
+            BackColor = Surface, ForeColor = Ink,
+            Renderer = new ToolStripProfessionalRenderer(new DarkMenuColours()),
+            Padding = new Padding(8, 4, 0, 4),
+        };
         menu.Items.Add(BuildPlayMenu());
         menu.Items.Add(BuildDataMenu());
         menu.Items.Add(BuildSettingsMenu());
@@ -202,6 +237,7 @@ public class MainForm : Form {
 
         data.DropDownItems.Add(MenuAction(Strings.T("menu.import"), ImportTrucksBook));
         data.DropDownItems.Add(MenuAction(Strings.T("menu.rebuild"), RebuildFromRecordings));
+        data.DropDownItems.Add(MenuAction(Strings.T("menu.removeImported"), RemoveImported));
         data.DropDownItems.Add(new ToolStripSeparator());
 
         data.DropDownItems.Add(MenuAction(Strings.T("menu.exportCsv"), () => Export("csv")));
@@ -366,6 +402,26 @@ public class MainForm : Form {
             MessageBox.Show(this, ex.Message, Strings.T("msg.error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
         } finally {
             Cursor = Cursors.Default;
+        }
+    }
+
+    /// <summary>Takes the TrucksBook rows back out. Nothing can regenerate them, which
+    /// is exactly why it asks first and backs up before it does anything.</summary>
+    private void RemoveImported() {
+        var answer = MessageBox.Show(this, Strings.T("msg.removeImportedConfirm"), Strings.T("menu.removeImported"),
+            MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
+        if (answer != DialogResult.OK) return;
+
+        try {
+            var backup = _store.Backup();
+            var removed = _store.DeleteImportedDeliveries();
+            AddLog($"{Strings.T("menu.removeImported")}: {removed}");
+            ReloadHistory();
+            ReloadStats();
+            MessageBox.Show(this, $"{Strings.T("msg.removed")}: {removed}\n\n{Strings.T("msg.backupSaved")} {backup}",
+                Strings.T("menu.removeImported"));
+        } catch (Exception ex) {
+            MessageBox.Show(this, ex.Message, Strings.T("msg.error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
@@ -652,11 +708,17 @@ public class MainForm : Form {
         _search.Width = 240;
         _search.Margin = new Padding(0, 3, 8, 3);
         _search.PlaceholderText = Strings.T("search.placeholder");
+        _search.BorderStyle = BorderStyle.FixedSingle;
+        _search.BackColor = Raised;
+        _search.ForeColor = Ink;
         _search.TextChanged += (_, _) => ApplyFilter();
 
-        _statusFilter.Width = 120;
+        _statusFilter.Width = 130;
         _statusFilter.Margin = new Padding(0, 3, 16, 3);
         _statusFilter.DropDownStyle = ComboBoxStyle.DropDownList;
+        _statusFilter.FlatStyle = FlatStyle.Flat;
+        _statusFilter.BackColor = Raised;
+        _statusFilter.ForeColor = Ink;
         // The controls are reused when the layout is rebuilt for a language change,
         // so the old entries have to go first. Left in place they pile up and, worse,
         // the still-selected entry is in the previous language while the filter
@@ -787,7 +849,7 @@ public class MainForm : Form {
             // like the game name and clips the timestamp. Weight them by content.
             var weights = new Dictionary<string, int> {
                 [nameof(DeliveryRow.Datum)] = 105,
-                [nameof(DeliveryRow.Hra)] = 45,
+                [nameof(DeliveryRow.Hra)] = 62,
                 [nameof(DeliveryRow.Odkial)] = 105,
                 [nameof(DeliveryRow.Kam)] = 105,
                 [nameof(DeliveryRow.Naklad)] = 130,
@@ -849,6 +911,10 @@ public class MainForm : Form {
         g.ColumnHeadersHeight = 34;
         g.ColumnHeadersDefaultCellStyle.BackColor = Surface;
         g.ColumnHeadersDefaultCellStyle.ForeColor = Muted;
+        // The sorted column's header is "selected", and left alone it takes the system
+        // highlight: a solid block behind grey text that could not be read at all.
+        g.ColumnHeadersDefaultCellStyle.SelectionBackColor = Surface;
+        g.ColumnHeadersDefaultCellStyle.SelectionForeColor = Accent;
         g.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
         g.ColumnHeadersDefaultCellStyle.Padding = new Padding(6, 0, 6, 0);
         g.DefaultCellStyle.BackColor = Surface;
@@ -857,13 +923,36 @@ public class MainForm : Form {
         g.DefaultCellStyle.SelectionForeColor = Ink;
         g.DefaultCellStyle.Padding = new Padding(6, 0, 6, 0);
         g.RowTemplate.Height = 30;
-        g.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(250, 251, 252);
+        g.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(34, 38, 44);
+        // Row height carries no information, so dragging it about is only a way to
+        // make the list worse by accident.
+        g.AllowUserToResizeRows = false;
+        g.RowHeadersVisible = false;
     }
 
     private static Button MakeButton(string text, Action onClick) {
-        var b = new Button { Text = text, AutoSize = true, Height = 26, Margin = new Padding(0, 3, 6, 3), Padding = new Padding(8, 0, 8, 0) };
+        var b = new Button {
+            Text = text, AutoSize = true, Height = 28, Margin = new Padding(0, 3, 6, 3),
+            Padding = new Padding(10, 0, 10, 0),
+            FlatStyle = FlatStyle.Flat, BackColor = Raised, ForeColor = Ink, Cursor = Cursors.Hand,
+        };
+        b.FlatAppearance.BorderColor = Line;
+        b.FlatAppearance.MouseOverBackColor = Line;
         b.Click += (_, _) => onClick();
         return b;
+    }
+
+    /// <summary>Windows paints the title bar itself and defaults it to light, which
+    /// leaves a white cap on a dark window. Available from Windows 10 20H1 on; older
+    /// builds simply ignore the call.</summary>
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
+    private void UseDarkTitleBar() {
+        try {
+            var on = 1;
+            DwmSetWindowAttribute(Handle, 20, ref on, sizeof(int));
+        } catch { /* an older Windows just keeps the light title bar */ }
     }
 
     /// <summary>Statistics as a wall of tiles rather than a block of monospaced text.
