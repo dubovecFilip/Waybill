@@ -24,6 +24,11 @@ public class TrackerConfig {
     // covering more than this means the clock jumped (sleep, ferry, teleport)
     // rather than time simply passing, so it is left out of the speed integral.
     public double MaxTickGameMinutes = 5.0;
+    // Ceiling on how fast the game clock can run compared to real time. The measured
+    // rate is about 19x, so this is generously above ordinary play and far below a
+    // sleep, which advances the clock by hours in seconds. Used to tell a gap the
+    // app is responsible for from one the game caused by fast forwarding.
+    public double MaxGameMinutesPerRealMinute = 60;
     // Ordinary driving wears the truck by ~0.0006% per tick, very consistently.
     // An impact is orders of magnitude above that, so 0.1% in a single tick
     // separates the two with a lot of room to spare.
@@ -554,7 +559,28 @@ public class JobTracker {
             // delivery land in "review".
             var gameMinutesPassed = snap.GameTimeMin - prev.GameTimeMin;
             var wasPaused = gameMinutesPassed < dtMs / 60000.0; // slower than real time = clock stopped
-            found.Add(new Anomaly { Code = wasPaused ? "paused_gap" : "client_gap", DtMs = dtMs });
+
+            // The third case: the clock leapt far further than the real gap could
+            // account for even at the game's compressed rate. That is the game fast
+            // forwarding through a sleep, a ferry or a train, and the loading screen
+            // it plays is exactly what left the hole. One observed sleep advanced the
+            // clock 900 game minutes across 11 real seconds and was being reported as
+            // an unstable client, while the rest stop itself went unrecorded, because
+            // rest detection above only looks at ticks that are not gaps.
+            var affordableGameMinutes = Math.Max((dtMs / 60000.0) * _config.MaxGameMinutesPerRealMinute, _config.MaxTickGameMinutes);
+            var fastForward = !wasPaused && gameMinutesPassed > affordableGameMinutes;
+
+            if (fastForward) {
+                found.Add(new Anomaly { Code = "fast_forward_gap", DtMs = dtMs, Delta = gameMinutesPassed });
+                var isTransport = snap.Events.FerryUsed != null || snap.Events.TrainUsed != null;
+                if (!isTransport) {
+                    j.RestStops += 1;
+                    j.RestMinutes += gameMinutesPassed;
+                    j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = Math.Round(gameMinutesPassed, 1), Detail = "hernych minut" });
+                }
+            } else {
+                found.Add(new Anomaly { Code = wasPaused ? "paused_gap" : "client_gap", DtMs = dtMs });
+            }
         }
 
         Record(found, j, nowMs);
