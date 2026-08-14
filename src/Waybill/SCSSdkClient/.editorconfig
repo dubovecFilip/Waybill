@@ -215,3 +215,17 @@ dotnet_naming_style.begins_with_i.required_prefix = I
 dotnet_naming_style.begins_with_i.required_suffix = 
 dotnet_naming_style.begins_with_i.word_separator = 
 dotnet_naming_style.begins_with_i.capitalization = pascal_case
+
+#### Local addition (not from upstream) ####
+# This library predates nullable reference types and produces about 150 nullability
+# warnings that nobody is going to act on, since the code is vendored and follows
+# upstream. Left visible they drown out warnings from code that is actually ours.
+# Silenced here rather than project wide, so our own files keep reporting them.
+dotnet_diagnostic.CS8600.severity = none
+dotnet_diagnostic.CS8601.severity = none
+dotnet_diagnostic.CS8602.severity = none
+dotnet_diagnostic.CS8603.severity = none
+dotnet_diagnostic.CS8604.severity = none
+dotnet_diagnostic.CS8618.severity = none
+dotnet_diagnostic.CS8622.severity = none
+dotnet_diagnostic.CS8625.severity = none

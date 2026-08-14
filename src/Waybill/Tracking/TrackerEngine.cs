@@ -153,6 +153,10 @@ public class TrackerEngine : IDisposable {
     // when only one trailer is attached, plus truck fields nothing here reads. Together
     // that was about 60% of every line's size (~31 KB/line observed). Keep this in sync
     // with Adapter if either starts reading a field the other drops.
+    // The SDK declares these properties non-nullable, so clearing them warns. That is
+    // exactly the intent here: this object is on its way to being serialized and
+    // never read again, so the fields are dropped rather than written out.
+#pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type
     private static void Trim(SCSTelemetry data) {
         data.TrailerValues = (data.TrailerValues ?? Array.Empty<SCSTelemetry.Trailer>())
             .Where(t => t.Attached)
@@ -183,6 +187,7 @@ public class TrackerEngine : IDisposable {
         data.Substances = null;
         data.ControlValues = null;
     }
+#pragma warning restore CS8625
 
     private void LoadInProgress() {
         if (!File.Exists(_inProgressPath)) return;
