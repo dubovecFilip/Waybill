@@ -163,8 +163,19 @@ public class JobTracker {
         if (prev == null || prevAt == null) return outEvents;
 
         var dtMs = nowMs - prevAt.Value;
-        var hasEnd = snap.Events.JobDelivered != null || snap.Events.JobCancelled != null;
-        if (dtMs < _config.MinTickMs && !hasEnd) return outEvents;
+
+        // The SDK fires its events on the very poll that produced the last snapshot,
+        // so an event line lands 0 to 20 ms behind the tick before it. Dropping a
+        // snapshot that close used to throw the event away with it: a fine issued at
+        // 0 ms showed up in the live log, because that is raised separately, and then
+        // never reached the delivery or the statistics. Only the movement half of a
+        // snapshot is worthless this close together, never the event half.
+        var carriesEvent = snap.Events.JobDelivered != null || snap.Events.JobCancelled != null
+            || snap.Events.Fined != null || snap.Events.TollgatePaid != null
+            || snap.Events.FerryUsed != null || snap.Events.TrainUsed != null
+            || snap.Events.RefuelPaid != null;
+        var instant = dtMs < _config.MinTickMs;
+        if (instant && !carriesEvent) return outEvents;
 
         var gap = dtMs > _config.MaxTickMs;
         var fp = Fingerprint(snap.Job);
@@ -186,7 +197,7 @@ public class JobTracker {
         var cancelled = snap.Events.JobCancelled;
 
         if (_current != null && (delivered != null || cancelled != null)) {
-            Accumulate(snap, prev, dtMs, gap, reloaded, nowMs);
+            Accumulate(snap, prev, dtMs, gap, reloaded, instant, nowMs);
             var record = Close(snap, delivered != null ? "delivered" : "cancelled",
                 delivered != null ? (object)delivered : cancelled!, nowMs);
             outEvents.Add(new TrackerEvent { Type = TrackerEventType.JobFinished, Record = record });
@@ -259,7 +270,7 @@ public class JobTracker {
         if (_current == null) return outEvents;
 
         _current.MissingJobSinceMs = null;
-        Accumulate(snap, prev, dtMs, gap, reloaded, nowMs);
+        Accumulate(snap, prev, dtMs, gap, reloaded, instant, nowMs);
 
         if (_state == State.Accepted && _current.DistanceKm > 0.05) {
             _state = State.Driving;
@@ -320,9 +331,20 @@ public class JobTracker {
         _current.TripPoints.Add(new TripPoint { AtMs = nowMs, X = snap.PosX, Y = snap.PosY, Z = snap.PosZ, SpeedKmh = snap.Truck.SpeedKmh });
     }
 
-    private List<Anomaly> Accumulate(Snapshot snap, Snapshot prev, long dtMs, bool gap, bool reloaded, long nowMs) {
+    private List<Anomaly> Accumulate(Snapshot snap, Snapshot prev, long dtMs, bool gap, bool reloaded, bool instant, long nowMs) {
         var j = _current!;
         var found = new List<Anomaly>();
+
+        // Same instant as the previous snapshot, kept only because it carries an
+        // event. There is no interval to measure anything over: distance would be
+        // noise, and the teleport check divides by the elapsed time, so any position
+        // difference at all would come out as an implausible speed and reject an
+        // honest delivery. Take the event and nothing else.
+        if (instant) {
+            RecordEvents(snap, j, found, (nowMs - j.StartedAtMs) < _config.JobStartGraceMs, nowMs);
+            Record(found, j, nowMs);
+            return found;
+        }
 
         if (snap.Paused) {
             j.PausedMs += dtMs;
@@ -520,6 +542,29 @@ public class JobTracker {
             j.SpeedingMs += dtMs;
         }
 
+        RecordEvents(snap, j, found, inGrace, nowMs);
+
+        if (gap) {
+            // No ticks are written while the game is paused (the SDK stops updating
+            // its timestamp), so opening the map or a menu leaves exactly the same
+            // hole in the recording as the app freezing would. The game clock tells
+            // them apart: it keeps running during a real client gap and stands still
+            // during a pause. Measured across 24 gaps in two recordings, 22 were
+            // pauses - flagging those as an unstable client made almost every honest
+            // delivery land in "review".
+            var gameMinutesPassed = snap.GameTimeMin - prev.GameTimeMin;
+            var wasPaused = gameMinutesPassed < dtMs / 60000.0; // slower than real time = clock stopped
+            found.Add(new Anomaly { Code = wasPaused ? "paused_gap" : "client_gap", DtMs = dtMs });
+        }
+
+        Record(found, j, nowMs);
+        return found;
+    }
+
+    /// <summary>The gameplay events carried by one snapshot. Separate from the rest of
+    /// accumulation because a snapshot can arrive in the same instant as the previous
+    /// one and still carry an event that has to be kept (see the instant branch).</summary>
+    private static void RecordEvents(Snapshot snap, JobState j, List<Anomaly> found, bool inGrace, long nowMs) {
         var e = snap.Events;
         if (e.Fined != null) {
             j.Fines.Add(new FineRecord { Amount = e.Fined.Amount, Offence = e.Fined.Offence });
@@ -551,22 +596,6 @@ public class JobTracker {
                 j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "refuel", Value = e.RefuelPaid.Amount });
             }
         }
-
-        if (gap) {
-            // No ticks are written while the game is paused (the SDK stops updating
-            // its timestamp), so opening the map or a menu leaves exactly the same
-            // hole in the recording as the app freezing would. The game clock tells
-            // them apart: it keeps running during a real client gap and stands still
-            // during a pause. Measured across 24 gaps in two recordings, 22 were
-            // pauses - flagging those as an unstable client made almost every honest
-            // delivery land in "review".
-            var gameMinutesPassed = snap.GameTimeMin - prev.GameTimeMin;
-            var wasPaused = gameMinutesPassed < dtMs / 60000.0; // slower than real time = clock stopped
-            found.Add(new Anomaly { Code = wasPaused ? "paused_gap" : "client_gap", DtMs = dtMs });
-        }
-
-        Record(found, j, nowMs);
-        return found;
     }
 
     private static void Record(List<Anomaly> found, JobState j, long nowMs) {
