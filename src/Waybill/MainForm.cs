@@ -83,6 +83,7 @@ public class MainForm : Form {
     private System.Windows.Forms.Timer? _detailSlide;
 
     private List<DeliveryRow> _rows = new();
+    private readonly Dictionary<string, GameRoutes> _routes = new();
 
     public MainForm() {
         Text = "Waybill";
@@ -1463,7 +1464,7 @@ public class MainForm : Form {
     private void ToggleTimeline(Button button) {
         if (_detailSide is not { } side) return;
 
-        var target = side.Width > 0 ? 0 : 430;
+        var target = side.Width > 0 ? 0 : 480;
         button.Text = Strings.T("detail.timelineOpen") + (target > 0 ? "   ▸" : "   ◂");
 
         _detailSlide?.Stop();
@@ -1507,12 +1508,47 @@ public class MainForm : Form {
         Padding = new Padding(16, 10, 0, 0),
     };
 
+    /// <summary>
+    /// Where the drive went, drawn on top of everywhere else this profile has ever
+    /// been.
+    ///
+    /// The background is the driver's own history and nothing else. There is no
+    /// real map under it because the game's world is not a scaled country: the same
+    /// nineteen deliveries put some pairs of cities thirteen times closer than
+    /// reality and others thirty, so no projection fits, and the closest one misses
+    /// by about thirty kilometres. Rather than draw a border in the wrong place,
+    /// the routes already driven are the map.
+    /// </summary>
+    private Control RoutePanel(DeliveryDetail d, Units u) {
+        var box = new Panel {
+            Dock = DockStyle.Top, Height = 300, BackColor = Line,
+            Padding = new Padding(0, 0, 0, 1),
+        };
+
+        var map = new RouteView {
+            Dock = DockStyle.Fill,
+            FormatSpeed = kmh => u.FormatSpeed(kmh),
+            EmptyText = Strings.T("map.none"),
+            Hint = Strings.T("map.hint"),
+        };
+
+        var all = RoutesFor(d.Game);
+        all.Routes.TryGetValue(d.Id, out var route);
+        map.Show(route ?? new List<RoutePoint>(),
+                 all.Routes.Where(r => r.Key != d.Id).Select(r => r.Value),
+                 all.Cities);
+
+        box.Controls.Add(map);
+        return box;
+    }
+
     private Control DetailBody(DeliveryDetail d, Units u) {
         var body = new Panel { Dock = DockStyle.Fill, BackColor = Canvas, Padding = new Padding(0, 12, 0, 0), AutoScroll = true };
 
-        // The timeline slides out from the right on request. It is worth reading when
-        // something went wrong and worth nothing when nothing did, and as a permanent
-        // column it took a third of the card away from the figures either way.
+        // The map and the timeline slide out from the right together on request. They
+        // are worth reading when something went wrong and worth nothing when nothing
+        // did, and as a permanent column they took a third of the card away from the
+        // figures either way.
         var side = new Panel { Dock = DockStyle.Right, Width = 0, BackColor = Canvas };
         var timeline = new Panel { Dock = DockStyle.Fill, BackColor = Surface, AutoScroll = true };
 
@@ -1604,7 +1640,11 @@ public class MainForm : Form {
             ForeColor = Muted, Font = new Font("Segoe UI", 7.5F, FontStyle.Bold),
         });
 
+        // Added after the timeline so it docks outermost and takes its height off the
+        // top, leaving the timeline the rest. The map stays put while the timeline
+        // scrolls under it, which is what lets the two refer to each other.
         side.Controls.Add(timeline);
+        side.Controls.Add(RoutePanel(d, u));
         _detailSide = side;
 
         body.Controls.Add(info);
@@ -1715,7 +1755,21 @@ public class MainForm : Form {
 
     private void ReloadHistory() {
         _rows = _store.RecentDeliveryRows(500, _settings.Units).ToList();
+        _routes.Clear();
         ApplyFilter();
+    }
+
+    /// <summary>
+    /// Every tracked route of one game, read once and kept.
+    ///
+    /// The map on a delivery's card draws the whole history underneath the drive
+    /// it is showing, so opening five cards in a row would otherwise mean five
+    /// reads of the same twenty thousand rows. Cleared whenever the history
+    /// changes, which is the only thing that can make it stale.
+    /// </summary>
+    private GameRoutes RoutesFor(string game) {
+        if (!_routes.TryGetValue(game, out var routes)) _routes[game] = routes = _store.RoutesForGame(game);
+        return routes;
     }
 
     private void ApplyFilter() {

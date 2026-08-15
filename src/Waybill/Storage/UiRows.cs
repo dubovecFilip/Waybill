@@ -63,6 +63,51 @@ public class DeliveryDetail {
     public List<Waybill.Tracking.TrailerUnitRecord> TrailerUnits = new();
 }
 
+/// <summary>
+/// One recorded position along a drive, in the game's world space.
+///
+/// These are not kilometres and must never be added up as distance: the game's
+/// world is compressed against the real one, and unevenly, so the length of a
+/// line drawn from these says nothing. Distance comes from the odometer. World
+/// space is for shape only, which is all the map claims to show.
+/// </summary>
+public readonly struct RoutePoint {
+    public readonly long AtMs;
+    public readonly float X, Z, SpeedKmh;
+
+    public RoutePoint(long atMs, float x, float z, float speedKmh) {
+        AtMs = atMs; X = x; Z = z; SpeedKmh = speedKmh;
+    }
+}
+
+/// <summary>
+/// Where a city sits in world space, learned from the driver's own deliveries
+/// rather than from any external list: every job names the city it loaded in and
+/// the one it unloaded in, and the recording says where the truck was at both
+/// moments.
+///
+/// <see cref="Seen"/> is how many deliveries contributed, and <see cref="Spread"/>
+/// how far apart those sightings were. A city visited once is one depot's
+/// position wearing the city's name; a city visited often converges on the middle
+/// of its depots, which is close enough to label but is not the city centre. Both
+/// numbers are kept so the map can say how much to trust the dot.
+/// </summary>
+public class CityAnchor {
+    public string Name = "";
+    public float X, Z;
+    public int Seen;
+    public float Spread;
+}
+
+/// <summary>Every tracked route of one game, read in a single pass, plus the
+/// cities derived from the same rows. The map needs both at once and they come
+/// from the same 20-thousand-row read, so splitting it into two queries would
+/// only mean doing the work twice.</summary>
+public class GameRoutes {
+    public Dictionary<long, List<RoutePoint>> Routes = new();
+    public List<CityAnchor> Cities = new();
+}
+
 /// <summary>One row in the per-delivery event timeline.</summary>
 public class TimelineRow {
     public string Cas { get; set; } = "";

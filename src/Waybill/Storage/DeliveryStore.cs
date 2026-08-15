@@ -762,9 +762,83 @@ public class DeliveryStore : IDisposable {
         }
     }
 
-    /// <summary>All trip points for one delivery, in order - the raw material for a
-    /// future route replay/map view. Coordinates are the SDK's raw world-space
-    /// units, not GPS; no map projection exists yet (see project_vision memory).</summary>
+    /// <summary>
+    /// Every tracked route of one game, in one read, together with the cities the
+    /// same rows imply.
+    ///
+    /// The map wants all of it at once: one route drawn in full, the rest drawn
+    /// faintly underneath as the only background that exists, and the cities
+    /// labelled. Reading it three times would mean three passes over the same
+    /// twenty thousand rows.
+    ///
+    /// Imported deliveries are left out because they have no telemetry behind
+    /// them, so there is nothing to draw and nothing to learn a position from.
+    /// </summary>
+    public GameRoutes RoutesForGame(string game) {
+        lock (_gate) {
+            var result = new GameRoutes();
+
+            // City per delivery, so the walk below can name the ends of each route.
+            var ends = new Dictionary<long, (string From, string To)>();
+            using (var cmd = _conn.CreateCommand()) {
+                cmd.CommandText = """
+                    SELECT id, source_city, destination_city FROM deliveries
+                    WHERE game = $game AND (source IS NULL OR source = 'waybill');
+                    """;
+                cmd.Parameters.AddWithValue("$game", game);
+                using var r = cmd.ExecuteReader();
+                while (r.Read()) ends[r.GetInt64(0)] = (r.GetString(1), r.GetString(2));
+            }
+            if (ends.Count == 0) return result;
+
+            using (var cmd = _conn.CreateCommand()) {
+                cmd.CommandText = """
+                    SELECT p.delivery_id, p.at_ms, p.x, p.z, p.speed_kmh
+                    FROM trip_points p JOIN deliveries d ON d.id = p.delivery_id
+                    WHERE d.game = $game AND (d.source IS NULL OR d.source = 'waybill')
+                    ORDER BY p.delivery_id, p.at_ms;
+                    """;
+                cmd.Parameters.AddWithValue("$game", game);
+                using var r = cmd.ExecuteReader();
+                while (r.Read()) {
+                    var id = r.GetInt64(0);
+                    if (!result.Routes.TryGetValue(id, out var list)) result.Routes[id] = list = new List<RoutePoint>();
+                    list.Add(new RoutePoint(r.GetInt64(1), (float)r.GetDouble(2), (float)r.GetDouble(3), (float)r.GetDouble(4)));
+                }
+            }
+
+            // Two sightings per delivery. The pickup is taken from the second point,
+            // not the first: the first is where the driver stood when the job was
+            // accepted, which for a quick job is another city entirely.
+            var sightings = new Dictionary<string, List<(float X, float Z)>>(StringComparer.OrdinalIgnoreCase);
+            void Saw(string city, RoutePoint p) {
+                if (city.Length == 0) return;
+                if (!sightings.TryGetValue(city, out var l)) sightings[city] = l = new List<(float, float)>();
+                l.Add((p.X, p.Z));
+            }
+            foreach (var (id, points) in result.Routes) {
+                if (points.Count < 3 || !ends.TryGetValue(id, out var e)) continue;
+                Saw(e.From, points[1]);
+                Saw(e.To, points[^1]);
+            }
+
+            foreach (var (name, seen) in sightings) {
+                var x = seen.Average(p => p.X);
+                var z = seen.Average(p => p.Z);
+                result.Cities.Add(new CityAnchor {
+                    Name = name, X = x, Z = z, Seen = seen.Count,
+                    Spread = seen.Count < 2 ? 0
+                        : (float)seen.Max(p => Math.Sqrt(Math.Pow(p.X - x, 2) + Math.Pow(p.Z - z, 2))),
+                });
+            }
+            result.Cities.Sort((a, b) => b.Seen.CompareTo(a.Seen));
+            return result;
+        }
+    }
+
+    /// <summary>All trip points for one delivery, in order. Coordinates are the
+    /// SDK's raw world-space units, not GPS: see <see cref="RoutePoint"/> for why
+    /// they can be drawn but never measured.</summary>
     public List<(long AtMs, double X, double Y, double Z, double SpeedKmh)> TripPoints(long deliveryId) {
         lock (_gate) {
             var points = new List<(long, double, double, double, double)>();
