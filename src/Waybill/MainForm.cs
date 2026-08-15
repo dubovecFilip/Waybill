@@ -1500,12 +1500,16 @@ public class MainForm : Form {
         var timelineButton = Action(Strings.T("detail.timelineOpen") + "  ▸", 210);
         timelineButton.Click += (_, _) => ToggleTimeline(timelineButton);
 
+        var sheetButton = Action(Strings.T("detail.saveSheet"), 110);
+        sheetButton.Click += (_, _) => SaveSheet(d, u);
+
         // Right to left, so the first one added sits furthest right.
         var actions = new FlowLayoutPanel {
             Dock = DockStyle.Right, FlowDirection = FlowDirection.RightToLeft,
             WrapContents = false, AutoSize = true, Padding = new Padding(0, 2, 0, 0),
         };
         actions.Controls.Add(back);
+        actions.Controls.Add(sheetButton);
         actions.Controls.Add(timelineButton);
 
         var route = new Label {
@@ -1594,6 +1598,35 @@ public class MainForm : Form {
         ForeColor = Muted, Font = new Font("Segoe UI", 8F, FontStyle.Bold),
         Padding = new Padding(16, 10, 0, 0),
     };
+
+    /// <summary>
+    /// Writes the delivery out as the document the app is named after.
+    ///
+    /// The paper treatment lives here and only here. On screen it fought the screen,
+    /// where boxes need room the window has not got, a fixed sheet cannot hold seven
+    /// trailer units, and a drawing cannot be zoomed or clicked. A file has none of
+    /// those problems, and a delivery you can keep and show is what the whole
+    /// project is about.
+    /// </summary>
+    private void SaveSheet(DeliveryDetail d, Units u) {
+        using var dialog = new SaveFileDialog {
+            Title = Strings.T("sheet.saveTitle"),
+            Filter = "PNG|*.png",
+            FileName = WaybillSheet.SuggestedName(d),
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+
+        try {
+            var route = RoutesFor(d.Game).Routes.TryGetValue(d.Id, out var points) ? points : new List<RoutePoint>();
+            var written = WaybillSheet.Save(d, _store.TimelineRows(d.Id), route, u, dialog.FileName, 300f);
+            MessageBox.Show(this,
+                Strings.T("sheet.saved") + "\n" + string.Join("\n", written),
+                Strings.T("detail.saveSheet"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+        } catch (Exception ex) {
+            MessageBox.Show(this, ex.Message, Strings.T("detail.saveSheet"),
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
 
     /// <summary>
     /// Where the drive went, drawn on top of everywhere else this profile has ever

@@ -164,6 +164,33 @@ if (args.Length >= 2 && args[0] == "--export") {
     return;
 }
 
+// `Waybill.exe --export-sheet <id> [path]` writes one delivery as the document the
+// app is named after. At 300 dpi, because the point of a sheet is that it can be
+// printed; a delivery that spills past one page writes numbered files.
+if (args.Length >= 2 && args[0] == "--export-sheet") {
+    if (!long.TryParse(args[1], out var sheetId)) {
+        Console.WriteLine("Pouzitie: --export-sheet <id> [subor.png]");
+        return;
+    }
+    using var sheetStore = new DeliveryStore();
+    var detail = sheetStore.Detail(sheetId);
+    if (detail is null) {
+        Console.WriteLine($"Zasielka {sheetId} neexistuje.");
+        return;
+    }
+    var units = Units.For(Settings.Load().Units, detail.Game);
+    var sheetPath = args.Length >= 3
+        ? args[2]
+        : Path.Combine(DeliveryStore.DefaultDir(), WaybillSheet.SuggestedName(detail));
+    var points = sheetStore.RoutesForGame(detail.Game).Routes.TryGetValue(sheetId, out var pts)
+        ? pts
+        : new List<RoutePoint>();
+    foreach (var file in WaybillSheet.Save(detail, sheetStore.TimelineRows(sheetId), points, units, sheetPath, 300f)) {
+        Console.WriteLine($"Ulozene: {file}");
+    }
+    return;
+}
+
 void ReplayFile(string path, bool save) {
     using var saveStore = save ? new DeliveryStore() : null;
     var replayTracker = new JobTracker();
