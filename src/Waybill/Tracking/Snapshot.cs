@@ -53,6 +53,9 @@ public class JobInfo {
     public double PlannedDistanceKm;
     public bool SpecialJob;
     public int Market;
+    /// <summary>Whether the cargo is on the trailer yet. Loading and unloading skip
+    /// the game clock forward, and that is not the driver resting.</summary>
+    public bool CargoLoaded;
 }
 
 public class TruckWear {

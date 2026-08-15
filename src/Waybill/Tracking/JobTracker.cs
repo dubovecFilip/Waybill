@@ -391,6 +391,15 @@ public class JobTracker {
             ? "reloaded"
             : "unresolved";
 
+    /// <summary>
+    /// The cargo went on or came off between these two snapshots. Loading and
+    /// unloading skip the game clock forward the same way a sleep does, and this is
+    /// what tells them apart: one flatbed load of scrapped cars moved the clock 25
+    /// minutes a minute into the job and was recorded as the driver having slept.
+    /// </summary>
+    private static bool CargoChangedHands(Snapshot snap, Snapshot prev) =>
+        (snap.Job?.CargoLoaded ?? false) != (prev.Job?.CargoLoaded ?? false);
+
     private static string? Fingerprint(JobInfo? job) {
         if (job == null) return null;
         return string.Join("|", job.SourceCity, job.SourceCompany, job.DestinationCity, job.DestinationCompany, job.Cargo, job.Income, job.DeadlineMin);
@@ -600,12 +609,14 @@ public class JobTracker {
             j.SimSpeedDistanceKm += snap.Truck.SpeedKmh * dtGameHours;
             j.DrivingGameMinutes += dtGameHours * 60.0;
         } else if (!gap && dtGameHours * 60.0 >= _config.MaxTickGameMinutes) {
-            // The clock leapt while real time barely moved: the driver slept or took a
-            // ferry/train. Ferries and trains announce themselves through their own
-            // events, so anything else here is a rest stop.
+            // The clock leapt while real time barely moved: the driver slept, took a
+            // ferry or train, or the game loaded the cargo. The first is the only one
+            // that is resting, and the other two say so for themselves.
             var jumpedMin = dtGameHours * 60.0;
             var isTransport = snap.Events.FerryUsed != null || snap.Events.TrainUsed != null;
-            if (!isTransport) {
+            var cargoMoved = CargoChangedHands(snap, prev);
+            if (cargoMoved) found.Add(new Anomaly { AtMs = nowMs, Code = "cargo_handling", DtMs = dtMs, Delta = jumpedMin });
+            if (!isTransport && !cargoMoved) {
                 j.RestStops += 1;
                 j.RestMinutes += jumpedMin;
                 j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = Math.Round(jumpedMin, 1), Detail = Waybill.Strings.T("unit.gameMinutes") });
@@ -696,7 +707,11 @@ public class JobTracker {
             if (fastForward) {
                 found.Add(new Anomaly { Code = "fast_forward_gap", DtMs = dtMs, Delta = gameMinutesPassed });
                 var isTransport = snap.Events.FerryUsed != null || snap.Events.TrainUsed != null;
-                if (!isTransport) {
+                var cargoMoved = CargoChangedHands(snap, prev);
+                if (cargoMoved) {
+                    found.Add(new Anomaly { AtMs = nowMs, Code = "cargo_handling", DtMs = dtMs, Delta = gameMinutesPassed });
+                }
+                if (!isTransport && !cargoMoved) {
                     j.RestStops += 1;
                     j.RestMinutes += gameMinutesPassed;
                     j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = Math.Round(gameMinutesPassed, 1), Detail = Waybill.Strings.T("unit.gameMinutes") });

@@ -55,6 +55,7 @@ public static class Adapter {
                     PlannedDistanceKm = job.PlannedDistanceKm,
                     SpecialJob = job.SpecialJob,
                     Market = (int)job.Market,
+                    CargoLoaded = job.CargoLoaded,
                 }
                 : null,
 
@@ -250,6 +251,7 @@ public static class Adapter {
                     PlannedDistanceKm = N(job?["PlannedDistanceKm"]),
                     SpecialJob = B(job?["SpecialJob"]),
                     Market = (int)N(job?["Market"]),
+                    CargoLoaded = B(job?["CargoLoaded"]),
                 }
                 : null,
 
