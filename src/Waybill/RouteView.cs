@@ -105,12 +105,17 @@ public class RouteView : Control {
     /// <summary>
     /// Breaks the recording into stretches that were actually driven.
     ///
-    /// Two of these matter. The first point of every job is where the driver stood
-    /// when the offer was taken, and the second is where the truck is: on a quick
-    /// job that is another city, and joining them draws a hundred kilometre line
-    /// across the map that was never driven. Ferries and trains do the same thing
-    /// in the middle of a drive. Neither is a straight line on a map, so neither
-    /// gets drawn as one.
+    /// The first point of every job is where the driver stood when the offer was
+    /// taken, and the second is where the truck is: on a quick job that is another
+    /// city, and joining them draws a hundred kilometre line across the map that
+    /// was never driven.
+    ///
+    /// The same thing happens mid drive, and for more reasons than the obvious
+    /// one. A ferry or a train is the expected case, but loading an earlier save
+    /// moves the truck too, and in this history that is the only mid-drive jump
+    /// there is: an escort car broke, the reload did not fix it, and the job was
+    /// cancelled. None of these were driven along, so none of them is drawn as a
+    /// line that was.
     /// </summary>
     private static List<List<RoutePoint>> Split(List<RoutePoint> pts) {
         var runs = new List<List<RoutePoint>>();
