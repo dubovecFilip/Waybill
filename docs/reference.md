@@ -75,8 +75,8 @@ the three marked below feed a flag.
 |---|---|---|
 | `teleport` | A jump across the map no vehicle could drive | `teleport_detected` |
 | `odometer_jump` | An odometer step too large for driving | `odometer_manipulation` |
-| `client_gap` | A hole in the recording while the game clock kept running, so Waybill was not polling | `unstable_client` past two |
-| `paused_gap` | A hole while the clock stood still: a menu, photo mode, alt tab | |
+| `client_gap` | A hole in the recording across which the game clock kept running at the rate the game reports, so Waybill was not polling | `unstable_client` past two |
+| `paused_gap` | A hole across which the clock did not: a menu, photo mode, alt tab | |
 | `fast_forward_gap` | The clock leapt further than the gap could account for: sleep, ferry or train | |
 | `save_loaded` | The game clock went backwards, meaning an earlier save was loaded | |
 | `resume_gap` | Distance recovered from the odometer for time the app was not running | |

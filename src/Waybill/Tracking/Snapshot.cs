@@ -24,6 +24,12 @@ public class Snapshot {
 
     public double SpeedLimitKmh;
 
+    /// <summary>How much faster the game clock runs than real time, as the game
+    /// itself reports it (20 on the recordings measured). Used to tell a hole left
+    /// by a pause from one left by this app: during a pause the clock barely moves,
+    /// during a real stall it keeps running at this rate.</summary>
+    public double GameTimeScale;
+
     public bool CruiseControlOn;
     public double CruiseControlSpeedKmh;
 

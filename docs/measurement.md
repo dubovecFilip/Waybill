@@ -46,7 +46,23 @@ switching units redraws old deliveries too.
 
 ## Game time
 
-The game clock has a resolution of one minute, so short intervals are coarse.
-That is still enough to tell a pause from a client outage: if fewer game minutes
-passed between two ticks than the real time between them would imply, the game
-was paused, otherwise Waybill was not running.
+The game clock has a resolution of one minute, so short intervals are coarse. It
+also runs faster than real time, by the factor the game publishes for itself in
+`CommonValues.Scale`, which reads 20 on every recording measured.
+
+That is what separates a pause from a stall in this app: the clock keeps running
+while the app is stalled and stops while the game is paused. Both leave the same
+hole in a recording.
+
+The comparison has to be against that reported scale, not against real time. Over
+a hole of ten or thirty seconds the one minute resolution means the clock reads
+either 0 or 1 depending only on whether a minute boundary fell inside it, and a
+reading of 1 is far above real time while being far below what running would have
+produced. Compared against real time, nine holes across three sessions were called
+stalls; every one of them had moved the clock by exactly one minute where running
+would have moved it by ten to twenty, so every one was a pause.
+
+A hole therefore counts as a stall only if the clock moved further than its own
+one minute resolution and reached at least half of what the reported scale
+predicts. Where the two cannot be told apart, it is read as a pause: being unable
+to prove the app stalled is not evidence that it did.

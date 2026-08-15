@@ -34,6 +34,7 @@ public static class Adapter {
             Game = d.Game.ToString(),
             GameVersion = $"{d.GameVersion?.Major ?? 0}.{d.GameVersion?.Minor ?? 0}",
             GameTimeMin = d.CommonValues?.GameTime?.Value ?? 0,
+            GameTimeScale = d.CommonValues?.Scale ?? 0,
 
             OnJob = hasJob,
             Job = hasJob
@@ -228,6 +229,7 @@ public static class Adapter {
             Game = ((SCSGame)(int)N(d["Game"])).ToString(),
             GameVersion = $"{N(d["GameVersion"]?["Major"])}.{N(d["GameVersion"]?["Minor"])}",
             GameTimeMin = N(d["CommonValues"]?["GameTime"]?["Value"]),
+            GameTimeScale = N(d["CommonValues"]?["Scale"]),
 
             OnJob = hasJob,
             Job = hasJob

@@ -42,6 +42,16 @@ public class TrackerConfig {
     // sleep, which advances the clock by hours in seconds. Used to tell a gap the
     // app is responsible for from one the game caused by fast forwarding.
     public double MaxGameMinutesPerRealMinute = 60;
+    // Used only when a recording predates the game reporting its own time scale.
+    // Every recording measured so far reports 20.
+    public double AssumedTimeScale = 20;
+    // Game time is published in whole minutes, so an advance of one minute over a
+    // gap of seconds says nothing: it means a minute boundary fell inside the gap.
+    public double GameClockResolutionMin = 1;
+    // How much of the expected advance counts as the clock having kept running.
+    // Half leaves room for the rounding at both ends of a short gap without
+    // accepting a clock that plainly stood still.
+    public double RunningClockShare = 0.5;
     // Ordinary driving wears the truck by ~0.0006% per tick, very consistently.
     // An impact is orders of magnitude above that, so 0.1% in a single tick
     // separates the two with a lot of room to spare.
@@ -651,7 +661,27 @@ public class JobTracker {
             // pauses - flagging those as an unstable client made almost every honest
             // delivery land in "review".
             var gameMinutesPassed = snap.GameTimeMin - prev.GameTimeMin;
-            var wasPaused = gameMinutesPassed < dtMs / 60000.0; // slower than real time = clock stopped
+
+            // How far the clock should have moved if the game had been running the
+            // whole time, at the rate the game itself reports.
+            var scale = snap.GameTimeScale > 0 ? snap.GameTimeScale : _config.AssumedTimeScale;
+            var expectedGameMinutes = (dtMs / 60000.0) * scale;
+
+            // Two conditions, and both matter. The clock has to have moved a real
+            // share of what running would have moved it, and it has to have moved
+            // further than its own resolution: game time steps in whole minutes, so
+            // over a gap of a few seconds it reads either 0 or 1 depending on
+            // whether a minute boundary happened to fall inside, and 1 there is luck
+            // rather than evidence. Comparing against real time instead called every
+            // one of those a stalled client: five short pauses in one session were
+            // flagged that way, each having advanced the clock by exactly 1 minute
+            // where running at 20x would have advanced it by three or more.
+            //
+            // Where the two cannot be told apart, this reads it as a pause. Not being
+            // able to prove the app stalled is not evidence that it did.
+            var clockRan = gameMinutesPassed > _config.GameClockResolutionMin
+                        && gameMinutesPassed >= expectedGameMinutes * _config.RunningClockShare;
+            var wasPaused = !clockRan;
 
             // The third case: the clock leapt far further than the real gap could
             // account for even at the game's compressed rate. That is the game fast
