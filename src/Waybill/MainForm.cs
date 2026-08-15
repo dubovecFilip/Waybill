@@ -78,6 +78,9 @@ public class MainForm : Form {
     private string _page = "deliveries";
     private readonly Panel _content = new();
     private readonly Panel _detailPage = new();
+    /// <summary>The timeline column, which lives at width zero until asked for.</summary>
+    private Panel? _detailSide;
+    private System.Windows.Forms.Timer? _detailSlide;
 
     private List<DeliveryRow> _rows = new();
 
@@ -829,6 +832,101 @@ public class MainForm : Form {
         });
     }
 
+    /// <summary>
+    /// The coupled set, folded away behind one line. Closed it says what the set is;
+    /// opened it lists every unit in hitching order with what each of them took,
+    /// which is the part the game never shows: it reports one condition for the
+    /// whole set, so on a triple the worst unit speaks for all five.
+    /// </summary>
+    private Control TrailerDropdown(DeliveryDetail d) {
+        var units = d.TrailerUnits;
+        var trailers = units.Where(x => x.Kind == "trailer").ToList();
+        const int lineHeight = 26;
+        var openHeight = 30 + units.Count * lineHeight + (trailers.Count > 1 ? lineHeight : 0);
+
+        var box = new Panel { Dock = DockStyle.Top, Height = 30, BackColor = Surface };
+
+        var arrow = new Label {
+            Dock = DockStyle.Right, Width = 24, Text = "▸", ForeColor = Muted,
+            TextAlign = ContentAlignment.MiddleCenter, Cursor = Cursors.Hand,
+        };
+        var summary = new Label {
+            Dock = DockStyle.Fill, ForeColor = Ink, TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true, Cursor = Cursors.Hand,
+            Text = TrailerSummary(d),
+        };
+        var caption = new Label {
+            Dock = DockStyle.Left, Width = 200, Text = Strings.T("detail.trailer"), ForeColor = Muted,
+            TextAlign = ContentAlignment.MiddleLeft, Cursor = Cursors.Hand,
+        };
+
+        var header = new Panel { Dock = DockStyle.Top, Height = 30, Padding = new Padding(16, 6, 16, 6), BackColor = Surface };
+        header.Controls.Add(summary);
+        header.Controls.Add(arrow);
+        header.Controls.Add(caption);
+
+        var body = new Panel { Dock = DockStyle.Top, Height = openHeight - 30, BackColor = Raised, Visible = false };
+        var lines = new List<Control>();
+        if (trailers.Count > 1) {
+            lines.Add(UnitLine(Strings.T("detail.unitsSummary"),
+                $"{Strings.T("detail.worst")} {Damage(trailers.Max(x => x.Damage))}   ·   "
+                + $"{Strings.T("detail.average")} {Damage(trailers.Average(x => x.Damage))}", Muted, lineHeight));
+        }
+        for (var i = 0; i < units.Count; i++) {
+            var unit = units[i];
+            var name = unit.Name.Length > 0 ? unit.Name : unit.Id;
+            var label = $"{i + 1}.  {Strings.T("value." + unit.Kind)}"
+                      + (unit.Owned ? $"  ({Strings.T("detail.owned")})" : "");
+            lines.Add(UnitLine(label, $"{name}   ·   {unit.Plate}   ·   {Damage(unit.Damage)}",
+                unit.Kind == "dolly" ? Muted : Ink, lineHeight));
+        }
+        // Docked children stack in reverse, so the summary ends up under the units.
+        for (var i = lines.Count - 1; i >= 0; i--) body.Controls.Add(lines[i]);
+
+        box.Controls.Add(body);
+        box.Controls.Add(header);
+
+        void Toggle(object? _, EventArgs __) {
+            body.Visible = !body.Visible;
+            arrow.Text = body.Visible ? "▾" : "▸";
+            box.Height = body.Visible ? openHeight : 30;
+        }
+        foreach (Control c in new Control[] { header, summary, arrow, caption }) c.Click += Toggle;
+
+        return box;
+    }
+
+    private string TrailerSummary(DeliveryDetail d) {
+        var trailers = d.TrailerUnits.Count(x => x.Kind == "trailer");
+        var dollies = d.TrailerUnits.Count(x => x.Kind == "dolly");
+        var parts = new List<string>();
+        if (d.TrailerChainType.Length > 0) parts.Add(Label(d.TrailerChainType));
+        parts.Add($"{trailers}x {Strings.T("value.trailer")}");
+        if (dollies > 0) parts.Add($"{dollies}x {Strings.T("value.dolly")}");
+        if (d.TrailerOwned) parts.Add(Strings.T("detail.owned"));
+        return string.Join("  ·  ", parts);
+    }
+
+    private static Control UnitLine(string label, string value, Color colour, int height) {
+        var line = new Panel { Dock = DockStyle.Top, Height = height, Padding = new Padding(28, 4, 16, 4), BackColor = Raised };
+        line.Controls.Add(new Label {
+            Dock = DockStyle.Fill, Text = value, ForeColor = colour,
+            TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true, Font = new Font("Segoe UI", 8.5F),
+        });
+        line.Controls.Add(new Label {
+            Dock = DockStyle.Left, Width = 172, Text = label, ForeColor = Muted,
+            TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 8.5F),
+        });
+        return line;
+    }
+
+    /// <summary>The game as people call it, not as the SDK enumerates it.</summary>
+    private static string GameName(string game) => game switch {
+        "Ats" => "ATS",
+        "Ets2" => "ETS2",
+        _ => game.ToUpperInvariant(),
+    };
+
     /// <summary>Damage as it is worth reading: two decimals, because ordinary wear
     /// over a delivery lands in hundredths of a percent and rounding it to whole
     /// numbers turns every clean drive into a flat zero.</summary>
@@ -1300,6 +1398,14 @@ public class MainForm : Form {
         back.FlatAppearance.BorderColor = Line;
         back.Click += (_, _) => ShowPage("deliveries");
 
+        var timelineButton = new Button {
+            Text = Strings.T("detail.timelineOpen") + "   ◂", Dock = DockStyle.Right, Width = 240,
+            FlatStyle = FlatStyle.Flat, BackColor = Raised, ForeColor = Ink, Cursor = Cursors.Hand,
+            Margin = new Padding(0, 0, 8, 0),
+        };
+        timelineButton.FlatAppearance.BorderColor = Line;
+        timelineButton.Click += (_, _) => ToggleTimeline(timelineButton);
+
         var route = new Label {
             Dock = DockStyle.Top, Height = 36, Text = $"{d.SourceCity}  →  {d.DestinationCity}",
             ForeColor = Ink, Font = new Font("Segoe UI", 16F, FontStyle.Bold),
@@ -1309,19 +1415,54 @@ public class MainForm : Form {
             Text = $"{d.Cargo} · {u.MassTonnes(d.CargoMassKg):0.0} {u.MassUnit} · {d.Truck}"
                  + (d.Trailer.Length > 0 ? $" · {d.Trailer}" : ""),
         };
-        var when = new Label {
-            Dock = DockStyle.Top, Height = 20, ForeColor = Muted, Font = new Font("Segoe UI", 8.5F),
-            // The flags used to be appended here as their raw stored names, which said
-            // nothing to anyone who had not read the source. They get a band of their
-            // own below, in words.
-            Text = $"{d.StartedAt:dd.MM.yyyy HH:mm} → {d.FinishedAt:HH:mm} · {Label(d.Outcome)} · {Label(d.Status)}",
+        // Date, game, hours, verdict. The game belongs up here beside the date rather
+        // than buried among the cargo details: it is the first thing that frames
+        // everything else on the card, including which units the figures are in.
+        var when = new FlowLayoutPanel {
+            Dock = DockStyle.Top, Height = 22, FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false, Margin = new Padding(0), Padding = new Padding(0),
         };
+        Label Part(string text, Color colour, float size, FontStyle style) => new() {
+            Text = text, ForeColor = colour, AutoSize = true,
+            Font = new Font("Segoe UI", size, style), Margin = new Padding(0, 2, 10, 0),
+        };
+        when.Controls.Add(Part($"{d.StartedAt:dd.MM.yyyy}", Muted, 8.5F, FontStyle.Regular));
+        when.Controls.Add(Part(GameName(d.Game), Accent, 10F, FontStyle.Bold));
+        when.Controls.Add(Part($"{d.StartedAt:HH:mm} → {d.FinishedAt:HH:mm}", Muted, 8.5F, FontStyle.Regular));
+        when.Controls.Add(Part($"· {Label(d.Outcome)} · {Label(d.Status)}", Muted, 8.5F, FontStyle.Regular));
 
         head.Controls.Add(when);
         head.Controls.Add(sub);
         head.Controls.Add(route);
+        head.Controls.Add(timelineButton);
         head.Controls.Add(back);
         return head;
+    }
+
+    /// <summary>Slides the timeline in and out rather than showing or hiding it: the
+    /// movement is what says where the panel came from, and a column that simply
+    /// appears reads as the page having jumped.</summary>
+    private void ToggleTimeline(Button button) {
+        if (_detailSide is not { } side) return;
+
+        var target = side.Width > 0 ? 0 : 430;
+        button.Text = Strings.T("detail.timelineOpen") + (target > 0 ? "   ▸" : "   ◂");
+
+        _detailSlide?.Stop();
+        _detailSlide?.Dispose();
+        _detailSlide = new System.Windows.Forms.Timer { Interval = 15 };
+        _detailSlide.Tick += (_, _) => {
+            // A fixed fraction of what is left, so it eases out instead of arriving
+            // at full speed, with a floor so the last pixels do not crawl.
+            var left = target - side.Width;
+            var step = Math.Max(6, Math.Abs(left) / 3);
+            side.Width = Math.Abs(left) <= step ? target : side.Width + Math.Sign(left) * step;
+            if (side.Width == target) {
+                _detailSlide!.Stop();
+                if (target > 0) UseDarkScrollbars(side);
+            }
+        };
+        _detailSlide.Start();
     }
 
     /// <summary>One fact as a line: the name of it held to the left, the value beside
@@ -1351,8 +1492,10 @@ public class MainForm : Form {
     private Control DetailBody(DeliveryDetail d, Units u) {
         var body = new Panel { Dock = DockStyle.Fill, BackColor = Canvas, Padding = new Padding(0, 12, 0, 0), AutoScroll = true };
 
-        // Timeline and notes down the right, the facts filling the rest.
-        var side = new Panel { Dock = DockStyle.Right, Width = 430, BackColor = Canvas };
+        // The timeline slides out from the right on request. It is worth reading when
+        // something went wrong and worth nothing when nothing did, and as a permanent
+        // column it took a third of the card away from the figures either way.
+        var side = new Panel { Dock = DockStyle.Right, Width = 0, BackColor = Canvas };
         var timeline = new Panel { Dock = DockStyle.Fill, BackColor = Surface, AutoScroll = true };
 
         var events = _store.TimelineRows(d.Id);
@@ -1385,21 +1528,25 @@ public class MainForm : Form {
         Row(Strings.T("col.cargo"), d.Cargo);
         Row(Strings.T("detail.weight"), $"{u.MassTonnes(d.CargoMassKg):0.0} {u.MassUnit}");
         Row(Strings.T("col.truck"), d.Truck);
-        if (d.Trailer.Length > 0) Row(Strings.T("detail.trailer"), d.Trailer);
         if (d.JobType.Length > 0) Row(Strings.T("detail.jobType"), Label(d.JobType));
-        Row(Strings.T("col.game"), d.Game);
+        // The coupled set folds away: one line for what it is, opened for what each
+        // unit of it took.
+        if (d.TrailerUnits.Count > 0) rows.Add(TrailerDropdown(d));
+        else if (d.Trailer.Length > 0) Row(Strings.T("detail.trailer"), d.Trailer);
 
         Group(Strings.T("detail.groupDistance"));
-        Row(Strings.T("detail.driven"), u.FormatDistance(d.DistanceKm));
-        Row(Strings.T("detail.planned"), u.FormatDistance(d.PlannedDistanceKm));
-        if (d.ReportedDistanceKm is > 0) Row(Strings.T("detail.game"), u.FormatDistance(d.ReportedDistanceKm.Value));
+        // The three measurements read as one thing, so they belong on one line where
+        // they can be compared instead of three where they have to be remembered.
+        var reported = d.ReportedDistanceKm is > 0 ? $"{u.Distance(d.ReportedDistanceKm.Value):0}" : "?";
+        Row(Strings.T("detail.distances"),
+            $"{u.Distance(d.PlannedDistanceKm):0}  /  {u.Distance(d.DistanceKm):0.0}  /  {reported} {u.DistanceUnit}");
         Row(Strings.T("detail.timeGame"), $"{d.DrivingGameMin / 60:0.0} {Strings.T("stats.gameTime")}");
         Row(Strings.T("detail.timeReal"), $"{d.RealDurationMs / 60000.0:0} min");
         Row(Strings.T("detail.rest"), $"{d.RestStops}x  ·  {d.RestMinutes:0} {Strings.T("unit.gameMinutes")}");
 
         Group(Strings.T("detail.groupMoney"));
-        Row(Strings.T("detail.pay"), d.Outcome == "delivered" ? u.FormatMoney(d.Revenue) : u.FormatMoney(-d.Penalty));
-        Row(Strings.T("detail.offered"), u.FormatMoney(d.OfferedIncome));
+        var paid = d.Outcome == "delivered" ? d.Revenue : -d.Penalty;
+        Row(Strings.T("detail.paidOffered"), $"{u.FormatMoney(paid)}  /  {u.FormatMoney(d.OfferedIncome)}");
         Row(Strings.T("detail.fines"), $"{u.FormatMoney(d.FinesTotal)}  ({d.FinesCount}x)");
         Row(Strings.T("detail.tolls"), u.FormatMoney(d.TollsPaid));
         Row(Strings.T("detail.fuel"), u.FormatVolume(d.FuelUsedL));
@@ -1427,6 +1574,7 @@ public class MainForm : Form {
         for (var i = rows.Count - 1; i >= 0; i--) info.Controls.Add(rows[i]);
 
         var notes = new Panel { Dock = DockStyle.Bottom, Height = 96, BackColor = Surface, Padding = new Padding(16, 12, 16, 12), Margin = new Padding(0) };
+        notes.BringToFront();
         var notesBox = new TextBox {
             Dock = DockStyle.Fill, Multiline = true, Text = d.Notes,
             BorderStyle = BorderStyle.None, BackColor = Raised, ForeColor = Ink,
@@ -1439,9 +1587,10 @@ public class MainForm : Form {
         });
 
         side.Controls.Add(timeline);
-        side.Controls.Add(notes);
+        _detailSide = side;
 
         body.Controls.Add(info);
+        body.Controls.Add(notes);
         body.Controls.Add(side);
         // Added last so it docks outermost and gets the full width. The verdict is
         // the first thing anyone asks about a delivery, so it reads across the top
