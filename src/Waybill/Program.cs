@@ -116,7 +116,8 @@ if (args.Length >= 1 && args[0] == "--rebuild") {
     using var rebuildStore = new DeliveryStore();
     var result = Rebuild.Run(rebuildStore);
     Console.WriteLine($"Zaloha pred prestavbou: {result.BackupPath}");
-    Console.WriteLine($"Zmazanych sledovanych zaznamov: {result.Removed}");
+    Console.WriteLine($"Prepocitanych: {result.Removed}");
+    Console.WriteLine($"Ponechanych (nahravka uz neexistuje): {result.Kept}");
     Console.WriteLine($"Prestavanych z {result.Recordings} nahravok: {result.Deliveries} zasielok");
     foreach (var skipped in result.Skipped) Console.WriteLine($"Necitatelna nahravka: {skipped}");
     return;

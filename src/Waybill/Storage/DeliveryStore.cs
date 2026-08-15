@@ -336,25 +336,52 @@ public class DeliveryStore : IDisposable {
         }
     }
 
-    public int DeleteTrackedDeliveries() {
+    public int CountTrackedDeliveries() {
+        lock (_gate) {
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = "SELECT COUNT(*) FROM deliveries WHERE source IS NULL OR source = 'waybill';";
+            return Convert.ToInt32(cmd.ExecuteScalar());
+        }
+    }
+
+    /// <summary>
+    /// Removes tracked deliveries driven inside any of the given stretches of time,
+    /// which are the periods the recordings cover and therefore the only ones a
+    /// rebuild can put back. A delivery whose recording is gone falls outside all of
+    /// them and stays: it is real history, and deleting it in the hope that
+    /// something replaces it would be a guess made on the user's data.
+    /// </summary>
+    public int DeleteTrackedDeliveriesWithin(IReadOnlyCollection<(long From, long To)> spans) {
+        if (spans.Count == 0) return 0;
+
         lock (_gate) {
         using var tx = _conn.BeginTransaction();
+
+        var ranges = string.Join(" OR ", spans.Select((_, i) => $"(started_at_ms BETWEEN $from{i} AND $to{i})"));
+        var tracked = $"SELECT id FROM deliveries WHERE (source IS NULL OR source = 'waybill') AND ({ranges})";
+
+        void Bind(SqliteCommand cmd) {
+            var i = 0;
+            foreach (var (from, to) in spans) {
+                cmd.Parameters.AddWithValue($"$from{i}", from);
+                cmd.Parameters.AddWithValue($"$to{i}", to);
+                i++;
+            }
+        }
 
         foreach (var table in new[] { "events", "trip_points" }) {
             using var child = _conn.CreateCommand();
             child.Transaction = tx;
-            child.CommandText = $"""
-                DELETE FROM {table} WHERE delivery_id IN (
-                    SELECT id FROM deliveries WHERE source IS NULL OR source = 'waybill'
-                );
-                """;
+            child.CommandText = $"DELETE FROM {table} WHERE delivery_id IN ({tracked});";
+            Bind(child);
             child.ExecuteNonQuery();
         }
 
         int removed;
         using (var cmd = _conn.CreateCommand()) {
             cmd.Transaction = tx;
-            cmd.CommandText = "DELETE FROM deliveries WHERE source IS NULL OR source = 'waybill';";
+            cmd.CommandText = $"DELETE FROM deliveries WHERE id IN ({tracked});";
+            Bind(cmd);
             removed = cmd.ExecuteNonQuery();
         }
 

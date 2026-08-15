@@ -4,11 +4,19 @@ using Waybill.Storage;
 namespace Waybill.Tracking;
 
 /// <summary>
-/// Re-derives every tracked delivery from its recording. Detection improves over
+/// Re-derives tracked deliveries from their recordings. Detection improves over
 /// time (the odometer units, pause against gap, a loaded save against a teleport),
 /// and a row written by an older build keeps that build's verdict forever
-/// otherwise. Lossless, because every tracked delivery has a recording behind it.
-/// Imported rows are left alone: nothing can regenerate those.
+/// otherwise. Imported rows are left alone: nothing can regenerate those.
+///
+/// It only touches the periods it can actually re-derive. A delivery whose
+/// recording is gone is outside every recording's span, and is kept exactly as it
+/// is rather than deleted in the hope that something would replace it. A delivery
+/// has no stable identity of its own to match on, so the span is what stands in
+/// for one.
+///
+/// Everything is replayed before anything is deleted, so a recording that turns
+/// out to be unreadable halfway through cannot leave the history half restored.
 ///
 /// Shared by the CLI and the window so both do exactly the same thing.
 /// </summary>
@@ -16,6 +24,9 @@ public static class Rebuild {
     public class Result {
         public string BackupPath = "";
         public int Removed;
+        /// <summary>Tracked deliveries left untouched because no recording covers
+        /// the time they were driven.</summary>
+        public int Kept;
         public int Recordings;
         public int Deliveries;
         /// <summary>Recordings that could not be read, with the reason.</summary>
@@ -23,8 +34,7 @@ public static class Rebuild {
     }
 
     public static Result Run(DeliveryStore store) {
-        var result = new Result { BackupPath = store.Backup() };
-        result.Removed = store.DeleteTrackedDeliveries();
+        var result = new Result();
 
         var sessionDir = Path.Combine(DeliveryStore.DefaultDir(), "sessions");
         var recordings = Directory.Exists(sessionDir)
@@ -32,23 +42,37 @@ public static class Rebuild {
             : Array.Empty<string>();
         result.Recordings = recordings.Length;
 
+        // Read everything first. Nothing in the database moves until every recording
+        // has been through the tracker, so an unreadable one costs its own deliveries
+        // and nothing else.
+        var records = new List<JobRecord>();
+        var spans = new List<(long From, long To)>();
         foreach (var recording in recordings) {
             try {
-                result.Deliveries += ReplayInto(recording, store);
+                var (found, span) = Replay(recording);
+                records.AddRange(found);
+                if (span is { } s) spans.Add(s);
             } catch (Exception ex) {
-                // The tracked rows are already gone by this point, so one damaged
-                // recording must not abandon the rest of them half restored. Note it
-                // and carry on, and the caller can say which one was unreadable.
                 result.Skipped.Add($"{Path.GetFileName(recording)}: {ex.Message}");
             }
         }
+        result.Deliveries = records.Count;
+
+        result.BackupPath = store.Backup();
+        var before = store.CountTrackedDeliveries();
+        result.Removed = store.DeleteTrackedDeliveriesWithin(spans);
+        result.Kept = before - result.Removed;
+        foreach (var record in records) store.SaveDelivery(record);
         return result;
     }
 
-    /// <summary>Replays one recording through the tracker, saving what it finishes.</summary>
-    public static int ReplayInto(string path, DeliveryStore store) {
+    /// <summary>Replays one recording, returning what finished in it and the stretch
+    /// of time it covers.</summary>
+    private static (List<JobRecord> Records, (long From, long To)? Span) Replay(string path) {
         var tracker = new JobTracker();
-        var saved = 0;
+        var records = new List<JobRecord>();
+        long first = 0, last = 0;
+
         foreach (var raw in SessionFiles.ReadLines(path)) {
             if (string.IsNullOrWhiteSpace(raw)) continue;
             Newtonsoft.Json.Linq.JObject parsed;
@@ -57,13 +81,17 @@ public static class Rebuild {
             var kind = (string?)parsed["kind"] ?? "tick";
             if (parsed["d"] is not Newtonsoft.Json.Linq.JObject d) continue;
 
+            if (ts > 0) {
+                if (first == 0) first = ts;
+                last = ts;
+            }
+
             foreach (var ev in tracker.Update(Adapter.FromRecordedJson(d, kind), ts)) {
-                if (ev.Type == TrackerEventType.JobFinished && ev.Record != null) {
-                    store.SaveDelivery(ev.Record);
-                    saved++;
-                }
+                if (ev.Type == TrackerEventType.JobFinished && ev.Record != null) records.Add(ev.Record);
             }
         }
-        return saved;
+
+        return (records, first > 0 ? (first, last) : null);
     }
+
 }

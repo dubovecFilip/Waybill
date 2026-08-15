@@ -231,9 +231,14 @@ and compare the numbers. `--test-resume` additionally simulates a restart in the
 middle of a drive and compares the result against one continuous run.
 
 `--rebuild` is worth running after every detection fix, because old rows
-otherwise keep the verdict issued by the version current at the time. It is
-lossless, since every tracked delivery has a recording behind it. Imported rows
-are left alone, as there is nothing to recompute them from.
+otherwise keep the verdict issued by the version current at the time.
+
+It only touches the periods the recordings cover. A delivery driven at a time no
+surviving recording spans is kept exactly as it is rather than deleted in the
+hope something replaces it, and the run reports how many were kept that way.
+Imported rows are left alone too, as there is nothing to recompute them from.
+Everything is replayed before anything is deleted, so an unreadable recording
+cannot leave the history half restored, and a backup is taken first regardless.
 
 ## Layout
 

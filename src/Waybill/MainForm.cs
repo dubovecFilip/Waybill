@@ -473,6 +473,7 @@ public class MainForm : Form {
             var report = $"{Strings.T("msg.rebuildDone")}\n\n"
                 + $"{Strings.T("msg.rebuildRecordings")}: {result.Recordings}\n"
                 + $"{Strings.T("msg.rebuildDeliveries")}: {result.Deliveries}\n"
+                + $"{Strings.T("msg.rebuildKept")}: {result.Kept}\n"
                 + $"{Strings.T("msg.backupSaved")} {result.BackupPath}";
             if (result.Skipped.Count > 0) {
                 report += $"\n\n{Strings.T("msg.rebuildSkipped")}\n" + string.Join("\n", result.Skipped);
