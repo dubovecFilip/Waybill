@@ -317,6 +317,7 @@ public class JobTracker {
         var record = new JobRecord {
             JobUid = j.JobUid,
             Outcome = "cancelled",
+            JobType = Adapter.MarketName(j.Job.Market),
             Game = j.Game,
             GameVersion = j.GameVersion,
             StartedAtMs = j.StartedAtMs,
@@ -728,6 +729,7 @@ public class JobTracker {
         var record = new JobRecord {
             JobUid = j.JobUid,
             Outcome = outcome,
+            JobType = Adapter.MarketName(j.Job.Market),
             Game = j.Game,
             GameVersion = j.GameVersion,
             StartedAtMs = j.StartedAtMs,

@@ -70,6 +70,12 @@ public static class Strings {
         ["button.refresh"] = "Obnoviť",
         ["button.cancel"] = "Zrušiť",
         ["msg.recordingFailed"] = "Nahrávku sa nepodarilo zapísať",
+        ["detail.jobType"] = "Zdroj zákazky",
+        ["value.cargo_market"] = "Trh nákladov",
+        ["value.quick_job"] = "Rýchla zákazka",
+        ["value.freight_market"] = "Prepravný trh",
+        ["value.external_contracts"] = "World of Trucks",
+        ["value.external_market"] = "World of Trucks (trh)",
 
         // why a delivery got the verdict it did
         ["verdict.heading"] = "Prečo tento verdikt",
@@ -299,6 +305,12 @@ public static class Strings {
         ["button.refresh"] = "Refresh",
         ["button.cancel"] = "Cancel",
         ["msg.recordingFailed"] = "The recording could not be written",
+        ["detail.jobType"] = "Taken from",
+        ["value.cargo_market"] = "Cargo market",
+        ["value.quick_job"] = "Quick job",
+        ["value.freight_market"] = "Freight market",
+        ["value.external_contracts"] = "World of Trucks",
+        ["value.external_market"] = "World of Trucks market",
 
         ["verdict.heading"] = "Why this verdict",
         ["verdict.accepted"] = "Nothing unusual was found.",

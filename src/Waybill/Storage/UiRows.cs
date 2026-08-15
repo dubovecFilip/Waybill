@@ -52,6 +52,9 @@ public class DeliveryDetail {
     public long RealDurationMs;
     public int RestStops, FinesCount, Collisions, Ferries, Refuels;
     public string Outcome = "", Status = "", Flags = "", Style = "", Notes = "", Source = "";
+    /// <summary>Which market the job came from, as the SDK names it. Empty for rows
+    /// recorded before it was stored, and for imports.</summary>
+    public string JobType = "";
 }
 
 /// <summary>One row in the per-delivery event timeline.</summary>

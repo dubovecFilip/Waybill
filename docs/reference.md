@@ -105,6 +105,24 @@ each thing happened.
 | `rest` | Game minutes slept | |
 | `save_loaded` | Game minutes rewound | |
 
+## Job market
+
+Column `job_type`. Which market the job was taken from, under the SDK's own name.
+Empty on imports and on deliveries recorded before it was stored; a rebuild fills
+those in from their recordings.
+
+| Value | Meaning |
+|---|---|
+| `quick_job` | Quick job, with the truck provided |
+| `cargo_market` | Cargo market at a company |
+| `freight_market` | Freight market, driving your own truck |
+| `external_contracts` | World of Trucks contract |
+| `external_market` | World of Trucks market |
+
+World of Trucks jobs carry no in-game deadline. Their window is a real one held on
+the World of Trucks site, so the game reports the largest value the field can hold
+and `minutes_late` stays empty.
+
 ## Source
 
 Column `source`. Where the row came from.

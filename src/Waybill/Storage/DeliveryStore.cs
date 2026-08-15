@@ -198,7 +198,8 @@ public class DeliveryStore : IDisposable {
                     tolls_paid, ferries_used, refuels, collisions, late_delivery, minutes_late,
                     cruise_control_share, rest_stops, rest_minutes,
                     fines_count, fines_total,
-                    started_at_ms, finished_at_ms, real_duration_ms, game_duration_min
+                    started_at_ms, finished_at_ms, real_duration_ms, game_duration_min,
+                    job_type
                 ) VALUES (
                     $job_uid, $game, $game_version, $outcome, $validation_status, $validation_flags,
                     $truck_make, $truck_model, $truck_id, $trailer_name, $trailer_id,
@@ -213,7 +214,8 @@ public class DeliveryStore : IDisposable {
                     $tolls_paid, $ferries_used, $refuels, $collisions, $late_delivery, $minutes_late,
                     $cruise_control_share, $rest_stops, $rest_minutes,
                     $fines_count, $fines_total,
-                    $started_at_ms, $finished_at_ms, $real_duration_ms, $game_duration_min
+                    $started_at_ms, $finished_at_ms, $real_duration_ms, $game_duration_min,
+                    $job_type
                 );
                 """;
 
@@ -221,6 +223,7 @@ public class DeliveryStore : IDisposable {
             cmd.Parameters.AddWithValue("$game", r.Game);
             cmd.Parameters.AddWithValue("$game_version", r.GameVersion);
             cmd.Parameters.AddWithValue("$outcome", r.Outcome);
+            cmd.Parameters.AddWithValue("$job_type", r.JobType);
             cmd.Parameters.AddWithValue("$validation_status", r.Validation.Status);
             cmd.Parameters.AddWithValue("$validation_flags", string.Join(",", r.Validation.Flags));
             cmd.Parameters.AddWithValue("$truck_make", r.TruckMake);
@@ -544,7 +547,7 @@ public class DeliveryStore : IDisposable {
                        -- Appended rather than slotted in beside the other distances:
                        -- the reader below indexes by position, so a column added in
                        -- the middle silently shifts every one after it.
-                       sim_speed_distance_km
+                       sim_speed_distance_km, COALESCE(job_type, '')
                 FROM deliveries WHERE id = $id;
                 """;
             cmd.Parameters.AddWithValue("$id", id);
@@ -579,6 +582,7 @@ public class DeliveryStore : IDisposable {
                 Flags = r.GetString(37), Style = r.GetString(38),
                 Notes = r.GetString(39), Source = r.GetString(40),
                 SimSpeedDistanceKm = Num(41),
+                JobType = r.GetString(42),
             };
         }
     }

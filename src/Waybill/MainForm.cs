@@ -1346,6 +1346,7 @@ public class MainForm : Form {
         Row(Strings.T("detail.weight"), $"{u.MassTonnes(d.CargoMassKg):0.0} {u.MassUnit}");
         Row(Strings.T("col.truck"), d.Truck);
         if (d.Trailer.Length > 0) Row(Strings.T("detail.trailer"), d.Trailer);
+        if (d.JobType.Length > 0) Row(Strings.T("detail.jobType"), Label(d.JobType));
         Row(Strings.T("col.game"), d.Game);
 
         Group(Strings.T("detail.groupDistance"));

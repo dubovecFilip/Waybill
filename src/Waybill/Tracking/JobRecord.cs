@@ -56,6 +56,10 @@ public class JobRecord {
     /// <summary>Share of driving time spent clearly over the limit, which is what the
     /// style is judged on. <see cref="SpeedingShare"/> remains the strict measure.</summary>
     public double HardSpeedingShare;
+    /// <summary>Which market the job was taken from, as the SDK names it. A World
+    /// of Trucks contract (`external_contracts`) is a different thing from a quick
+    /// job, and without this the history cannot tell them apart.</summary>
+    public string JobType = "";
     public string Game = "";
     public string GameVersion = "";
     public long StartedAtMs;

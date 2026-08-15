@@ -50,7 +50,7 @@ public static class Adapter {
                     CargoId = cargo?.Id ?? "",
                     CargoMassKg = cargo?.Mass ?? 0,
                     Income = job.Income,
-                    DeadlineMin = job.DeliveryTime?.Value ?? 0,
+                    DeadlineMin = Deadline(job.DeliveryTime?.Value ?? 0),
                     PlannedDistanceKm = job.PlannedDistanceKm,
                     SpecialJob = job.SpecialJob,
                     Market = (int)job.Market,
@@ -102,6 +102,23 @@ public static class Adapter {
             Events = BuildEvents(kind, gp),
         };
     }
+
+    /// <summary>
+    /// A World of Trucks contract carries no in-game deadline: its window is a real
+    /// one, kept on the World of Trucks site rather than on the game clock. The game
+    /// says so by filling the field with the largest value it can hold, and taken at
+    /// face value that produced a delivery four billion game minutes early.
+    /// Zero here means the same as everywhere else in the tracker: not known.
+    /// </summary>
+    private const double NoDeadline = uint.MaxValue;
+
+    private static double Deadline(double minutes) => minutes >= NoDeadline ? 0 : minutes;
+
+    /// <summary>Where the job came from, as the SDK's own name for it: `quick_job`,
+    /// `freight_market`, `external_contracts` (World of Trucks) and the rest. Stored
+    /// raw like every other identifier and translated when displayed.</summary>
+    public static string MarketName(int market) =>
+        market > 0 && Enum.IsDefined(typeof(JobMarket), market) ? ((JobMarket)market).ToString() : "";
 
     private static double TrailerWear(SCSTelemetry.Trailer? t) {
         if (t?.DamageValues == null) return 0;
@@ -227,7 +244,7 @@ public static class Adapter {
                     CargoId = S(cargo?["Id"]),
                     CargoMassKg = N(cargo?["Mass"]),
                     Income = N(job?["Income"]),
-                    DeadlineMin = N(job?["DeliveryTime"]?["Value"]),
+                    DeadlineMin = Deadline(N(job?["DeliveryTime"]?["Value"])),
                     PlannedDistanceKm = N(job?["PlannedDistanceKm"]),
                     SpecialJob = B(job?["SpecialJob"]),
                     Market = (int)N(job?["Market"]),
