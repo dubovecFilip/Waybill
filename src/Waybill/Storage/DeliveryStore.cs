@@ -810,10 +810,25 @@ public class DeliveryStore : IDisposable {
             // Two sightings per delivery. The pickup is taken from the second point,
             // not the first: the first is where the driver stood when the job was
             // accepted, which for a quick job is another city entirely.
+            //
+            // A sighting within a few metres of one already held is thrown away
+            // rather than averaged in. Dropping a load and taking the next job from
+            // the same depot is two deliveries reporting one position, and counting
+            // it twice would both weight that depot double and claim the city had
+            // been confirmed from two places when it had not. In this history five
+            // of nineteen cities are exactly that, at 0 m apart, while the closest
+            // genuinely different pair of depots in one city is 277 m, so there is
+            // room for the threshold to sit between them.
+            const float SamePlaceMetres = 25f;
             var sightings = new Dictionary<string, List<(float X, float Z)>>(StringComparer.OrdinalIgnoreCase);
             void Saw(string city, RoutePoint p) {
                 if (city.Length == 0) return;
                 if (!sightings.TryGetValue(city, out var l)) sightings[city] = l = new List<(float, float)>();
+                foreach (var (x, z) in l) {
+                    var dx = x - p.X;
+                    var dz = z - p.Z;
+                    if (dx * dx + dz * dz < SamePlaceMetres * SamePlaceMetres) return;
+                }
                 l.Add((p.X, p.Z));
             }
             foreach (var (id, points) in result.Routes) {

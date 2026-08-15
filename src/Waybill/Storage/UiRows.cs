@@ -86,11 +86,15 @@ public readonly struct RoutePoint {
 /// the one it unloaded in, and the recording says where the truck was at both
 /// moments.
 ///
-/// <see cref="Seen"/> is how many deliveries contributed, and <see cref="Spread"/>
-/// how far apart those sightings were. A city visited once is one depot's
-/// position wearing the city's name; a city visited often converges on the middle
-/// of its depots, which is close enough to label but is not the city centre. Both
-/// numbers are kept so the map can say how much to trust the dot.
+/// <see cref="Seen"/> counts distinct places used in that city, not deliveries
+/// that mentioned it: dropping a load and taking the next job from the same depot
+/// is one place however many jobs passed through it. <see cref="Spread"/> is how
+/// far apart those places were.
+///
+/// A city seen once is one depot's position wearing the city's name; a city seen
+/// in several places converges on the middle of them, which is close enough to
+/// label but is not the city centre. Both numbers are kept so the map can say how
+/// much to trust the dot.
 /// </summary>
 public class CityAnchor {
     public string Name = "";
