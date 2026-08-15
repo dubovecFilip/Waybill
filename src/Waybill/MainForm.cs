@@ -84,6 +84,14 @@ public class MainForm : Form {
 
     private List<DeliveryRow> _rows = new();
     private readonly Dictionary<string, GameRoutes> _routes = new();
+    /// <summary>For the map's glyph buttons, which have no room to say in words what
+    /// they do.</summary>
+    private readonly ToolTip _tips = new();
+    private RouteView? _mapPage;
+    private readonly ComboBox _mapGame = new();
+    /// <summary>The games behind the entries in <see cref="_mapGame"/>, as the
+    /// database spells them. The box shows them the way the game does.</summary>
+    private List<string> _mapGames = new();
 
     public MainForm() {
         Text = "Waybill";
@@ -164,6 +172,7 @@ public class MainForm : Form {
 
         // Added bottom-up so the first entry ends up on top.
         bar.Controls.Add(NavButton("stats", Strings.T("tab.stats")));
+        bar.Controls.Add(NavButton("map", Strings.T("tab.map")));
         bar.Controls.Add(NavButton("deliveries", Strings.T("tab.deliveries")));
         bar.Controls.Add(NavButton("live", Strings.T("tab.live")));
         bar.Controls.Add(edge);
@@ -225,13 +234,91 @@ public class MainForm : Form {
         _content.Controls.Add(_detailPage);
         var deliveries = BuildHistoryPage();
         deliveries.Tag = "deliveries";
+        var map = BuildMapPage();
+        map.Tag = "map";
         var stats = BuildStatsPage();
         stats.Tag = "stats";
 
         _content.Controls.Add(live);
         _content.Controls.Add(deliveries);
+        _content.Controls.Add(map);
         _content.Controls.Add(stats);
         return _content;
+    }
+
+    /// <summary>
+    /// Every drive of one game on one picture.
+    ///
+    /// A second way through the same history: the list answers when something was
+    /// driven, this answers where, and sometimes that is the half a driver
+    /// remembers. Pointing at a route names it, clicking one opens its card, so the
+    /// map is a way into the history rather than an ornament beside it.
+    ///
+    /// One game at a time, and that is not a convenience. ATS and ETS2 number their
+    /// worlds separately, so the same coordinates mean unrelated places in the two;
+    /// drawn together they would overlap into nonsense.
+    /// </summary>
+    private Panel BuildMapPage() {
+        var page = new Panel { Dock = DockStyle.Fill, BackColor = Canvas, Padding = new Padding(16) };
+
+        var map = new RouteView {
+            Dock = DockStyle.Fill,
+            EmptyText = Strings.T("map.noneGame"),
+            Hint = Strings.T("map.hintHistory"),
+        };
+        map.DescribeRoute = id => _rows.FirstOrDefault(r => r.Id == id) is { } row
+            ? $"{row.Odkial}  →  {row.Kam}      {row.Datum:dd.MM.yyyy}   {row.Vzdialenost}"
+            : "";
+        map.RouteChosen += ShowDetail;
+        _mapPage = map;
+
+        _mapGame.DropDownStyle = ComboBoxStyle.DropDownList;
+        _mapGame.FlatStyle = FlatStyle.Flat;
+        _mapGame.BackColor = Raised;
+        _mapGame.ForeColor = Ink;
+        _mapGame.Width = 150;
+        _mapGame.SelectedIndexChanged -= OnMapGameChanged;
+        _mapGame.SelectedIndexChanged += OnMapGameChanged;
+
+        var bar = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = Canvas };
+        bar.Controls.Add(_mapGame);
+
+        var frame = new Panel { Dock = DockStyle.Fill, BackColor = Line, Padding = new Padding(1) };
+        frame.Controls.Add(map);
+        MapButtons(frame, map, null);
+
+        page.Controls.Add(frame);
+        page.Controls.Add(bar);
+        return page;
+    }
+
+    private void OnMapGameChanged(object? sender, EventArgs e) => ReloadMapPage();
+
+    /// <summary>Fills the map page from whatever the history currently holds. The
+    /// game list is built from the deliveries themselves rather than from the two
+    /// the app knows about, so a profile that has only ever driven one of them is
+    /// not offered an empty picture of the other.</summary>
+    private void ReloadMapPage() {
+        if (_mapPage is not { } map) return;
+
+        var games = _rows.Select(r => r.Hra).Where(g => g.Length > 0).Distinct().OrderBy(g => g).ToList();
+        if (!_mapGames.SequenceEqual(games)) {
+            var was = _mapGame.SelectedIndex >= 0 && _mapGame.SelectedIndex < _mapGames.Count
+                ? _mapGames[_mapGame.SelectedIndex] : null;
+            _mapGames = games;
+            _mapGame.Items.Clear();
+            // Shown as the game calls itself, kept as the database spells it.
+            foreach (var g in games) _mapGame.Items.Add(GameName(g));
+            _mapGame.SelectedIndex = was is not null && games.IndexOf(was) >= 0 ? games.IndexOf(was)
+                : games.Count > 0 ? 0 : -1;
+        }
+        if (_mapGame.SelectedIndex < 0 || _mapGame.SelectedIndex >= _mapGames.Count) {
+            map.Show(new List<RouteLayer>(), 0, new List<CityAnchor>());
+            return;
+        }
+
+        var routes = RoutesFor(_mapGames[_mapGame.SelectedIndex]);
+        map.Show(Layers(routes), 0, routes.Cities);
     }
 
     // ---------- menu ----------
@@ -1525,21 +1612,105 @@ public class MainForm : Form {
             Padding = new Padding(0, 0, 0, 1),
         };
 
-        var map = new RouteView {
-            Dock = DockStyle.Fill,
-            FormatSpeed = kmh => u.FormatSpeed(kmh),
-            EmptyText = Strings.T("map.none"),
-            Hint = Strings.T("map.hint"),
-        };
-
-        var all = RoutesFor(d.Game);
-        all.Routes.TryGetValue(d.Id, out var route);
-        map.Show(route ?? new List<RoutePoint>(),
-                 all.Routes.Where(r => r.Key != d.Id).Select(r => r.Value),
-                 all.Cities);
+        var map = NewMap(u);
+        map.Show(Layers(RoutesFor(d.Game)), d.Id, RoutesFor(d.Game).Cities, _store.TimelineRows(d.Id));
 
         box.Controls.Add(map);
+        MapButtons(box, map, () => BigMap(d, u));
         return box;
+    }
+
+    private RouteView NewMap(Units u) => new() {
+        Dock = DockStyle.Fill,
+        FormatSpeed = kmh => u.FormatSpeed(kmh),
+        EmptyText = Strings.T("map.none"),
+        Hint = Strings.T("map.hint"),
+    };
+
+    private static IEnumerable<RouteLayer> Layers(GameRoutes routes) =>
+        routes.Routes.Select(r => new RouteLayer { Id = r.Key, Points = r.Value });
+
+    /// <summary>
+    /// The three things the map can be told to do, over the top right of it.
+    ///
+    /// Kept as small square glyphs rather than words: they sit on the drawing, and
+    /// a row of labelled buttons there would take more of the map than the map can
+    /// spare. Placed by hand on every resize because the map underneath them is
+    /// docked to fill, so there is no layout to anchor to.
+    /// </summary>
+    private void MapButtons(Control host, RouteView map, Action? expand) {
+        var bar = new Panel { BackColor = Color.Transparent, Height = 26, Width = 0 };
+
+        Button Glyph(string text, string tip, Action click) {
+            var b = new Button {
+                Text = text, Width = 26, Height = 26, Left = bar.Width, Top = 0,
+                FlatStyle = FlatStyle.Flat, BackColor = Surface, ForeColor = Muted,
+                Font = new Font("Segoe UI", 10F), Cursor = Cursors.Hand, TabStop = false,
+            };
+            b.FlatAppearance.BorderColor = Line;
+            b.FlatAppearance.MouseOverBackColor = Raised;
+            b.Click += (_, _) => click();
+            _tips.SetToolTip(b, tip);
+            bar.Controls.Add(b);
+            bar.Width += 30;
+            return b;
+        }
+
+        var layers = Glyph("≡", Strings.T("map.layers"), () => { });
+        layers.Click += (_, _) => LayerMenu(map).Show(layers, new Point(0, layers.Height));
+        Glyph("⟲", Strings.T("map.fit"), map.Fit);
+        if (expand is not null) Glyph("⤢", Strings.T("map.expand"), expand);
+
+        void Place() => bar.Left = Math.Max(0, host.ClientSize.Width - bar.Width - 8);
+        bar.Top = 8;
+        host.Controls.Add(bar);
+        bar.BringToFront();
+        host.Resize += (_, _) => Place();
+        Place();
+    }
+
+    /// <summary>What the map draws, as three switches. Anything the delivery does
+    /// not have is simply not offered: a filter for something there is none of is
+    /// noise on a menu that has to stay glanceable.</summary>
+    private ContextMenuStrip LayerMenu(RouteView map) {
+        var menu = new ContextMenuStrip {
+            BackColor = Surface, ForeColor = Ink, ShowImageMargin = false,
+            Renderer = new ToolStripProfessionalRenderer(),
+        };
+        void Item(string label, bool on, Action<bool> set) {
+            var item = new ToolStripMenuItem(label) { Checked = on, CheckOnClick = true, BackColor = Surface, ForeColor = Ink };
+            item.Click += (_, _) => { set(item.Checked); map.Invalidate(); };
+            menu.Items.Add(item);
+        }
+        Item(Strings.T("map.layerHistory"), map.ShowHistory, v => map.ShowHistory = v);
+        Item(Strings.T("map.layerCities"), map.ShowCities, v => map.ShowCities = v);
+        Item(Strings.T("map.layerMarks"), map.ShowMarks, v => map.ShowMarks = v);
+        return menu;
+    }
+
+    /// <summary>The same map with the whole screen to itself. A route panel beside a
+    /// column of figures is enough to see the shape of a drive and not enough to
+    /// look at a junction, and zooming inside a 300 pixel strip is a poor substitute
+    /// for room.</summary>
+    private void BigMap(DeliveryDetail d, Units u) {
+        using var window = new Form {
+            Text = $"{d.SourceCity}  →  {d.DestinationCity}",
+            StartPosition = FormStartPosition.CenterScreen,
+            WindowState = FormWindowState.Maximized,
+            BackColor = Canvas, ForeColor = Ink, KeyPreview = true,
+            Icon = Icon, MinimumSize = new Size(640, 480),
+        };
+        var map = NewMap(u);
+        map.Hint = Strings.T("map.hintBig");
+        window.Controls.Add(map);
+        MapButtons(window, map, null);
+        // Shown before the data, so the map measures itself against the size it will
+        // actually have rather than fitting the route to a window that is about to
+        // be maximised.
+        window.Shown += (_, _) => map.Show(Layers(RoutesFor(d.Game)), d.Id, RoutesFor(d.Game).Cities, _store.TimelineRows(d.Id));
+        window.Load += (_, _) => UseDarkTitleBar(window);
+        window.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) window.Close(); };
+        window.ShowDialog(this);
     }
 
     private Control DetailBody(DeliveryDetail d, Units u) {
@@ -1757,6 +1928,7 @@ public class MainForm : Form {
         _rows = _store.RecentDeliveryRows(500, _settings.Units).ToList();
         _routes.Clear();
         ApplyFilter();
+        ReloadMapPage();
     }
 
     /// <summary>

@@ -5,8 +5,9 @@ using Waybill.Storage;
 namespace Waybill;
 
 /// <summary>
-/// Draws a drive in the game's world space: the route itself, every other route
-/// ever driven as the background, and the cities the history has learned.
+/// Draws drives in the game's world space. One route can be singled out and drawn
+/// in full, with the rest behind it; with nothing singled out every route is drawn
+/// alike and the whole history becomes the picture.
 ///
 /// There is no real map underneath and there deliberately is not one. The game's
 /// world is not a scaled United States: measured across nineteen deliveries, some
@@ -25,7 +26,7 @@ public class RouteView : Control {
     private static readonly Color Muted = Color.FromArgb(138, 148, 163);
     private static readonly Color Accent = Color.FromArgb(232, 168, 74);
     private static readonly Color Surface = Color.FromArgb(30, 34, 39);
-    private static readonly Color Line = Color.FromArgb(48, 54, 62);
+    private static readonly Color Edge = Color.FromArgb(48, 54, 62);
 
     /// <summary>Slow to fast. Eight steps rather than a continuous gradient so the
     /// line can be drawn as a handful of polylines instead of a thousand separate
@@ -43,16 +44,23 @@ public class RouteView : Control {
 
     /// <summary>Two recorded positions further apart than this were not driven
     /// between. Measured on real history the ordinary gap is 19 m and the 95th
-    /// percentile 32 m, while every teleport and ferry was over 1 700 m, so there
+    /// percentile 32 m, while every teleport and reload was over 1 700 m, so there
     /// is a wide empty band to put the line in.</summary>
     private const float BreakMetres = 250f;
 
     private const float Pad = 18f;
 
-    private List<RoutePoint> _route = new();
-    private List<List<RoutePoint>> _runs = new();
-    private List<List<RoutePoint>> _background = new();
+    /// <summary>One route, split into the stretches that were actually driven.</summary>
+    private class Drawn {
+        public long Id;
+        public List<RoutePoint> All = new();
+        public List<List<RoutePoint>> Runs = new();
+    }
+
+    private List<Drawn> _drawn = new();
+    private Drawn? _focus;
     private List<CityAnchor> _cities = new();
+    private List<(TimelineRow Row, RoutePoint At)> _marks = new();
 
     private float _fitScale = 1f;
     private float _zoom = 1f;
@@ -60,11 +68,14 @@ public class RouteView : Control {
     private bool _fitted;
 
     private Bitmap? _under;
-    private (int W, int H, float Scale, float CX, float CY) _underKey;
+    private (int W, int H, float Scale, float CX, float CY, long Lit) _underKey;
 
     private Point _dragFrom;
     private bool _dragging;
-    private int _hover = -1;
+    private bool _dragged;
+    private int _hoverPoint = -1;
+    private int _hoverMark = -1;
+    private long _lit;
 
     // Set from code and never from a designer, which is what the attribute says:
     // this control is built by hand like the rest of the window.
@@ -75,6 +86,11 @@ public class RouteView : Control {
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public Func<float, string> FormatSpeed { get; set; } = kmh => $"{kmh:0} km/h";
 
+    /// <summary>Says what a route is, for the readout when one is pointed at with
+    /// nothing singled out. The control knows an identifier and nothing else.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Func<long, string> DescribeRoute { get; set; } = _ => "";
+
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public string EmptyText { get; set; } = "";
 
@@ -84,6 +100,19 @@ public class RouteView : Control {
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public string Hint { get; set; } = "";
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool ShowCities { get; set; } = true;
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool ShowHistory { get; set; } = true;
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool ShowMarks { get; set; } = true;
+
+    /// <summary>Raised when a route is clicked with none singled out, which is the
+    /// history map's way of opening a delivery.</summary>
+    public event Action<long>? RouteChosen;
+
     public RouteView() {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
                | ControlStyles.UserPaint | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
@@ -92,18 +121,51 @@ public class RouteView : Control {
         Cursor = Cursors.Hand;
     }
 
-    public void Show(List<RoutePoint> route, IEnumerable<List<RoutePoint>> background, List<CityAnchor> cities) {
-        _route = route;
-        _runs = Split(route);
-        _background = background.SelectMany(Split).ToList();
+    /// <summary><paramref name="focus"/> is the delivery to draw in full, or 0 to
+    /// draw every route alike. <paramref name="marks"/> only mean anything against
+    /// a focused route, since they are placed by matching their time to it.</summary>
+    public void Show(IEnumerable<RouteLayer> routes, long focus, List<CityAnchor> cities, List<TimelineRow>? marks = null) {
+        _drawn = routes.Select(r => new Drawn { Id = r.Id, All = r.Points, Runs = Split(r.Points) })
+                       .Where(d => d.Runs.Count > 0).ToList();
+        _focus = _drawn.FirstOrDefault(d => d.Id == focus);
         _cities = cities;
+        _marks = PlaceMarks(marks);
+        _lit = 0;
+        _hoverPoint = _hoverMark = -1;
         _fitted = false;
         Discard();
         Invalidate();
     }
 
     /// <summary>
-    /// Breaks the recording into stretches that were actually driven.
+    /// Ties each event to the position the truck was in when it happened, by time.
+    ///
+    /// Events and route points are recorded by the same clock a second apart, so
+    /// the nearest point is the right one. An event further than a minute from any
+    /// recorded position is dropped rather than pinned to a guess: that means the
+    /// route stopped being recorded around it, and a pin in the wrong place says
+    /// something false about where the driver was.
+    /// </summary>
+    private List<(TimelineRow, RoutePoint)> PlaceMarks(List<TimelineRow>? marks) {
+        var placed = new List<(TimelineRow, RoutePoint)>();
+        if (marks is null || _focus is null) return placed;
+
+        foreach (var mark in marks) {
+            var best = long.MaxValue;
+            RoutePoint at = default;
+            foreach (var p in _focus.All) {
+                var off = Math.Abs(p.AtMs - mark.AtMs);
+                if (off >= best) continue;
+                best = off;
+                at = p;
+            }
+            if (best <= 60_000) placed.Add((mark, at));
+        }
+        return placed;
+    }
+
+    /// <summary>
+    /// Breaks a recording into stretches that were actually driven.
     ///
     /// The first point of every job is where the driver stood when the offer was
     /// taken, and the second is where the truck is: on a quick job that is another
@@ -138,17 +200,22 @@ public class RouteView : Control {
         return runs;
     }
 
-    private void Fit() {
+    public void Fit() {
         _zoom = 1f;
         _fitted = true;
-        if (_runs.Count == 0) { _fitScale = 1f; _centre = PointF.Empty; return; }
+
+        // The focused route sets the frame when there is one. On the history map
+        // there is not, so everything does.
+        var scope = _focus is { } f ? new List<Drawn> { f } : _drawn;
+        if (scope.Count == 0) { _fitScale = 1f; _centre = PointF.Empty; return; }
 
         float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
-        foreach (var run in _runs)
-            foreach (var p in run) {
-                minX = Math.Min(minX, p.X); maxX = Math.Max(maxX, p.X);
-                minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z);
-            }
+        foreach (var d in scope)
+            foreach (var run in d.Runs)
+                foreach (var p in run) {
+                    minX = Math.Min(minX, p.X); maxX = Math.Max(maxX, p.X);
+                    minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z);
+                }
         _centre = new PointF((minX + maxX) / 2, (minZ + maxZ) / 2);
 
         var w = Math.Max(maxX - minX, 1f);
@@ -158,6 +225,8 @@ public class RouteView : Control {
         // thing this control does claim to show.
         _fitScale = Math.Min((Width - Pad * 2) / w, (Height - Pad * 2) / h);
         if (_fitScale <= 0 || float.IsInfinity(_fitScale)) _fitScale = 1f;
+        Discard();
+        Invalidate();
     }
 
     /// <summary>Pixels per world metre. Named for what it is rather than "scale",
@@ -191,7 +260,7 @@ public class RouteView : Control {
 
     protected override void OnMouseWheel(MouseEventArgs e) {
         base.OnMouseWheel(e);
-        if (_runs.Count == 0) return;
+        if (_drawn.Count == 0) return;
 
         // Zoom about the pointer: whatever is under it stays under it, which is what
         // makes zooming feel like moving closer rather than being thrown somewhere.
@@ -209,6 +278,7 @@ public class RouteView : Control {
         base.OnMouseDown(e);
         Focus();
         _dragging = true;
+        _dragged = false;
         _dragFrom = e.Location;
         Cursor = Cursors.SizeAll;
     }
@@ -216,6 +286,7 @@ public class RouteView : Control {
     protected override void OnMouseMove(MouseEventArgs e) {
         base.OnMouseMove(e);
         if (_dragging) {
+            if (Math.Abs(e.X - _dragFrom.X) > 2 || Math.Abs(e.Y - _dragFrom.Y) > 2) _dragged = true;
             _centre = new PointF(
                 _centre.X - (e.X - _dragFrom.X) / PerMetre,
                 _centre.Y - (e.Y - _dragFrom.Y) / PerMetre);
@@ -225,39 +296,78 @@ public class RouteView : Control {
             return;
         }
 
-        var was = _hover;
-        _hover = Nearest(e.Location);
-        if (was != _hover) Invalidate();
+        var wasPoint = _hoverPoint;
+        var wasMark = _hoverMark;
+        var wasLit = _lit;
+
+        if (_focus is { } f) {
+            _hoverMark = NearestMark(e.Location);
+            _hoverPoint = _hoverMark >= 0 ? -1 : NearestPoint(f, e.Location);
+        } else {
+            _lit = NearestRoute(e.Location);
+        }
+
+        if (wasPoint != _hoverPoint || wasMark != _hoverMark) Invalidate();
+        // The lit route lives in the cached layer, so changing it has to throw it.
+        if (wasLit != _lit) { Discard(); Invalidate(); }
     }
 
     protected override void OnMouseUp(MouseEventArgs e) {
         base.OnMouseUp(e);
         _dragging = false;
         Cursor = Cursors.Hand;
+        // A click that did not drag, on the history map, opens what was clicked.
+        if (!_dragged && _focus is null && _lit != 0) RouteChosen?.Invoke(_lit);
     }
 
     protected override void OnMouseLeave(EventArgs e) {
         base.OnMouseLeave(e);
-        if (_hover >= 0) { _hover = -1; Invalidate(); }
+        if (_hoverPoint >= 0 || _hoverMark >= 0) { _hoverPoint = _hoverMark = -1; Invalidate(); }
+        if (_lit != 0) { _lit = 0; Discard(); Invalidate(); }
     }
 
     protected override void OnMouseDoubleClick(MouseEventArgs e) {
         base.OnMouseDoubleClick(e);
-        Fit();
-        Discard();
-        Invalidate();
+        // Only where a click means nothing else. On the history map the first click
+        // has already opened a delivery.
+        if (_focus is not null) Fit();
     }
 
-    /// <summary>Index into the route of the closest recorded position, or -1 when
-    /// the pointer is not near the line at all.</summary>
-    private int Nearest(Point at) {
+    private int NearestPoint(Drawn route, Point at) {
         var best = -1;
         var bestDist = 14f * 14f;
-        for (var i = 0; i < _route.Count; i++) {
-            var s = ToScreen(_route[i].X, _route[i].Z);
+        for (var i = 0; i < route.All.Count; i++) {
+            var s = ToScreen(route.All[i].X, route.All[i].Z);
             var d = (s.X - at.X) * (s.X - at.X) + (s.Y - at.Y) * (s.Y - at.Y);
             if (d < bestDist) { bestDist = d; best = i; }
         }
+        return best;
+    }
+
+    private int NearestMark(Point at) {
+        if (!ShowMarks) return -1;
+        var best = -1;
+        var bestDist = 11f * 11f;
+        for (var i = 0; i < _marks.Count; i++) {
+            var s = ToScreen(_marks[i].At.X, _marks[i].At.Z);
+            var d = (s.X - at.X) * (s.X - at.X) + (s.Y - at.Y) * (s.Y - at.Y);
+            if (d < bestDist) { bestDist = d; best = i; }
+        }
+        return best;
+    }
+
+    /// <summary>Which route the pointer is over, on the history map. Every fourth
+    /// point is enough: they are 19 m apart and the tolerance is a dozen pixels,
+    /// so three out of four are asking the same question twice.</summary>
+    private long NearestRoute(Point at) {
+        long best = 0;
+        var bestDist = 12f * 12f;
+        foreach (var d in _drawn)
+            for (var i = 0; i < d.All.Count; i += 4) {
+                var s = ToScreen(d.All[i].X, d.All[i].Z);
+                var dist = (s.X - at.X) * (s.X - at.X) + (s.Y - at.Y) * (s.Y - at.Y);
+                if (dist < bestDist) { bestDist = dist; best = d.Id; }
+            }
         return best;
     }
 
@@ -267,7 +377,7 @@ public class RouteView : Control {
         var g = e.Graphics;
         g.Clear(Backdrop);
 
-        if (_route.Count == 0 || _runs.Count == 0) {
+        if (_drawn.Count == 0) {
             if (EmptyText.Length > 0) {
                 using var brush = new SolidBrush(Muted);
                 using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
@@ -280,15 +390,18 @@ public class RouteView : Control {
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
         DrawUnderlay(g);
-        DrawRoute(g);
+        if (_focus is { } f) {
+            DrawRoute(g, f);
+            DrawEnds(g, f);
+        }
         // Names go over the route rather than under it. A label is what makes the
         // line mean somewhere, so the line is not allowed to eat the first letters
         // of it, which it did wherever a drive passed through a city it named.
-        DrawCities(g);
-        DrawEnds(g);
-        DrawHover(g);
+        if (ShowCities) DrawCities(g);
+        if (ShowMarks) DrawMarks(g);
+        DrawReadout(g);
 
-        if (Hint.Length > 0 && _hover < 0) {
+        if (Hint.Length > 0 && _hoverPoint < 0 && _hoverMark < 0 && _lit == 0) {
             using var font = new Font("Segoe UI", 7.5F);
             using var brush = new SolidBrush(Color.FromArgb(120, 138, 148, 163));
             var size = g.MeasureString(Hint, font);
@@ -297,15 +410,16 @@ public class RouteView : Control {
     }
 
     /// <summary>
-    /// Every other drive, and the cities, painted once into a bitmap and kept.
+    /// Every route that is not the one being read, painted once into a bitmap and
+    /// kept.
     ///
     /// It only has to be redone when the view actually moves. Measured on real
     /// routes cloned up to a five hundred delivery history, drawing them costs
-    /// 13 ms while copying the finished bitmap costs 1.3 ms, and hovering the
+    /// 13 ms while copying the finished bitmap costs 1.3 ms, and pointing at the
     /// route repaints constantly.
     /// </summary>
     private void DrawUnderlay(Graphics g) {
-        var key = (Width, Height, PerMetre, _centre.X, _centre.Y);
+        var key = (Width, Height, PerMetre, _centre.X, _centre.Y, _lit);
         if (_under is null || _underKey != key) {
             Discard();
             _underKey = key;
@@ -313,13 +427,25 @@ public class RouteView : Control {
             using var ug = Graphics.FromImage(_under);
             ug.SmoothingMode = SmoothingMode.AntiAlias;
 
-            using var pen = new Pen(Color.FromArgb(64, 104, 116, 132), 1.1f);
-            foreach (var run in _background) {
-                // Simplified against the screen, not the world: points closer together
-                // than a pixel cannot be told apart, and on a whole-map view that is
-                // about 97 % of them.
-                var pts = Reduce(Project(run), 0.7f);
-                if (pts.Length > 1) ug.DrawLines(pen, pts);
+            // Behind a route being read they are context and stay out of the way; with
+            // nothing singled out they are the whole picture, and a background drawn
+            // at background strength would leave the page looking empty.
+            using var quiet = _focus is null
+                ? new Pen(Color.FromArgb(165, 128, 146, 166), 1.4f) { LineJoin = LineJoin.Round }
+                : new Pen(Color.FromArgb(64, 104, 116, 132), 1.1f);
+            using var loud = new Pen(Color.FromArgb(235, 232, 168, 74), 2f) { LineJoin = LineJoin.Round };
+
+            foreach (var d in _drawn) {
+                if (d == _focus) continue;
+                if (!ShowHistory && d.Id != _lit) continue;
+                var pen = d.Id == _lit && _lit != 0 ? loud : quiet;
+                foreach (var run in d.Runs) {
+                    // Simplified against the screen, not the world: points closer
+                    // together than a pixel cannot be told apart, and on a whole-map
+                    // view that is about 97 % of them.
+                    var pts = Reduce(Project(run), 0.7f);
+                    if (pts.Length > 1) ug.DrawLines(pen, pts);
+                }
             }
         }
         g.DrawImageUnscaled(_under, 0, 0);
@@ -331,12 +457,12 @@ public class RouteView : Control {
         return pts;
     }
 
-    private void DrawRoute(Graphics g) {
+    private void DrawRoute(Graphics g, Drawn route) {
         // The stretches that were not driven, drawn first so the route sits on top.
         using (var skip = new Pen(Color.FromArgb(90, 150, 160, 175), 1f) { DashStyle = DashStyle.Dash }) {
-            for (var i = 1; i < _runs.Count; i++) {
-                var a = ToScreen(_runs[i - 1][^1].X, _runs[i - 1][^1].Z);
-                var b = ToScreen(_runs[i][0].X, _runs[i][0].Z);
+            for (var i = 1; i < route.Runs.Count; i++) {
+                var a = ToScreen(route.Runs[i - 1][^1].X, route.Runs[i - 1][^1].Z);
+                var b = ToScreen(route.Runs[i][0].X, route.Runs[i][0].Z);
                 g.DrawLine(skip, a, b);
             }
         }
@@ -346,7 +472,7 @@ public class RouteView : Control {
             pens[i] = new Pen(Ramp[i], 2.4f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
 
         try {
-            foreach (var run in _runs) {
+            foreach (var run in route.Runs) {
                 var band = Band(run[0].SpeedKmh);
                 var stretch = new List<PointF> { ToScreen(run[0].X, run[0].Z) };
                 for (var i = 1; i < run.Count; i++) {
@@ -366,9 +492,9 @@ public class RouteView : Control {
         }
     }
 
-    private void DrawEnds(Graphics g) {
-        var start = ToScreen(_runs[0][0].X, _runs[0][0].Z);
-        var end = ToScreen(_runs[^1][^1].X, _runs[^1][^1].Z);
+    private void DrawEnds(Graphics g, Drawn route) {
+        var start = ToScreen(route.Runs[0][0].X, route.Runs[0][0].Z);
+        var end = ToScreen(route.Runs[^1][^1].X, route.Runs[^1][^1].Z);
 
         using var ring = new Pen(Ink, 2f);
         using var back = new SolidBrush(Backdrop);
@@ -379,14 +505,52 @@ public class RouteView : Control {
         g.FillEllipse(fill, end.X - 5.5f, end.Y - 5.5f, 11, 11);
     }
 
+    /// <summary>Colour and shape for an event, by its stored identifier. Shape as
+    /// well as colour, so the pins stay apart from each other where several land on
+    /// the same stretch of road, and for anyone who reads colour poorly.</summary>
+    private static (Color Colour, int Sides) Pin(string type) => type switch {
+        "collision" => (Color.FromArgb(226, 116, 104), 3),
+        "fine" => (Color.FromArgb(232, 168, 74), 0),
+        "refuel" => (Color.FromArgb(112, 172, 214), 4),
+        "ferry" or "train" => (Color.FromArgb(96, 176, 168), 4),
+        "rest" => (Color.FromArgb(150, 160, 175), 0),
+        "tollgate" => (Color.FromArgb(150, 160, 175), 4),
+        "save_loaded" => (Color.FromArgb(180, 150, 200), 3),
+        "trailer_coupled" => (Color.FromArgb(200, 210, 224), 4),
+        _ => (Color.FromArgb(150, 160, 175), 0),
+    };
+
+    private void DrawMarks(Graphics g) {
+        for (var i = 0; i < _marks.Count; i++) {
+            var (row, point) = _marks[i];
+            var at = ToScreen(point.X, point.Z);
+            var (colour, sides) = Pin(row.Type);
+            var r = i == _hoverMark ? 6.5f : 4.5f;
+
+            using var fill = new SolidBrush(colour);
+            using var rim = new Pen(Backdrop, 1.6f);
+            if (sides == 0) {
+                g.FillEllipse(fill, at.X - r, at.Y - r, r * 2, r * 2);
+                g.DrawEllipse(rim, at.X - r, at.Y - r, r * 2, r * 2);
+            } else {
+                var shape = sides == 3
+                    ? new[] { new PointF(at.X, at.Y - r * 1.2f), new PointF(at.X + r, at.Y + r * 0.8f), new PointF(at.X - r, at.Y + r * 0.8f) }
+                    : new[] { new PointF(at.X, at.Y - r), new PointF(at.X + r, at.Y), new PointF(at.X, at.Y + r), new PointF(at.X - r, at.Y) };
+                g.FillPolygon(fill, shape);
+                g.DrawPolygon(rim, shape);
+            }
+        }
+    }
+
     /// <summary>
     /// The cities this history knows, each where the game actually put it.
     ///
     /// They are learned rather than looked up: every job names the city it loaded
-    /// in and the one it unloaded in. That means a dot is really the middle of the
-    /// depots used there, which for a city visited once is one depot. Close enough
-    /// to label a corner of the map with, and honest, which a downloaded list from
-    /// an older version of the game would not be.
+    /// in and the one it unloaded in, and the trailer coupling says where the load
+    /// was. That means a dot is really the middle of the depots used there, which
+    /// for a city seen once is one depot. Close enough to label a corner of the map
+    /// with, and honest, which a downloaded list from an older version of the game
+    /// would not be.
     /// </summary>
     private void DrawCities(Graphics g) {
         using var dot = new SolidBrush(Color.FromArgb(190, 150, 160, 175));
@@ -408,8 +572,8 @@ public class RouteView : Control {
             // which lands on a city dot whenever a drive starts or finishes there,
             // and swallowed the first letters of the name when it did.
             var label = new RectangleF(at.X + 10, at.Y - size.Height / 2, size.Width, size.Height);
-            // Cities seen most often are drawn first, so where two labels collide the
-            // one the driver knows better is the one that survives.
+            // Cities seen in most places are drawn first, so where two labels collide
+            // the one the driver knows better is the one that survives.
             if (placed.Any(p => p.IntersectsWith(label))) continue;
             placed.Add(RectangleF.Inflate(label, 3, 1));
 
@@ -418,16 +582,33 @@ public class RouteView : Control {
         }
     }
 
-    private void DrawHover(Graphics g) {
-        if (_hover < 0 || _hover >= _route.Count) return;
+    private void DrawReadout(Graphics g) {
+        string label;
+        PointF at;
 
-        var p = _route[_hover];
-        var at = ToScreen(p.X, p.Z);
-        using (var ring = new Pen(Ink, 1.6f)) g.DrawEllipse(ring, at.X - 4, at.Y - 4, 8, 8);
-
-        var into = TimeSpan.FromMilliseconds(p.AtMs - _route[0].AtMs);
-        var when = into.TotalHours >= 1 ? $"{(int)into.TotalHours}:{into.Minutes:00}:{into.Seconds:00}" : $"{into.Minutes}:{into.Seconds:00}";
-        var label = $"{when}   {FormatSpeed(p.SpeedKmh)}";
+        if (_hoverMark >= 0 && _hoverMark < _marks.Count) {
+            var (row, point) = _marks[_hoverMark];
+            at = ToScreen(point.X, point.Z);
+            label = row.Udalost;
+            if (row.Hodnota.Length > 0) label += $"   {row.Hodnota}";
+            if (row.Detail.Length > 0) label += $"   {row.Detail}";
+        } else if (_hoverPoint >= 0 && _focus is { } f && _hoverPoint < f.All.Count) {
+            var p = f.All[_hoverPoint];
+            at = ToScreen(p.X, p.Z);
+            var into = TimeSpan.FromMilliseconds(p.AtMs - f.All[0].AtMs);
+            var when = into.TotalHours >= 1
+                ? $"{(int)into.TotalHours}:{into.Minutes:00}:{into.Seconds:00}"
+                : $"{into.Minutes}:{into.Seconds:00}";
+            label = $"{when}   {FormatSpeed(p.SpeedKmh)}";
+            using var ring = new Pen(Ink, 1.6f);
+            g.DrawEllipse(ring, at.X - 4, at.Y - 4, 8, 8);
+        } else if (_lit != 0) {
+            label = DescribeRoute(_lit);
+            if (label.Length == 0) return;
+            at = PointToClient(MousePosition);
+        } else {
+            return;
+        }
 
         using var font = new Font("Segoe UI", 8F);
         var size = g.MeasureString(label, font);
@@ -435,10 +616,11 @@ public class RouteView : Control {
         // Kept inside the control, or the readout falls off the edge exactly when the
         // pointer is somewhere interesting.
         if (box.Right > Width - 4) box.X = at.X - box.Width - 10;
+        if (box.X < 4) box.X = 4;
         if (box.Top < 4) box.Y = at.Y + 10;
 
         using var back = new SolidBrush(Surface);
-        using var edge = new Pen(Line);
+        using var edge = new Pen(Edge);
         using var ink = new SolidBrush(Ink);
         g.FillRectangle(back, box);
         g.DrawRectangle(edge, box.X, box.Y, box.Width, box.Height);

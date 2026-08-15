@@ -571,6 +571,8 @@ public class DeliveryStore : IDisposable {
                     Udalost = Strings.T("event." + type) is var t && t != "event." + type ? t : type,
                     Hodnota = reader.IsDBNull(2) ? "" : reader.GetDouble(2).ToString("0.##"),
                     Detail = detail,
+                    AtMs = reader.GetInt64(0),
+                    Type = type,
                 });
             }
             return rows;

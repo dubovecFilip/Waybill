@@ -112,12 +112,26 @@ public class GameRoutes {
     public List<CityAnchor> Cities = new();
 }
 
-/// <summary>One row in the per-delivery event timeline.</summary>
+/// <summary>One route to draw. Carries its delivery so the map can say which one
+/// was clicked without the caller having to match coordinates back to a row.</summary>
+public class RouteLayer {
+    public long Id;
+    public List<RoutePoint> Points = new();
+}
+
+/// <summary>One row in the per-delivery event timeline.
+///
+/// <see cref="AtMs"/> and <see cref="Type"/> are the raw stored values rather than
+/// anything for reading. The map places its pins by matching the time against the
+/// route, and picks the shape by the identifier, so both have to survive the
+/// translation that produces the rest of these fields.</summary>
 public class TimelineRow {
     public string Cas { get; set; } = "";
     public string Udalost { get; set; } = "";
     public string Hodnota { get; set; } = "";
     public string Detail { get; set; } = "";
+    public long AtMs { get; set; }
+    public string Type { get; set; } = "";
 }
 
 /// <summary>
