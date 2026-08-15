@@ -97,7 +97,7 @@ each thing happened.
 
 | Type | Value holds | Detail holds |
 |---|---|---|
-| `fine` | Amount | The offence |
+| `fine` | Amount | The offence, by name |
 | `tollgate` | Amount | |
 | `ferry` | Price | Source and target |
 | `train` | Price | Source and target |
@@ -105,6 +105,34 @@ each thing happened.
 | `collision` | Damage step, in percent | |
 | `rest` | Game minutes slept | |
 | `save_loaded` | Game minutes rewound | |
+
+The offence is stored under the SDK's own name: `Crash`, `Speeding`,
+`Speeding_camera`, `Red_signal`, `Wrong_way`, `No_lights`, `Avoid_sleeping`,
+`Avoid_weighting`, `Avoid_Inspection`, `Illegal_trailer`,
+`Illegal_Border_Crossing`, `Hard_Shoulder_Violation`, `Damaged_Vehicle_Usage` or
+`Generic`. A recording keeps it as the raw number the game publishes, so a replay
+names it on the way back in.
+
+## The coupled set
+
+Columns `trailer_chain_type`, `trailer_owned` and `trailer_units`.
+
+`trailer_chain_type` is the configuration under the game's own name, read from the
+leading unit: `single`, `double`, `rmdouble` or `triple`. It is the game's idea of
+it, so a three section car transporter reports `single`, being one articulated
+vehicle rather than a road train.
+
+`trailer_units` holds every coupled unit in hitching order, each with its
+identifier, name, plate, body type, whether it is a `trailer` or a `dolly`,
+whether it is owned, and the damage it took over that delivery measured from the
+condition it was hitched in.
+
+`trailer_owned` is true when any unit is the driver's own. Owned units are
+identified the way trucks are, as `vehicle.something`, and carry a name; a trailer
+handed over with the job is named for its type and has none.
+
+`trailer_damage_pct` stays the worst across the set, which is the set's condition
+and what the game itself shows.
 
 ## Job market
 

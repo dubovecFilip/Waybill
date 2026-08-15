@@ -332,6 +332,38 @@ written from scratch rather than adapted.
 - Shared feed
 - Leaderboards
 - Company statistics
+
+---
+
+# Where it stands
+
+This document is the vision it was written as. What follows is what has actually
+been built, so the two can be told apart.
+
+**Phase 1 is done.** Auto start, telemetry capture, delivery history, local
+database, logbook and event tracking all work, and have been driven for real
+rather than only tested.
+
+**Beyond it, already built:**
+
+- Every verdict explained in words on the delivery's own card, rather than a label
+- Per unit damage across doubles and triples, with dollies told apart from trailers
+- Which market a job came from, and whether the trailer was the driver's own
+- Discord Rich Presence, over the local pipe, no account and nothing sent anywhere
+- Export to CSV and JSON, backup and restore, TrucksBook import
+- Rebuild from the raw recordings, which is what makes every judgement above
+  revisable rather than frozen at whatever the tracker believed that day
+
+**Phase 2, partly.** Export tools are there. Achievements, session statistics and
+period comparisons are not.
+
+**Phase 3 has not started.** Route coordinates are recorded from day one, so the
+input for the map and the replay is accumulating; nothing draws it yet.
+
+**Phases 4 and 5 have not started**, and should not until the local side is worth
+sharing. The one piece of groundwork that exists is that a delivery now has a
+stable identity, so the same drive can be referred to across machines without
+inventing a server first.
 - Management tools
 
 ---

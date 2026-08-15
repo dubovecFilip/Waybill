@@ -7,7 +7,7 @@ local database and shows statistics. No account, no internet, no second program.
 A *waybill* is the document that travels with a shipment and carries the route,
 the cargo and the sender. That is exactly what this app keeps about every drive.
 
-![Application window](assets/screenshot.png)
+![The delivery history](assets/deliveries.png)
 
 ## Why it exists
 
@@ -72,6 +72,9 @@ Every state, flag and anomaly is listed with its meaning in
 * Detects the start and the end of a job with no manual input
 * Measures distance, fuel, speed, damage, fines, tolls and ferries
 * Records an event timeline, so the exact moment of a fine or a collision is kept
+* Keeps every unit of a double or a triple, each with the damage it took
+* Says which market a job came from, and whether the trailer was your own
+* Explains every verdict in words rather than leaving a label on the row
 * Stores route coordinates for a map view later on
 * Resumes an interrupted job after a crash or after quitting mid drive
 * Launches the game from the window, including a telemetry plugin check
@@ -121,19 +124,46 @@ Jobs are detected and saved without any input.
 Three pages down the left. *Deliveries* is the history, with search, a filter and
 the verdict on each drive.
 
-*Current job* is what the engine sees right now: the route, the cargo, and how far
-along the drive is.
+*Current job* is what the engine sees right now: the route, the cargo, how far
+along the drive is, and a log of what has happened, each entry with its figure,
+so a fine reads `Fine: 700 $ (crash)` rather than just `Fined`.
 
-![The current job page](assets/screenshot-current-job.png)
+Double clicking a delivery, or pressing Enter on it, opens its own card. It starts
+with why it got the verdict it did, then every figure the tracker kept.
 
-Double clicking a delivery opens its own card: every figure the tracker kept about
-that drive, and what happened along the way.
+![A delivery on its own card](assets/delivery-card.png)
 
-![A delivery on its own card](assets/screenshot-detail.png)
+*What happened along the way* slides the timeline out from the right. It is worth
+reading when something went wrong and worth nothing when nothing did, so it stays
+out of the way until asked for.
+
+![The timeline slid out](assets/delivery-timeline.png)
 
 *Statistics* is the whole logbook at a glance, on one screen with no scrolling.
 
-![The statistics page](assets/screenshot-statistics.png)
+![The statistics page](assets/statistics.png)
+
+## Doubles and triples
+
+The game shows one condition for the whole set however many units are behind the
+truck. Telemetry has them separately, and Waybill keeps each one.
+
+The *Trailer* line folds the set away: closed it says what the set is, opened it
+lists every unit in the order they are hitched, with its plate and the damage it
+took. A dolly is named as a dolly, so counting or averaging does not treat the
+converter as cargo capacity, and a trailer you own says so.
+
+![The coupled set, opened](assets/trailer-chain.png)
+
+The configuration comes from the game itself, which is where `single`, `double`,
+`rmdouble` and `triple` come from. It is worth knowing that the game reports its
+own idea of it: a three section car transporter calls itself `single`, because it
+is one articulated vehicle rather than a road train.
+
+Splitting the set apart is not only bookkeeping. On one triple the leading unit
+took fifteen times the body damage of the others while the wheels wore evenly
+across all three, which is the difference between clipping something and simply
+driving a long way. One figure for the set hides that entirely.
 
 ## Discord
 
@@ -188,6 +218,10 @@ rebuild or a `dotnet clean` cannot take any of it with it.
 Recordings are packed into `.gz` once a session ends, roughly 13x less space.
 They are never deleted: they are the input for `--rebuild` and `--replay`, both
 of which read them packed or unpacked.
+
+A delivery's identity is computed from the game, the moment the job was accepted
+and the offer itself, so the same drive always derives to the same delivery. That
+is what lets a rebuild update the history rather than having to delete it first.
 
 ## Units
 
@@ -261,7 +295,8 @@ archive/            retired, no longer used
 
 Working: automatic tracking and saving, launching the game from the app, resume
 after a restart, history with search and notes, statistics, event timeline,
-Discord Rich Presence, TrucksBook import, export and backups.
+per unit damage across a coupled set, Discord Rich Presence, TrucksBook import,
+export and backups.
 
 Missing: the map and route replay, although the coordinates are already being
 collected, plus achievements and whole session statistics. Details in
