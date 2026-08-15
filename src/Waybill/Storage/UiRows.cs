@@ -27,6 +27,9 @@ public class DeliveryRow {
     /// <summary>Driving style, derived from how the delivery was actually driven.</summary>
     public string Styl { get; set; } = "";
     public string Stav { get; set; } = "";
+    /// <summary>The stored flag identifiers. Not a column: it feeds the tooltip on
+    /// the state cell, so a row saying "review" can say why without being opened.</summary>
+    public string Flags { get; set; } = "";
     public string Poznamky { get; set; } = "";
 }
 
@@ -38,6 +41,9 @@ public class DeliveryDetail {
     public string Game = "", SourceCity = "", SourceCompany = "", DestinationCity = "", DestinationCompany = "";
     public string Cargo = "", Truck = "", Trailer = "";
     public double CargoMassKg, PlannedDistanceKm, DistanceKm;
+    /// <summary>The second, independent distance measurement. Only shown when the
+    /// two disagree, which is the whole reason a delivery gets flagged for it.</summary>
+    public double SimSpeedDistanceKm;
     public double? ReportedDistanceKm;
     public double Revenue, OfferedIncome, Penalty;
     public double FuelUsedL, TopSpeedKmh, SpeedingShare, HardSpeedingShare, CruiseShare;

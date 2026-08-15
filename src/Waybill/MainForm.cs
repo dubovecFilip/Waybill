@@ -923,12 +923,16 @@ public class MainForm : Form {
         _grid.CellEndEdit += OnGridCellEndEdit;
         _grid.CellFormatting -= OnGridCellFormatting;
         _grid.CellFormatting += OnGridCellFormatting;
+        _grid.CellToolTipTextNeeded -= OnGridToolTip;
+        _grid.CellToolTipTextNeeded += OnGridToolTip;
 
         // Opening a delivery is a double click: a single one is how a row gets
         // selected while walking the list, and it would fling the card open on every
         // press of an arrow key.
         _grid.CellDoubleClick -= OnGridDoubleClick;
         _grid.CellDoubleClick += OnGridDoubleClick;
+        _grid.KeyDown -= OnGridKeyDown;
+        _grid.KeyDown += OnGridKeyDown;
 
         var hint = new Label {
             Dock = DockStyle.Bottom, Height = 24, Text = Strings.T("list.openHint"),
@@ -947,7 +951,31 @@ public class MainForm : Form {
         if (_grid.Rows[e.RowIndex].DataBoundItem is DeliveryRow row) ShowDetail(row.Id);
     }
 
+    /// <summary>Enter opens the selected delivery too. Walking the list with the
+    /// arrow keys and then having to reach for the mouse to look at one is the kind
+    /// of thing that makes a list feel like a wall rather than an index.</summary>
+    private void OnGridKeyDown(object? sender, KeyEventArgs e) {
+        if (e.KeyCode != Keys.Enter) return;
+        if (_grid.CurrentRow?.DataBoundItem is not DeliveryRow row) return;
+        // Otherwise Enter also steps the selection down a row behind the card.
+        e.Handled = e.SuppressKeyPress = true;
+        ShowDetail(row.Id);
+    }
+
     private void OnFilterChanged(object? sender, EventArgs e) => ApplyFilter();
+
+    /// <summary>Hovering the verdict names what was found, so a row saying "review"
+    /// does not have to be opened just to learn whether it matters. The full
+    /// explanation stays on the card.</summary>
+    private void OnGridToolTip(object? sender, DataGridViewCellToolTipTextNeededEventArgs e) {
+        if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+        if (_grid.Columns[e.ColumnIndex].DataPropertyName != nameof(DeliveryRow.Stav)) return;
+        if (_grid.Rows[e.RowIndex].DataBoundItem is not DeliveryRow row || row.Flags.Length == 0) return;
+
+        e.ToolTipText = string.Join(Environment.NewLine, row.Flags
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(f => "•  " + Strings.T("flag." + f)));
+    }
 
     private void OnGridCellEndEdit(object? sender, DataGridViewCellEventArgs e) {
         if (_grid.Columns[e.ColumnIndex].DataPropertyName != nameof(DeliveryRow.Poznamky)) return;
@@ -1243,8 +1271,10 @@ public class MainForm : Form {
         };
         var when = new Label {
             Dock = DockStyle.Top, Height = 20, ForeColor = Muted, Font = new Font("Segoe UI", 8.5F),
-            Text = $"{d.StartedAt:dd.MM.yyyy HH:mm} → {d.FinishedAt:HH:mm} · {Label(d.Outcome)} · {Label(d.Status)}"
-                 + (d.Flags.Length > 0 ? $" · {d.Flags}" : ""),
+            // The flags used to be appended here as their raw stored names, which said
+            // nothing to anyone who had not read the source. They get a band of their
+            // own below, in words.
+            Text = $"{d.StartedAt:dd.MM.yyyy HH:mm} → {d.FinishedAt:HH:mm} · {Label(d.Outcome)} · {Label(d.Status)}",
         };
 
         head.Controls.Add(when);
@@ -1365,7 +1395,85 @@ public class MainForm : Form {
 
         body.Controls.Add(info);
         body.Controls.Add(side);
+        // Added last so it docks outermost and gets the full width. The verdict is
+        // the first thing anyone asks about a delivery, so it reads across the top
+        // rather than as one more row buried in the list of facts.
+        body.Controls.Add(VerdictBand(d, u));
         return body;
+    }
+
+    /// <summary>Why this delivery got the verdict it did, in words. Every flag is
+    /// stored, but stored as its identifier, and "distance_mismatch" on a row tells
+    /// the driver nothing about what to do with it.</summary>
+    private Control VerdictBand(DeliveryDetail d, Units u) {
+        var reasons = Reasons(d, u);
+        var note = d.Status switch {
+            "rejected" => Strings.T("verdict.rejectedNote"),
+            "review" => Strings.T("verdict.reviewNote"),
+            "imported" => Strings.T("verdict.imported"),
+            _ => Strings.T("verdict.accepted"),
+        };
+
+        var band = new Panel {
+            Dock = DockStyle.Top, BackColor = Surface, Padding = new Padding(0, 0, 0, 10),
+            Height = 34 + reasons.Count * 46 + 32,
+        };
+
+        var footer = new Label {
+            Dock = DockStyle.Bottom, Height = 32, Text = note, ForeColor = Muted,
+            Padding = new Padding(16, 0, 16, 0), TextAlign = ContentAlignment.MiddleLeft,
+        };
+
+        // Docked children stack in reverse, so the reasons go in backwards.
+        for (var i = reasons.Count - 1; i >= 0; i--) {
+            band.Controls.Add(ReasonLine(reasons[i].Title, reasons[i].Why, i % 2 == 1));
+        }
+        band.Controls.Add(CardHeading(Strings.T("verdict.heading")));
+        band.Controls.Add(footer);
+        return band;
+    }
+
+    /// <summary>One reason: what was noticed, and underneath it what that means. The
+    /// figures behind a measurement disagreement are appended, because "the two
+    /// distances disagree" invites the obvious next question.</summary>
+    private static Control ReasonLine(string title, string why, bool shaded) {
+        var line = new Panel {
+            Dock = DockStyle.Top, Height = 46, BackColor = shaded ? Raised : Surface,
+            Padding = new Padding(16, 5, 16, 5),
+        };
+        line.Controls.Add(new Label {
+            Dock = DockStyle.Fill, Text = why, ForeColor = Muted,
+            Font = new Font("Segoe UI", 8.5F), AutoEllipsis = true,
+        });
+        line.Controls.Add(new Label {
+            Dock = DockStyle.Top, Height = 19, Text = title, ForeColor = Ink,
+            Font = new Font("Segoe UI", 9F, FontStyle.Bold),
+        });
+        // A marker down the side, so the reasons read as a set at a glance rather
+        // than as more prose.
+        line.Controls.Add(new Panel { Dock = DockStyle.Left, Width = 3, BackColor = Accent, Margin = new Padding(0) });
+        return line;
+    }
+
+    private static List<(string Title, string Why)> Reasons(DeliveryDetail d, Units u) {
+        var reasons = new List<(string, string)>();
+
+        foreach (var flag in d.Flags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) {
+            var why = Strings.T("flag." + flag + ".why");
+            // The measurements themselves, for the flags that are about two numbers
+            // not agreeing. Without them the explanation is unanswerable.
+            why += flag switch {
+                "implausible_top_speed" => $"  ({u.FormatSpeed(d.TopSpeedKmh)})",
+                "distance_too_short" => $"  ({u.FormatDistance(d.DistanceKm)})",
+                "distance_inconsistent" => $"  ({u.FormatDistance(d.DistanceKm)} · {u.FormatDistance(d.SimSpeedDistanceKm)})",
+                "distance_mismatch" when d.ReportedDistanceKm is > 0
+                    => $"  ({u.FormatDistance(d.DistanceKm)} · {u.FormatDistance(d.ReportedDistanceKm.Value)})",
+                _ => "",
+            };
+            reasons.Add((Strings.T("flag." + flag), why));
+        }
+
+        return reasons;
     }
 
     /// <summary>One event as a line, not a table row: the time set away on the left,
@@ -1421,6 +1529,7 @@ public class MainForm : Form {
             nameof(DeliveryRow.Id), nameof(DeliveryRow.DistanceKm), nameof(DeliveryRow.Zarobok),
             nameof(DeliveryRow.Hra), nameof(DeliveryRow.Tahac), nameof(DeliveryRow.Pokuty),
             nameof(DeliveryRow.Kolizie), nameof(DeliveryRow.Styl), nameof(DeliveryRow.Poznamky),
+            nameof(DeliveryRow.Flags),
         }) {
             if (_grid.Columns[hidden] is { } col) col.Visible = false;
         }

@@ -434,7 +434,8 @@ public class DeliveryStore : IDisposable {
                             ELSE -COALESCE(penalty, 0) END,
                        fines_count, collisions,
                        validation_status, COALESCE(notes, ''), COALESCE(game, ''),
-                       COALESCE(outcome, ''), COALESCE(driving_style, '')
+                       COALESCE(outcome, ''), COALESCE(driving_style, ''),
+                       COALESCE(validation_flags, '')
                 FROM deliveries
                 ORDER BY started_at_ms DESC
                 LIMIT $limit;
@@ -464,6 +465,7 @@ public class DeliveryStore : IDisposable {
                     Vysledok = reader.GetString(13),
                     Styl = reader.GetString(14),
                     Stav = reader.GetString(10),
+                    Flags = reader.GetString(15),
                     Poznamky = reader.GetString(11),
                 });
             }
@@ -538,7 +540,11 @@ public class DeliveryStore : IDisposable {
                        driving_game_min, real_duration_ms, rest_stops, rest_minutes,
                        fines_count, fines_total, collisions, tolls_paid, ferries_used, refuels,
                        outcome, validation_status, COALESCE(validation_flags, ''),
-                       COALESCE(driving_style, ''), COALESCE(notes, ''), COALESCE(source, '')
+                       COALESCE(driving_style, ''), COALESCE(notes, ''), COALESCE(source, ''),
+                       -- Appended rather than slotted in beside the other distances:
+                       -- the reader below indexes by position, so a column added in
+                       -- the middle silently shifts every one after it.
+                       sim_speed_distance_km
                 FROM deliveries WHERE id = $id;
                 """;
             cmd.Parameters.AddWithValue("$id", id);
@@ -572,6 +578,7 @@ public class DeliveryStore : IDisposable {
                 Status = r.IsDBNull(36) ? "" : r.GetString(36),
                 Flags = r.GetString(37), Style = r.GetString(38),
                 Notes = r.GetString(39), Source = r.GetString(40),
+                SimSpeedDistanceKm = Num(41),
             };
         }
     }

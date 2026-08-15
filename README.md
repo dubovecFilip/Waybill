@@ -41,6 +41,11 @@ and that is all it does: the delivery keeps its distance, its payout and its
 place in the statistics, which count every row whatever its state. Reaching
 review costs nothing.
 
+A verdict is never left unexplained. Hovering it in the list names what was
+found, and the delivery's own card opens with *Why this verdict*: each flag in
+words, with the figures behind it where two measurements disagreed, and a line
+saying plainly that none of it refuses the delivery.
+
 What lands in review is, for instance, a job that stopped existing without
 ending, one abandoned past its window, a top speed no truck reaches, or the two
 independent distance measurements disagreeing with each other or with the figure
