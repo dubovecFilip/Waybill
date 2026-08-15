@@ -334,10 +334,16 @@ public class MainForm : Form {
         _discord = null;
 
         if (!_settings.DiscordPresence) return;
-        if (string.IsNullOrWhiteSpace(_settings.DiscordAppId)) return;
+        if (string.IsNullOrWhiteSpace(_settings.DiscordAppId)) {
+            AddLog(Strings.T("discord.needsAppId"));
+            return;
+        }
 
         _discord = new DiscordPresence(_settings.DiscordAppId!);
         _discord.Message += m => BeginInvoke(() => AddLog(m));
+        // Said up front, so the log shows the feature is on and trying rather than
+        // saying nothing at all until something goes wrong.
+        AddLog(Strings.T("discord.waiting"));
     }
 
     private ToolStripMenuItem MenuAction(string label, Action action) {

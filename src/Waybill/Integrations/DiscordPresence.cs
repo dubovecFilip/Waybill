@@ -40,6 +40,8 @@ public sealed class DiscordPresence : IDisposable {
     // rest, so there is nothing to gain from sending more often.
     private static readonly TimeSpan SendEvery = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan RetryEvery = TimeSpan.FromSeconds(20);
+    // Generous: a busy Discord answering slowly must not read as a refusal.
+    private static readonly TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(5);
     private const int PipesToTry = 10;
     private const int MaxTextLength = 128;
 
@@ -55,11 +57,19 @@ public sealed class DiscordPresence : IDisposable {
     private volatile bool _broken;
     private DateTime _lastSend = DateTime.MinValue;
     private DateTime _lastTry = DateTime.MinValue;
+    // Said once, not every twenty seconds. Silence was the worst part of this:
+    // with nothing to show on the profile and nothing in the log, there was no way
+    // to tell a wrong application ID from Discord simply not being open.
+    private bool _saidUnreachable;
 
     /// <summary>Log line worth showing the user, in whatever language is active.</summary>
     public event Action<string>? Message;
 
     public bool Connected => _pipe != null && !_broken;
+
+    /// <summary>Whether the last attempt found a Discord pipe at all. Separates
+    /// "Discord is not running" from "Discord is running and would not have us".</summary>
+    public bool SawPipe { get; private set; }
 
     public DiscordPresence(string appId) {
         _appId = appId;
@@ -105,7 +115,14 @@ public sealed class DiscordPresence : IDisposable {
             if (want == null) return;
             if (DateTime.UtcNow - _lastTry < RetryEvery) return;
             _lastTry = DateTime.UtcNow;
-            if (!Connect()) return;
+            if (!Connect()) {
+                if (!_saidUnreachable) {
+                    _saidUnreachable = true;
+                    Message?.Invoke(Strings.T(SawPipe ? "discord.refused" : "discord.unreachable"));
+                }
+                return;
+            }
+            _saidUnreachable = false;
         }
 
         var key = want?.Key ?? "";
@@ -120,6 +137,7 @@ public sealed class DiscordPresence : IDisposable {
     /// <summary>Discord numbers its pipes when several clients (stable, PTB, canary)
     /// run at once, so all ten are tried before giving up.</summary>
     private bool Connect() {
+        SawPipe = false;
         for (var i = 0; i < PipesToTry; i++) {
             var pipe = new NamedPipeClientStream(".", $"discord-ipc-{i}", PipeDirection.InOut, PipeOptions.Asynchronous);
             try {
@@ -129,11 +147,16 @@ public sealed class DiscordPresence : IDisposable {
                 continue;
             }
 
+            // Discord is there. Whatever goes wrong from here is about this
+            // application rather than about Discord being closed, and the two
+            // deserve different things said about them.
+            SawPipe = true;
+            var attempt = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
             try {
                 WriteFrame(pipe, 0, JsonConvert.SerializeObject(new { v = 1, client_id = _appId }));
                 // A wrong application ID gets the connection closed instead of a
                 // READY, which shows up here as no readable reply.
-                if (ReadFrame(pipe, TimeSpan.FromSeconds(2), _stop.Token) == null) throw new IOException("no handshake reply");
+                if (ReadFrame(pipe, HandshakeTimeout, attempt.Token) == null) throw new IOException("no handshake reply");
 
                 _pipe = pipe;
                 _broken = false;
@@ -143,7 +166,12 @@ public sealed class DiscordPresence : IDisposable {
                 Message?.Invoke(Strings.T("discord.connected"));
                 return true;
             } catch {
+                // Cancel first: a read abandoned on timeout is still outstanding on
+                // the handle, and closing a pipe with one pending waits for it.
+                attempt.Cancel();
                 pipe.Dispose();
+            } finally {
+                attempt.Dispose();
             }
         }
         return false;
