@@ -20,6 +20,15 @@ public class Settings {
     public string? AtsPath { get; set; }
     public string? Ets2Path { get; set; }
 
+    /// <summary>Show the current delivery on the Discord profile. On by default,
+    /// but it only does anything once <see cref="DiscordAppId"/> is filled in, so
+    /// nothing is published without the user having set it up deliberately.</summary>
+    public bool DiscordPresence { get; set; } = true;
+
+    /// <summary>Discord application ID from the developer portal. Public by design,
+    /// not a secret: it only tells Discord whose icons and name to show.</summary>
+    public string? DiscordAppId { get; set; }
+
     public string? PathFor(SimGame game) => game == SimGame.Ats ? AtsPath : Ets2Path;
 
     public void SetPathFor(SimGame game, string? path) {

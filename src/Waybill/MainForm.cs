@@ -1,6 +1,7 @@
 using System.Data;
 using System.Diagnostics;
 using System.Windows.Forms;
+using Waybill.Integrations;
 using Waybill.Storage;
 using Waybill.Tracking;
 
@@ -56,6 +57,7 @@ public class MainForm : Form {
     private readonly DeliveryStore _store = new();
     private readonly Settings _settings = Settings.Load();
     private TrackerEngine? _engine;
+    private DiscordPresence? _discord;
 
     private readonly Label _status = new();
     private readonly Label _jobLine = new();
@@ -110,7 +112,10 @@ public class MainForm : Form {
         };
         // Rebuilt controls are new windows, so they need asking again.
         Shown += (_, _) => UseDarkScrollbars(this);
-        FormClosing += (_, _) => _engine?.Dispose();
+        FormClosing += (_, _) => {
+            _engine?.Dispose();
+            _discord?.Dispose();
+        };
 
         var timer = new System.Windows.Forms.Timer { Interval = 500 };
         timer.Tick += (_, _) => RefreshLive();
@@ -291,7 +296,48 @@ public class MainForm : Form {
         var settings = new ToolStripMenuItem(Strings.T("menu.settings"));
         settings.DropDownItems.Add(BuildUnitsMenu());
         settings.DropDownItems.Add(BuildLanguageMenu());
+        settings.DropDownItems.Add(BuildDiscordMenu());
         return settings;
+    }
+
+    private ToolStripMenuItem BuildDiscordMenu() {
+        var discord = new ToolStripMenuItem(Strings.T("menu.discord"));
+
+        var show = new ToolStripMenuItem(Strings.T("menu.discordPresence")) { Checked = _settings.DiscordPresence };
+        show.Click += (_, _) => {
+            _settings.DiscordPresence = !_settings.DiscordPresence;
+            _settings.Save();
+            show.Checked = _settings.DiscordPresence;
+            if (_settings.DiscordPresence && string.IsNullOrWhiteSpace(_settings.DiscordAppId)) {
+                AddLog(Strings.T("discord.needsAppId"));
+            }
+            StartDiscord();
+        };
+        discord.DropDownItems.Add(show);
+
+        discord.DropDownItems.Add(MenuAction(Strings.T("menu.discordAppId"), () => {
+            var entered = Prompt(Strings.T("discord.appIdTitle"), Strings.T("discord.appIdPrompt"), _settings.DiscordAppId ?? "");
+            if (entered == null) return;
+            _settings.DiscordAppId = entered.Trim() is { Length: > 0 } id ? id : null;
+            _settings.Save();
+            StartDiscord();
+        }));
+
+        return discord;
+    }
+
+    /// <summary>Rebuilt from scratch on every change rather than reconfigured: the
+    /// application ID is fixed for the lifetime of a connection, so switching it
+    /// means a new one anyway.</summary>
+    private void StartDiscord() {
+        _discord?.Dispose();
+        _discord = null;
+
+        if (!_settings.DiscordPresence) return;
+        if (string.IsNullOrWhiteSpace(_settings.DiscordAppId)) return;
+
+        _discord = new DiscordPresence(_settings.DiscordAppId!);
+        _discord.Message += m => BeginInvoke(() => AddLog(m));
     }
 
     private ToolStripMenuItem MenuAction(string label, Action action) {
@@ -683,6 +729,7 @@ public class MainForm : Form {
 
         ReloadHistory();
         ReloadStats();
+        StartDiscord();
     }
 
     private void AddLog(string text) {
@@ -704,6 +751,11 @@ public class MainForm : Form {
             _progressText.Text = "";
             _progressFill.Width = 0;
             if (_progressRow != null) _progressRow.Visible = false;
+            // Between jobs the profile says so; with the game closed it says nothing
+            // at all, rather than leaving Waybill sitting there all evening.
+            _discord?.Update(_engine.Connected
+                ? new DiscordPresence.Activity { Details = Strings.T("discord.idle"), LargeImage = "waybill", LargeText = "Waybill" }
+                : null);
             return;
         }
 
@@ -724,6 +776,73 @@ public class MainForm : Form {
         if (_progressRow != null) _progressRow.Visible = true;
         _progressFill.Width = (int)(_progressTrack.ClientSize.Width * ratio);
         _progressText.Text = $"{u.Distance(driven):0.0} / {u.Distance(planned):0} {u.DistanceUnit}   ·   {ratio * 100:0} %";
+
+        // The same three numbers the page shows, in one line each for Discord. The
+        // start time is sent raw so Discord runs the elapsed counter itself, which
+        // keeps ticking between the updates it only accepts every 15 seconds.
+        var game = state?.Game ?? "";
+        _discord?.Update(new DiscordPresence.Activity {
+            Details = $"{job.SourceCity} → {job.DestinationCity}",
+            State = planned > 0
+                ? $"{job.Cargo} · {u.Distance(driven):0} / {u.Distance(planned):0} {u.DistanceUnit} ({ratio * 100:0} %)"
+                : job.Cargo,
+            StartUnix = state != null ? state.StartedAtMs / 1000 : null,
+            LargeImage = game.ToLowerInvariant() is "ats" or "ets2" ? game.ToLowerInvariant() : "waybill",
+            LargeText = game == "Ats" ? GameLauncher.DisplayName(SimGame.Ats)
+                      : game == "Ets2" ? GameLauncher.DisplayName(SimGame.Ets2) : "Waybill",
+            SmallImage = "waybill",
+            SmallText = "Waybill",
+        });
+    }
+
+    /// <summary>A one line text prompt, because WinForms has no InputBox and the
+    /// application ID has to come from somewhere. Returns null when cancelled,
+    /// which is different from an empty string meaning "clear it".</summary>
+    private string? Prompt(string title, string message, string value) {
+        using var dialog = new Form {
+            Text = title,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            StartPosition = FormStartPosition.CenterParent,
+            MinimizeBox = false,
+            MaximizeBox = false,
+            ClientSize = new Size(420, 190),
+            BackColor = Surface,
+            ForeColor = Ink,
+            Font = Font,
+        };
+
+        var label = new Label { Text = message, Dock = DockStyle.Top, Height = 90, ForeColor = Muted };
+        var input = new TextBox {
+            Text = value, Dock = DockStyle.Top, BorderStyle = BorderStyle.None,
+            BackColor = Raised, ForeColor = Ink, Font = new Font("Consolas", 10F),
+        };
+        // A borderless TextBox is exactly as tall as its text, so the room to breathe
+        // has to come from a panel around it, as with the search box.
+        var inputBox = new Panel { Dock = DockStyle.Top, Height = 30, BackColor = Raised, Padding = new Padding(10, 6, 10, 6) };
+        inputBox.Controls.Add(input);
+
+        var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, Width = 90, Height = 30, FlatStyle = FlatStyle.Flat, BackColor = Raised, ForeColor = Ink };
+        var cancel = new Button { Text = Strings.T("button.cancel"), DialogResult = DialogResult.Cancel, Width = 90, Height = 30, FlatStyle = FlatStyle.Flat, BackColor = Raised, ForeColor = Ink };
+        ok.FlatAppearance.BorderColor = Line;
+        cancel.FlatAppearance.BorderColor = Line;
+
+        var buttons = new FlowLayoutPanel {
+            Dock = DockStyle.Bottom, Height = 44, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 6, 0, 0),
+        };
+        buttons.Controls.Add(ok);
+        buttons.Controls.Add(cancel);
+
+        var body = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16, 14, 16, 8) };
+        body.Controls.Add(inputBox);
+        body.Controls.Add(label);
+
+        dialog.Controls.Add(body);
+        dialog.Controls.Add(buttons);
+        dialog.AcceptButton = ok;
+        dialog.CancelButton = cancel;
+        dialog.Load += (_, _) => UseDarkTitleBar(dialog);
+
+        return dialog.ShowDialog(this) == DialogResult.OK ? input.Text : null;
     }
 
     // ---------- tabs ----------
@@ -977,10 +1096,12 @@ public class MainForm : Form {
     [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
-    private void UseDarkTitleBar() {
+    private void UseDarkTitleBar() => UseDarkTitleBar(this);
+
+    private static void UseDarkTitleBar(Form form) {
         try {
             var on = 1;
-            DwmSetWindowAttribute(Handle, 20, ref on, sizeof(int));
+            DwmSetWindowAttribute(form.Handle, 20, ref on, sizeof(int));
         } catch { /* an older Windows just keeps the light title bar */ }
     }
 
