@@ -6,8 +6,9 @@
 | `logo.psd` | Layered source file for editing the logo. |
 | `deliveries.png` | The delivery history, used at the top of the README. |
 | `delivery-card.png` | One delivery on its own card. |
-| `delivery-timeline.png` | The same card with the timeline slid out. |
+| `delivery-route.png` | The same card with the route and timeline slid out. |
 | `trailer-chain.png` | A triple with its units and dollies opened out. |
+| `map.png` | The map page, with one route lit under the pointer. |
 | `statistics.png` | The statistics page. |
 
 Screenshots are taken at 1180x760, which is roughly the window's default size and
@@ -21,6 +22,11 @@ figures in them are ordinary rather than tidy.
 There is no shot of the *Current job* page. It only has anything to show while a
 delivery is actually running, and one taken with the game closed says nothing but
 "waiting for the game", so it is better left out than faked.
+
+There is none of the map at full screen either. It fills whatever monitor it is
+opened on, so the shot would be the size of that monitor rather than the size
+every other picture here is, and it shows the same map as `map.png` with more
+room. The feature is described in the README instead.
 
 The application icon `src/Waybill/waybill.ico` is generated from `logo.png` and
 contains the 16, 32, 48, 64, 128 and 256 px sizes, so Windows can pick whichever

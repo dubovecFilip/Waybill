@@ -75,7 +75,8 @@ Every state, flag and anomaly is listed with its meaning in
 * Keeps every unit of a double or a triple, each with the damage it took
 * Says which market a job came from, and whether the trailer was your own
 * Explains every verdict in words rather than leaving a label on the row
-* Stores route coordinates for a map view later on
+* Draws where each delivery went, with every fine and collision marked on it
+* Draws the whole history as one map, built entirely from your own drives
 * Resumes an interrupted job after a crash or after quitting mid drive
 * Launches the game from the window, including a telemetry plugin check
 * Shows the current delivery on Discord, over the local pipe, with no account
@@ -121,7 +122,7 @@ live in `%LOCALAPPDATA%\Waybill\`, independent of where the exe sits.
 Start order does not matter, the app connects to the game as soon as it finds it.
 Jobs are detected and saved without any input.
 
-Three pages down the left. *Deliveries* is the history, with search, a filter and
+Four pages down the left. *Deliveries* is the history, with search, a filter and
 the verdict on each drive.
 
 *Current job* is what the engine sees right now: the route, the cargo, how far
@@ -133,11 +134,11 @@ with why it got the verdict it did, then every figure the tracker kept.
 
 ![A delivery on its own card](assets/delivery-card.png)
 
-*What happened along the way* slides the timeline out from the right. It is worth
-reading when something went wrong and worth nothing when nothing did, so it stays
-out of the way until asked for.
+*What happened along the way* slides a column out from the right: the route on
+top, the timeline underneath it. Both are worth reading when something went wrong
+and worth nothing when nothing did, so they stay out of the way until asked for.
 
-![The timeline slid out](assets/delivery-timeline.png)
+![The route and the timeline](assets/delivery-route.png)
 
 *Statistics* is the whole logbook at a glance, on one screen with no scrolling.
 
@@ -164,6 +165,59 @@ Splitting the set apart is not only bookkeeping. On one triple the leading unit
 took fifteen times the body damage of the others while the wheels wore evenly
 across all three, which is the difference between clipping something and simply
 driving a long way. One figure for the set hides that entirely.
+
+## The map
+
+Position has been recorded once a second since the first delivery, so every drive
+already had a shape long before anything drew one.
+
+A delivery's card shows its own route, coloured by speed, over every other route
+the profile has driven. Fines, collisions, refuels, rests and the moment the
+trailer was hitched are marked on it, each tied to the position the truck was in
+when it happened. The *Map* page shows the same thing without a delivery singled
+out: every drive of one game at once, where pointing at a route names it and
+clicking one opens its card. It is a second way into the history, since the list
+answers when something was driven and this answers where.
+
+![The map of everywhere driven](assets/map.png)
+
+Wheel zooms, dragging moves, double clicking fits. Three buttons sit over the top
+right: what to draw, fit the view, and full screen.
+
+### There is no real map underneath, on purpose
+
+The game's world is not a scaled United States. Measured across nineteen
+deliveries, some pairs of cities sit thirteen times closer than reality and others
+thirty, which is a difference of more than twice within the same map. SCS did not
+shrink a country; they laid out a road network that plays well and put the cities
+where that worked.
+
+So no projection fits. Fitting the closest one anyway leaves cities about thirty
+kilometres out under cross validation, and neither a quadratic fit nor a spline
+through the cities as control points does better. Thirty kilometres is roughly
+twenty minutes of driving: a state border drawn that far off would put the truck
+in the wrong state, which is exactly the sort of small lie this project tries not
+to tell.
+
+What is drawn instead comes entirely from the driver's own data, where every
+position is exactly where the game put it:
+
+* **The routes already driven** are the background. They are the one backdrop that
+  cannot be wrong, and the picture fills in as more gets driven.
+* **Cities are learned** from the jobs themselves. Each names the city it loaded
+  in and the one it unloaded in, and the recording says where the truck was. A dot
+  is really the middle of the depots used there, so a city seen once is one depot
+  wearing the city's name.
+
+Nothing on the map ever reports a distance, and it never will. The length of a
+line on it is not kilometres; the odometer answers that.
+
+### What is not drawn as driving
+
+Two stretches are deliberately shown as a dashed break rather than a line. The
+first point of a job is where the driver stood when the offer was accepted, which
+on a quick job is another city entirely, and a ferry, a train or loading an
+earlier save moves the truck mid drive. None of them were driven along.
 
 ## Discord
 
@@ -283,6 +337,7 @@ src/Waybill/
 ├── Integrations/   Discord Rich Presence over the local pipe
 ├── SCSSdkClient/   vendored C# SDK client (MIT, with local fixes)
 ├── GameLauncher.cs finding and launching the games through Steam
+├── RouteView.cs    drawing routes, cities and event pins
 ├── MainForm.cs     the window
 └── Program.cs      CLI and entry point
 assets/             logo and icon source
@@ -295,12 +350,12 @@ archive/            retired, no longer used
 
 Working: automatic tracking and saving, launching the game from the app, resume
 after a restart, history with search and notes, statistics, event timeline,
-per unit damage across a coupled set, Discord Rich Presence, TrucksBook import,
-export and backups.
+per unit damage across a coupled set, the route map with event pins and the map
+of the whole history, Discord Rich Presence, TrucksBook import, export and
+backups.
 
-Missing: the map and route replay, although the coordinates are already being
-collected, plus achievements and whole session statistics. Details in
-[`docs/roadmap.md`](docs/roadmap.md).
+Missing: replaying a drive along its route, an elevation profile, achievements
+and whole session statistics. Details in [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Licence
 

@@ -317,9 +317,18 @@ Add comparison dashboards:
 - Replay
 - Filters
 
-Licensing note: existing map projects such as TruckNav-Sim are GPL 3.0, which
-would force GPL on all of Waybill. Waybill is MIT, so map rendering has to be
-written from scratch rather than adapted.
+Licensing note: the fullest map projects are GPL 3.0, including TruckNav-Sim and
+truckermudgeon/maps, which would force GPL on all of Waybill. Waybill is MIT, so
+route drawing was written from scratch instead.
+
+For city positions there is one permissive option worth knowing about:
+dariowouters/ts-map is MIT, is written in C#, and reads the player's own installed
+game rather than shipping extracted data. That is the right shape for this
+project, since the result then matches the player's own DLC and nothing derived
+from SCS's files ends up in this repository. Two older sources are not usable:
+thezir.com is from 2017 with all rights reserved, and Koenvh1's premade files are
+MIT but their ATS data stops at game version 1.5, covering California and Nevada
+only.
 
 ## Phase 4 — Cloud sync
 
@@ -348,6 +357,8 @@ rather than only tested.
 
 - Every verdict explained in words on the delivery's own card, rather than a label
 - Per unit damage across doubles and triples, with dollies told apart from trailers
+- The route of each delivery drawn, with its fines and collisions marked on it
+- A map of the whole history, built from the driver's own drives and nothing else
 - Which market a job came from, and whether the trailer was the driver's own
 - Discord Rich Presence, over the local pipe, no account and nothing sent anywhere
 - Export to CSV and JSON, backup and restore, TrucksBook import
@@ -357,14 +368,25 @@ rather than only tested.
 **Phase 2, partly.** Export tools are there. Achievements, session statistics and
 period comparisons are not.
 
-**Phase 3 has not started.** Route coordinates are recorded from day one, so the
-input for the map and the replay is accumulating; nothing draws it yet.
+**Phase 3, mostly.** The map is drawn: a delivery's own route with its events
+marked on it, and a page showing every drive of one game at once, where clicking a
+route opens it. Route replay along the line is not built, and neither is the
+elevation profile, though altitude has been recorded all along.
+
+The map turned out to need a decision this document did not anticipate. The game's
+world is not a scaled country: measured over nineteen deliveries some pairs of
+cities sit thirteen times closer than reality and others thirty, so no projection
+lines it up with real geography, and the closest fit leaves cities about thirty
+kilometres out. Rather than draw borders in the wrong place, the map is built
+entirely from the driver's own data. The routes already driven are the background
+and the cities are learned from the jobs, which means the picture fills in as more
+gets driven. GPX and KML export are still open, and would need that same decision
+faced again, since both formats want real coordinates.
 
 **Phases 4 and 5 have not started**, and should not until the local side is worth
 sharing. The one piece of groundwork that exists is that a delivery now has a
 stable identity, so the same drive can be referred to across machines without
 inventing a server first.
-- Management tools
 
 ---
 

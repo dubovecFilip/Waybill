@@ -105,6 +105,15 @@ each thing happened.
 | `collision` | Damage step, in percent | |
 | `rest` | Game minutes slept | |
 | `save_loaded` | Game minutes rewound | |
+| `trailer_coupled` | | |
+
+`trailer_coupled` is the moment the load was hitched up, which is not the moment
+the job began. A World of Trucks contract spawns its trailer when the offer is
+accepted and starts counting kilometres from wherever the driver was standing, so
+the job's own starting position can be another city. This is the one instant that
+is the pickup whatever kind of job it is, and it is what the map anchors a city
+to. A job that was already coupled when tracking began, which is how a quick job
+starts, records nothing here.
 
 The offence is stored under the SDK's own name: `Crash`, `Speeding`,
 `Speeding_camera`, `Red_signal`, `Wrong_way`, `No_lights`, `Avoid_sleeping`,
