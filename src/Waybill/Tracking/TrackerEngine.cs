@@ -15,11 +15,56 @@ namespace Waybill.Tracking;
 /// engine drives both the window and the console output.
 /// </summary>
 public class TrackerEngine : IDisposable {
-    private readonly JsonSerializerSettings _jsonSettings = new() {
+    private static JsonSerializerSettings Recording(bool keepEvents) => new() {
         ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
         NullValueHandling = NullValueHandling.Ignore,
         Formatting = Formatting.None,
+        ContractResolver = new RecordingContract(keepEvents),
     };
+
+    // Ordinary snapshots leave the event block out; the extra line written when an
+    // event fires keeps it. See RecordingContract for why.
+    private readonly JsonSerializerSettings _tickJson = Recording(keepEvents: false);
+    private readonly JsonSerializerSettings _eventJson = Recording(keepEvents: true);
+
+    /// <summary>
+    /// Decides what a recorded line leaves out. Nothing dropped here is information:
+    /// every one of these is either computed from a value that stays, or a copy of
+    /// one. A recording is the evidence a delivery can be recomputed from, so
+    /// anything the game actually measured is kept even when nothing reads it yet.
+    /// </summary>
+    private sealed class RecordingContract : Newtonsoft.Json.Serialization.DefaultContractResolver {
+        private readonly bool _keepEvents;
+
+        public RecordingContract(bool keepEvents) => _keepEvents = keepEvents;
+
+        protected override Newtonsoft.Json.Serialization.JsonProperty CreateProperty(
+            System.Reflection.MemberInfo member, MemberSerialization serialization) {
+            var property = base.CreateProperty(member, serialization);
+            var owner = member.DeclaringType;
+            var name = member.Name;
+
+            var derived =
+                // A speed is stored three times over: m/s, and that times 3.6 and
+                // times 2.25. Km/h is the one everything reads, and the other two
+                // follow from it.
+                (owner == typeof(SCSTelemetry.Movement) && name is "Value" or "Mph")
+                // Date is the same count of game minutes written out as a date.
+                || (owner == typeof(SCSTelemetry.Time) && name == "Date")
+                // Cabin camera geometry: fixed offsets, and one point expressed in
+                // four different spaces. The world position is the one the tracker
+                // reads and the only one that cannot be derived from the others.
+                || (owner == typeof(SCSTelemetry.PositionData) && name != "HeadPositionInWorldSpace")
+                // Event payloads hold their last value indefinitely, so on an
+                // ordinary tick they describe something that already happened. Only
+                // the line tagged with the event is believed, and that line keeps
+                // them; on every other line they are a stale copy.
+                || (!_keepEvents && owner == typeof(SCSTelemetry) && name == "GamePlay");
+
+            if (derived) property.ShouldSerialize = _ => false;
+            return property;
+        }
+    }
 
     private readonly object _gate = new();
     private readonly JobTracker _tracker = new();
@@ -166,7 +211,8 @@ public class TrackerEngine : IDisposable {
             ProcessForTracking(kind, data, nowMs);
 
             Trim(data);
-            var line = JsonConvert.SerializeObject(new { t = nowMs, kind, d = data }, _jsonSettings);
+            var line = JsonConvert.SerializeObject(new { t = nowMs, kind, d = data },
+                kind == "tick" ? _tickJson : _eventJson);
             // Handed to the scribe rather than written here. Serialising stays on this
             // thread because the object is about to be reused by the next poll, and it
             // costs a fraction of what waiting for the disk did.
