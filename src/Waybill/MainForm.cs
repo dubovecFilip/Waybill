@@ -1391,20 +1391,33 @@ public class MainForm : Form {
     private Control DetailHeader(DeliveryDetail d, Units u) {
         var head = new Panel { Dock = DockStyle.Top, Height = 108, BackColor = Surface, Padding = new Padding(24, 16, 24, 12) };
 
-        var back = new Button {
-            Text = Strings.T("detail.back"), Dock = DockStyle.Right, Width = 130,
-            FlatStyle = FlatStyle.Flat, BackColor = Raised, ForeColor = Ink, Cursor = Cursors.Hand,
-        };
-        back.FlatAppearance.BorderColor = Line;
+        // Quiet and small. These are ways out of the card, not the point of it, and
+        // docking them filled the header's whole height with two slabs.
+        Button Action(string text, int width) {
+            var b = new Button {
+                Text = text, Width = width, Height = 26, AutoSize = false,
+                FlatStyle = FlatStyle.Flat, BackColor = Surface, ForeColor = Muted,
+                Font = new Font("Segoe UI", 8.5F), Cursor = Cursors.Hand,
+                Margin = new Padding(8, 0, 0, 0), TextAlign = ContentAlignment.MiddleCenter,
+            };
+            b.FlatAppearance.BorderColor = Line;
+            b.FlatAppearance.MouseOverBackColor = Raised;
+            return b;
+        }
+
+        var back = Action(Strings.T("detail.back"), 90);
         back.Click += (_, _) => ShowPage("deliveries");
 
-        var timelineButton = new Button {
-            Text = Strings.T("detail.timelineOpen") + "   ◂", Dock = DockStyle.Right, Width = 240,
-            FlatStyle = FlatStyle.Flat, BackColor = Raised, ForeColor = Ink, Cursor = Cursors.Hand,
-            Margin = new Padding(0, 0, 8, 0),
-        };
-        timelineButton.FlatAppearance.BorderColor = Line;
+        var timelineButton = Action(Strings.T("detail.timelineOpen") + "  ▸", 210);
         timelineButton.Click += (_, _) => ToggleTimeline(timelineButton);
+
+        // Right to left, so the first one added sits furthest right.
+        var actions = new FlowLayoutPanel {
+            Dock = DockStyle.Right, FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false, AutoSize = true, Padding = new Padding(0, 2, 0, 0),
+        };
+        actions.Controls.Add(back);
+        actions.Controls.Add(timelineButton);
 
         var route = new Label {
             Dock = DockStyle.Top, Height = 36, Text = $"{d.SourceCity}  →  {d.DestinationCity}",
@@ -1422,20 +1435,24 @@ public class MainForm : Form {
             Dock = DockStyle.Top, Height = 22, FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false, Margin = new Padding(0), Padding = new Padding(0),
         };
+        // Anchored to the bottom of the row rather than the top, so the larger game
+        // name sits on the same line as the rest instead of riding above it. Every
+        // gap is the same eight pixels; the separators live inside the text, so the
+        // spacing does not double up where one label ends and the next begins.
         Label Part(string text, Color colour, float size, FontStyle style) => new() {
-            Text = text, ForeColor = colour, AutoSize = true,
-            Font = new Font("Segoe UI", size, style), Margin = new Padding(0, 2, 10, 0),
+            Text = text, ForeColor = colour, AutoSize = true, Anchor = AnchorStyles.Bottom,
+            Font = new Font("Segoe UI", size, style), Margin = new Padding(0, 0, 8, 0),
         };
         when.Controls.Add(Part($"{d.StartedAt:dd.MM.yyyy}", Muted, 8.5F, FontStyle.Regular));
         when.Controls.Add(Part(GameName(d.Game), Accent, 10F, FontStyle.Bold));
-        when.Controls.Add(Part($"{d.StartedAt:HH:mm} → {d.FinishedAt:HH:mm}", Muted, 8.5F, FontStyle.Regular));
-        when.Controls.Add(Part($"· {Label(d.Outcome)} · {Label(d.Status)}", Muted, 8.5F, FontStyle.Regular));
+        when.Controls.Add(Part(
+            $"{d.StartedAt:HH:mm} → {d.FinishedAt:HH:mm}  ·  {Label(d.Outcome)}  ·  {Label(d.Status)}",
+            Muted, 8.5F, FontStyle.Regular));
 
         head.Controls.Add(when);
         head.Controls.Add(sub);
         head.Controls.Add(route);
-        head.Controls.Add(timelineButton);
-        head.Controls.Add(back);
+        head.Controls.Add(actions);
         return head;
     }
 
