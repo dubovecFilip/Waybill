@@ -795,6 +795,12 @@ public class MainForm : Form {
         });
     }
 
+    /// <summary>Damage as it is worth reading: two decimals, because ordinary wear
+    /// over a delivery lands in hundredths of a percent and rounding it to whole
+    /// numbers turns every clean drive into a flat zero.</summary>
+    private static string Damage(double share) =>
+        share <= 0 ? $"0 %" : $"{share * 100:0.00} %";
+
     /// <summary>A one line text prompt, because WinForms has no InputBox and the
     /// application ID has to come from somewhere. Returns null when cancelled,
     /// which is different from an empty string meaning "clear it".</summary>
@@ -1372,8 +1378,15 @@ public class MainForm : Form {
         Row(Strings.T("detail.speeding"), $"{d.SpeedingShare * 100:0.0} %  ·  {Strings.T("detail.clearlyOver")} {d.HardSpeedingShare * 100:0.0} %");
         Row(Strings.T("detail.cruise"), $"{d.CruiseShare * 100:0.0} %");
         Row(Strings.T("detail.collisions"), d.Collisions.ToString());
-        Row(Strings.T("detail.damage"), $"{d.TruckDamage * 100:0.00} %  ·  {Strings.T("detail.trailer")} {d.TrailerDamage * 100:0.00} %");
         Row(Strings.T("detail.ferries"), d.Ferries.ToString());
+
+        // Damage on its own, one line per thing that can take it. Truck and trailer
+        // used to share a line and the cargo was not shown at all, which left no way
+        // to see that a load arrived damaged without a collision behind it.
+        Group(Strings.T("detail.groupDamage"));
+        Row(Strings.T("col.truck"), Damage(d.TruckDamage));
+        Row(Strings.T("detail.trailer"), Damage(d.TrailerDamage));
+        Row(Strings.T("col.cargo"), Damage(d.CargoDamage));
 
         // Docked children stack in reverse order of adding, so the list goes in
         // backwards to come out in the order it was built.

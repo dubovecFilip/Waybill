@@ -48,7 +48,7 @@ public class DeliveryDetail {
     public double Revenue, OfferedIncome, Penalty;
     public double FuelUsedL, TopSpeedKmh, SpeedingShare, HardSpeedingShare, CruiseShare;
     public double? AvgConsumption;
-    public double TruckDamage, TrailerDamage, DrivingGameMin, RestMinutes, FinesTotal, TollsPaid;
+    public double TruckDamage, TrailerDamage, CargoDamage, DrivingGameMin, RestMinutes, FinesTotal, TollsPaid;
     public long RealDurationMs;
     public int RestStops, FinesCount, Collisions, Ferries, Refuels;
     public string Outcome = "", Status = "", Flags = "", Style = "", Notes = "", Source = "";

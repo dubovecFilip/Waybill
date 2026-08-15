@@ -547,7 +547,7 @@ public class DeliveryStore : IDisposable {
                        -- Appended rather than slotted in beside the other distances:
                        -- the reader below indexes by position, so a column added in
                        -- the middle silently shifts every one after it.
-                       sim_speed_distance_km, COALESCE(job_type, '')
+                       sim_speed_distance_km, COALESCE(job_type, ''), cargo_damage_pct
                 FROM deliveries WHERE id = $id;
                 """;
             cmd.Parameters.AddWithValue("$id", id);
@@ -583,6 +583,7 @@ public class DeliveryStore : IDisposable {
                 Notes = r.GetString(39), Source = r.GetString(40),
                 SimSpeedDistanceKm = Num(41),
                 JobType = r.GetString(42),
+                CargoDamage = Num(43),
             };
         }
     }
