@@ -188,17 +188,26 @@ public class TrackerEngine : IDisposable {
         Hook("Tollgate", h => _telemetry.Tollgate += h);
         Hook("Ferry", h => _telemetry.Ferry += h);
         Hook("Train", h => _telemetry.Train += h);
-        Hook("RefuelStart", h => _telemetry.RefuelStart += h);
-        Hook("RefuelEnd", h => _telemetry.RefuelEnd += h);
+        // The pump opening and closing is not news, and worse, it is not always
+        // true: servicing or modifying the truck at a dealer fires both with the
+        // tank untouched and the old amount still sitting in the event, which read
+        // as a refuel that never happened. Only paying for one is real, and only
+        // paying for one is what the tracker counts. Both are still recorded.
+        Hook("RefuelStart", h => _telemetry.RefuelStart += h, announce: false);
+        Hook("RefuelEnd", h => _telemetry.RefuelEnd += h, announce: false);
         Hook("RefuelPayed", h => _telemetry.RefuelPayed += h);
 
         return true;
     }
 
-    private void Hook(string name, Action<EventHandler> subscribe) {
+    /// <summary><paramref name="announce"/> controls only whether the event reaches
+    /// the log the user reads. The recording gets it either way: what is worth
+    /// telling someone about and what is worth keeping as evidence are different
+    /// questions.</summary>
+    private void Hook(string name, Action<EventHandler> subscribe, bool announce = true) {
         subscribe((_, _) => {
             Write(name, _last);
-            Message?.Invoke($"[{DateTime.Now:HH:mm:ss}] {name}");
+            if (announce) Message?.Invoke($"[{DateTime.Now:HH:mm:ss}] {name}");
         });
     }
 
