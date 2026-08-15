@@ -10,9 +10,13 @@
 | `trailer-chain.png` | A triple with its units and dollies opened out. |
 | `map.png` | The map page, with one route lit under the pointer. |
 | `statistics.png` | The statistics page. |
+| `waybill-sheet.png` | A delivery exported as an A4 sheet. |
 
 Screenshots are taken at 1180x760, which is roughly the window's default size and
 wide enough for the delivery list to show most of its columns without scrolling.
+`waybill-sheet.png` is the exception: it is not a screenshot but a real export,
+downscaled from the 300 dpi original to 1000 px tall, so it keeps A4's proportions
+rather than the window's.
 Each is named for what it shows rather than for where it happens to appear, so
 moving one around the README does not leave the name lying.
 

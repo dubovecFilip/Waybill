@@ -77,6 +77,7 @@ Every state, flag and anomaly is listed with its meaning in
 * Explains every verdict in words rather than leaving a label on the row
 * Draws where each delivery went, with every fine and collision marked on it
 * Draws the whole history as one map, built entirely from your own drives
+* Writes a delivery out as a printable A4 waybill, route and stamp included
 * Resumes an interrupted job after a crash or after quitting mid drive
 * Launches the game from the window, including a telemetry plugin check
 * Shows the current delivery on Discord, over the local pipe, with no account
@@ -219,6 +220,32 @@ first point of a job is where the driver stood when the offer was accepted, whic
 on a quick job is another city entirely, and a ferry, a train or loading an
 earlier save moves the truck mid drive. None of them were driven along.
 
+## Saving a delivery as a sheet
+
+*Save sheet* on a delivery's card writes it out as the document the app is named
+after: A4 upright, the form printed and the figures written in. Shipper and
+consignee, the coupled set in hitching order, the route sketched in the same pen,
+the remarks entered along the way, and the verdict struck as a rubber stamp.
+
+![A delivery written out as a waybill](assets/waybill-sheet.png)
+
+It is rendered at 300 dpi, so it prints as well as it posts. A delivery with more
+than a sheet's worth of units or remarks runs onto a second one, which reprints
+the heading and carries the stamp at its foot, and the files are numbered.
+
+This is the only place the paper idea lives, and that is deliberate. As a skin for
+the window it would have cost the map its zooming and clicking, or left two
+different maps in the app, and a fixed sheet cannot hold seven trailer units. A
+file has none of those problems: it is a fixed size by definition, nobody expects
+to click it, and running onto a second sheet is what paper has always done about
+too much content.
+
+From a script:
+
+```bash
+Waybill.exe --export-sheet <id> [path.png]
+```
+
 ## Discord
 
 *Settings → Discord* puts the current delivery on the Discord profile: the route,
@@ -251,6 +278,7 @@ Waybill.exe --export csv|json [path]    # export the history
 Waybill.exe --import-trucksbook <csv>   # import history from TrucksBook
 Waybill.exe --backup [path]             # back up the database
 Waybill.exe --restore <path>            # restore from a backup
+Waybill.exe --export-sheet <id> [path]  # one delivery as an A4 waybill, 300 dpi
 Waybill.exe --rebuild                   # recompute deliveries from recordings
 Waybill.exe --replay <recording>        # replay an old recording
 Waybill.exe --test-resume <recording> <line>   # test resume after a restart
@@ -338,6 +366,8 @@ src/Waybill/
 ├── SCSSdkClient/   vendored C# SDK client (MIT, with local fixes)
 ├── GameLauncher.cs finding and launching the games through Steam
 ├── RouteView.cs    drawing routes, cities and event pins
+├── RouteGeometry.cs where a recording stops being a drive, shared by both
+├── WaybillSheet.cs a delivery painted as an A4 document
 ├── MainForm.cs     the window
 └── Program.cs      CLI and entry point
 assets/             logo and icon source

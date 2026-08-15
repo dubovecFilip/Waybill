@@ -359,6 +359,11 @@ rather than only tested.
 - Per unit damage across doubles and triples, with dollies told apart from trailers
 - The route of each delivery drawn, with its fines and collisions marked on it
 - A map of the whole history, built from the driver's own drives and nothing else
+- A delivery written out as a printable A4 waybill, which no plan here asked for
+  and which turned out to be the right home for the paper idea: as a skin for the
+  window it would have cost the map its zooming, and a fixed sheet cannot hold
+  seven trailer units, while a file is a fixed size by definition and can run onto
+  a second sheet
 - Which market a job came from, and whether the trailer was the driver's own
 - Discord Rich Presence, over the local pipe, no account and nothing sent anywhere
 - Export to CSV and JSON, backup and restore, TrucksBook import
