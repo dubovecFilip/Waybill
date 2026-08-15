@@ -69,6 +69,7 @@ public static class Strings {
         ["filter.all"] = "všetky",
         ["button.refresh"] = "Obnoviť",
         ["button.cancel"] = "Zrušiť",
+        ["msg.recordingFailed"] = "Nahrávku sa nepodarilo zapísať",
 
         // why a delivery got the verdict it did
         ["verdict.heading"] = "Prečo tento verdikt",
@@ -297,6 +298,7 @@ public static class Strings {
         ["filter.all"] = "all",
         ["button.refresh"] = "Refresh",
         ["button.cancel"] = "Cancel",
+        ["msg.recordingFailed"] = "The recording could not be written",
 
         ["verdict.heading"] = "Why this verdict",
         ["verdict.accepted"] = "Nothing unusual was found.",

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Newtonsoft.Json;
 using SCSSdkClient;
 using SCSSdkClient.Object;
@@ -25,6 +26,17 @@ public class TrackerEngine : IDisposable {
     private readonly DeliveryStore _store;
     private readonly StreamWriter _writer;
     private readonly string _inProgressPath;
+
+    // Finished lines waiting to reach the disk. Tracking must never wait on a write:
+    // it used to flush every line inside the same lock that does the measuring, so a
+    // disk busy elsewhere on the machine delayed the next measured sample, and the
+    // hole that left was recorded as `client_gap` against the driver. Measuring now
+    // hands the line over and carries on.
+    private readonly BlockingCollection<string> _pending = new(20000);
+    private readonly Thread _scribe;
+    // Long enough that flushing is not per line, short enough that a crash costs a
+    // couple of seconds of recording rather than the buffer.
+    private readonly TimeSpan _flushEvery = TimeSpan.FromSeconds(2);
 
     private SCSSdkTelemetry? _telemetry;
     private SCSTelemetry? _last;
@@ -63,9 +75,38 @@ public class TrackerEngine : IDisposable {
         var outDir = Path.Combine(DeliveryStore.DefaultDir(), "sessions");
         Directory.CreateDirectory(outDir);
         SessionPath = Path.Combine(outDir, $"session-{DateTime.Now:yyyyMMdd-HHmmss}.jsonl");
-        _writer = new StreamWriter(SessionPath) { AutoFlush = true };
+        // AutoFlush off on purpose: the scribe below decides when to flush, off the
+        // measuring thread.
+        _writer = new StreamWriter(SessionPath) { AutoFlush = false };
 
         _inProgressPath = Path.Combine(DeliveryStore.DefaultDir(), "in-progress.json");
+
+        _scribe = new Thread(Scribe) { Name = "waybill-recorder", IsBackground = true };
+        _scribe.Start();
+    }
+
+    /// <summary>Takes finished lines off the queue and puts them on disk. The only
+    /// thread that touches the writer, so nothing here needs a lock.</summary>
+    private void Scribe() {
+        var lastFlush = DateTime.UtcNow;
+        try {
+            foreach (var line in _pending.GetConsumingEnumerable()) {
+                _writer.WriteLine(line);
+                // Flushing once the queue is empty keeps the recording within a line
+                // or two of live during ordinary play, while a burst still gets
+                // written out in one go.
+                if (_pending.Count == 0 || DateTime.UtcNow - lastFlush >= _flushEvery) {
+                    _writer.Flush();
+                    lastFlush = DateTime.UtcNow;
+                }
+            }
+            _writer.Flush();
+        } catch (Exception ex) {
+            // A recording that cannot be written is worth saying out loud, but it must
+            // not take the tracking down with it: the delivery still reaches the
+            // database, it just loses the raw evidence behind it.
+            Message?.Invoke($"{Waybill.Strings.T("msg.recordingFailed")}: {ex.Message}");
+        }
     }
 
     /// <summary>Loads any interrupted job and connects to the game's shared memory.
@@ -126,7 +167,10 @@ public class TrackerEngine : IDisposable {
 
             Trim(data);
             var line = JsonConvert.SerializeObject(new { t = nowMs, kind, d = data }, _jsonSettings);
-            _writer.WriteLine(line);
+            // Handed to the scribe rather than written here. Serialising stays on this
+            // thread because the object is about to be reused by the next poll, and it
+            // costs a fraction of what waiting for the disk did.
+            if (!_pending.IsAddingCompleted) _pending.Add(line);
             LineCount++;
         }
     }
@@ -251,8 +295,20 @@ public class TrackerEngine : IDisposable {
         // Flush the in-progress job unthrottled, so quitting mid-delivery keeps the
         // last few seconds too and the next start resumes from the real position.
         lock (_gate) SaveInProgress(force: true);
-        _writer.Flush();
-        _writer.Dispose();
+
+        // Let the scribe drain what is still queued before the file is closed under
+        // it, otherwise quitting loses the last seconds of the recording. Bounded, so
+        // a jammed disk delays closing rather than preventing it.
+        _pending.CompleteAdding();
+        var drained = _scribe.Join(TimeSpan.FromSeconds(10));
+        try {
+            _writer.Flush();
+            _writer.Dispose();
+        } catch (Exception ex) when (!drained) {
+            // The scribe outlasted its window and still holds the writer. Closing
+            // anyway is right: the alternative is refusing to shut down.
+            Message?.Invoke($"{Waybill.Strings.T("msg.recordingFailed")}: {ex.Message}");
+        }
 
         // The recording is finished now, so pack it away (see SessionFiles).
         SessionFiles.Compress(SessionPath);
