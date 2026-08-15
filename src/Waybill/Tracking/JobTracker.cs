@@ -143,6 +143,9 @@ public class JobState {
     public List<Anomaly> Anomalies = new();
     public List<JobEvent> Timeline = new();
     public List<TripPoint> TripPoints = new();
+    /// <summary>Whether the load has been hitched up yet. Only the first coupling of
+    /// a job is worth marking; dropping and re-hitching later is the same load.</summary>
+    public bool TrailerCoupled;
     public long? MissingJobSinceMs;
     /// <summary>When an earlier save was last loaded, so a job that disappears in the
     /// wake of one is recognised as gone with the save rather than unresolved.</summary>
@@ -518,6 +521,10 @@ public class JobTracker {
             // against a zeroed baseline and report a bogus negative damage figure.
             StartTrailerWear = snap.Trailer.Wear,
             LastOdometerKm = snap.Truck.OdometerKm,
+            // Already hitched when the job began, which is how a quick job starts:
+            // the truck is placed at the depot with the load on. There was no
+            // coupling to mark, and a later re-hitch is not one either.
+            TrailerCoupled = snap.Trailer.Attached,
         };
         _current.TripPoints.Add(new TripPoint { AtMs = nowMs, X = snap.PosX, Y = snap.PosY, Z = snap.PosZ, SpeedKmh = snap.Truck.SpeedKmh });
     }
@@ -525,6 +532,20 @@ public class JobTracker {
     private List<Anomaly> Accumulate(Snapshot snap, Snapshot prev, long dtMs, bool gap, bool reloaded, bool instant, long nowMs) {
         var j = _current!;
         var found = new List<Anomaly>();
+
+        // The moment the load was hitched up, which is not the moment the job began.
+        // A World of Trucks contract spawns its trailer when the offer is taken and
+        // starts counting kilometres there, so the driver can be a city away from it
+        // and drive to it under the job. Where the job started says nothing about
+        // where the cargo was; this does.
+        //
+        // Checked before the instant guard below, because a coupling that happened
+        // to land on a duplicate poll would otherwise be missed entirely: the next
+        // tick compares against a snapshot that is already coupled.
+        if (snap.Trailer.Attached && !prev.Trailer.Attached && !j.TrailerCoupled) {
+            j.TrailerCoupled = true;
+            j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "trailer_coupled" });
+        }
 
         // Same instant as the previous snapshot, kept only because it carries an
         // event. There is no interval to measure anything over: distance would be

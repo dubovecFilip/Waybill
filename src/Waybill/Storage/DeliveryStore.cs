@@ -779,17 +779,32 @@ public class DeliveryStore : IDisposable {
             var result = new GameRoutes();
 
             // City per delivery, so the walk below can name the ends of each route.
-            var ends = new Dictionary<long, (string From, string To)>();
+            // The outcome comes too, because only a delivered job ends where it said
+            // it would: a cancelled one ends wherever the driver gave up.
+            var ends = new Dictionary<long, (string From, string To, bool Delivered)>();
             using (var cmd = _conn.CreateCommand()) {
                 cmd.CommandText = """
-                    SELECT id, source_city, destination_city FROM deliveries
+                    SELECT id, source_city, destination_city, COALESCE(outcome, '') FROM deliveries
                     WHERE game = $game AND (source IS NULL OR source = 'waybill');
                     """;
                 cmd.Parameters.AddWithValue("$game", game);
                 using var r = cmd.ExecuteReader();
-                while (r.Read()) ends[r.GetInt64(0)] = (r.GetString(1), r.GetString(2));
+                while (r.Read()) ends[r.GetInt64(0)] = (r.GetString(1), r.GetString(2), r.GetString(3) == "delivered");
             }
             if (ends.Count == 0) return result;
+
+            // When the load was hitched up, for the jobs that recorded it.
+            var coupled = new Dictionary<long, long>();
+            using (var cmd = _conn.CreateCommand()) {
+                cmd.CommandText = """
+                    SELECT e.delivery_id, MIN(e.at_ms) FROM events e JOIN deliveries d ON d.id = e.delivery_id
+                    WHERE d.game = $game AND e.event_type = 'trailer_coupled'
+                    GROUP BY e.delivery_id;
+                    """;
+                cmd.Parameters.AddWithValue("$game", game);
+                using var r = cmd.ExecuteReader();
+                while (r.Read()) coupled[r.GetInt64(0)] = r.GetInt64(1);
+            }
 
             using (var cmd = _conn.CreateCommand()) {
                 cmd.CommandText = """
@@ -807,9 +822,6 @@ public class DeliveryStore : IDisposable {
                 }
             }
 
-            // Two sightings per delivery. The pickup is taken from the second point,
-            // not the first: the first is where the driver stood when the job was
-            // accepted, which for a quick job is another city entirely.
             //
             // A sighting within a few metres of one already held is thrown away
             // rather than averaged in. Dropping a load and taking the next job from
@@ -831,10 +843,39 @@ public class DeliveryStore : IDisposable {
                 }
                 l.Add((p.X, p.Z));
             }
+            // Where two positions along the route can be trusted to be the city named
+            // on the job, and where they cannot.
+            //
+            // The pickup is the awkward one. On a quick job the truck is placed at the
+            // depot, so the second point is it. On a World of Trucks contract the
+            // trailer spawns when the offer is taken and the odometer starts running
+            // from wherever the driver happened to be standing, which can be another
+            // city: the job's second point is not the load, it is the driver. So the
+            // moment the trailer was hitched is used when the job recorded one, and
+            // failing that only a job that began with a jump counts, since that jump
+            // is the truck being put down at the depot. Seven of the nineteen
+            // deliveries here began with no jump at all.
+            //
+            // The drop is simpler but not automatic: a delivered job ends at the
+            // destination, a cancelled one ends nowhere in particular.
             foreach (var (id, points) in result.Routes) {
                 if (points.Count < 3 || !ends.TryGetValue(id, out var e)) continue;
-                Saw(e.From, points[1]);
-                Saw(e.To, points[^1]);
+
+                if (coupled.TryGetValue(id, out var at)) {
+                    var hitched = points[0];
+                    var best = long.MaxValue;
+                    foreach (var p in points) {
+                        var off = Math.Abs(p.AtMs - at);
+                        if (off >= best) continue;
+                        best = off;
+                        hitched = p;
+                    }
+                    Saw(e.From, hitched);
+                } else if (Jumped(points[0], points[1])) {
+                    Saw(e.From, points[1]);
+                }
+
+                if (e.Delivered) Saw(e.To, points[^1]);
             }
 
             foreach (var (name, seen) in sightings) {
@@ -849,6 +890,17 @@ public class DeliveryStore : IDisposable {
             result.Cities.Sort((a, b) => b.Seen.CompareTo(a.Seen));
             return result;
         }
+    }
+
+    /// <summary>Whether the truck was moved between these two positions rather than
+    /// driven. The same threshold the map draws with: measured on real history the
+    /// ordinary gap between recorded positions is 19 m and every teleport was over
+    /// 1 700 m.</summary>
+    private static bool Jumped(RoutePoint a, RoutePoint b) {
+        const float BreakMetres = 250f;
+        var dx = a.X - b.X;
+        var dz = a.Z - b.Z;
+        return dx * dx + dz * dz > BreakMetres * BreakMetres;
     }
 
     /// <summary>All trip points for one delivery, in order. Coordinates are the
