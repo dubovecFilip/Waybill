@@ -468,6 +468,22 @@ public class JobTracker {
     private static bool CargoChangedHands(Snapshot snap, Snapshot prev) =>
         (snap.Job?.CargoLoaded ?? false) != (prev.Job?.CargoLoaded ?? false);
 
+    /// <summary>
+    /// The delivery's identity, computed from what makes it that delivery: the game,
+    /// the moment the job was accepted, and the offer itself. It used to be a fresh
+    /// guid, which meant a delivery had no identity at all: replaying the same
+    /// recording produced a different one every time, so a rebuild could match
+    /// nothing and had to delete the history before it could put any of it back.
+    ///
+    /// Kept to the same 32 hex characters a guid was written as, so nothing that
+    /// already stores one has to care.
+    /// </summary>
+    private static string MakeUid(string game, string fingerprint, long startedAtMs) {
+        var seed = $"{game}|{startedAtMs}|{fingerprint}";
+        var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(seed));
+        return Convert.ToHexString(hash, 0, 16).ToLowerInvariant();
+    }
+
     private static string? Fingerprint(JobInfo? job) {
         if (job == null) return null;
         return string.Join("|", job.SourceCity, job.SourceCompany, job.DestinationCity, job.DestinationCompany, job.Cargo, job.Income, job.DeadlineMin);
@@ -482,7 +498,7 @@ public class JobTracker {
 
     private void Open(Snapshot snap, string fp, long nowMs) {
         _current = new JobState {
-            JobUid = Guid.NewGuid().ToString("n"),
+            JobUid = MakeUid(snap.Game, fp, nowMs),
             Fingerprint = fp,
             StartedAtMs = nowMs,
             StartedAtGameMin = snap.GameTimeMin,

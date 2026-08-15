@@ -188,10 +188,25 @@ public class DeliveryStore : IDisposable {
 
         var finesTotal = r.Fines.Sum(f => f.Amount);
 
+        // A delivery has a stable identity, so storing one that is already here is a
+        // better reading of the same drive rather than a second drive. It replaces
+        // the old one outright, children included: ignoring the row but inserting
+        // the events again would have doubled the timeline and the route behind it.
+        using (var replace = _conn.CreateCommand()) {
+            replace.Transaction = tx;
+            replace.CommandText = """
+                DELETE FROM events WHERE delivery_id IN (SELECT id FROM deliveries WHERE job_uid = $job_uid);
+                DELETE FROM trip_points WHERE delivery_id IN (SELECT id FROM deliveries WHERE job_uid = $job_uid);
+                DELETE FROM deliveries WHERE job_uid = $job_uid;
+                """;
+            replace.Parameters.AddWithValue("$job_uid", r.JobUid);
+            replace.ExecuteNonQuery();
+        }
+
         using (var cmd = _conn.CreateCommand()) {
             cmd.Transaction = tx;
             cmd.CommandText = """
-                INSERT OR IGNORE INTO deliveries (
+                INSERT INTO deliveries (
                     job_uid, game, game_version, outcome, validation_status, validation_flags,
                     truck_make, truck_model, truck_id, trailer_name, trailer_id,
                     cargo, cargo_id, cargo_mass_kg,
@@ -304,11 +319,10 @@ public class DeliveryStore : IDisposable {
         }
     }
 
-    /// <summary>Removes deliveries this app tracked itself, leaving imported ones
-    /// untouched - they have no recording to rebuild them from. Used by --rebuild.</summary>
     /// <summary>Removes the rows that came from a TrucksBook export. The mirror of
-    /// <see cref="DeleteTrackedDeliveries"/>, and the only way back out of an import:
-    /// nothing regenerates these, so once they are in, they stay until asked to go.</summary>
+    /// <see cref="DeleteTrackedDeliveriesWithin"/>, and the only way back out of an
+    /// import: nothing regenerates these, so once they are in, they stay until asked
+    /// to go.</summary>
     public int DeleteImportedDeliveries() {
         lock (_gate) {
             using var tx = _conn.BeginTransaction();

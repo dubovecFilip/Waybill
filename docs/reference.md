@@ -124,6 +124,13 @@ World of Trucks jobs carry no in-game deadline. Their window is a real one held 
 the World of Trucks site, so the game reports the largest value the field can hold
 and `minutes_late` stays empty.
 
+## Delivery identity
+
+Column `job_uid`. Computed from the game, the moment the job was accepted, and the
+offer itself, so the same drive always derives to the same delivery. Storing one
+that is already held replaces it rather than adding a second, which is what makes
+a rebuild able to update history instead of having to delete it first.
+
 ## Source
 
 Column `source`. Where the row came from.
