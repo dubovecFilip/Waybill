@@ -707,6 +707,7 @@ public class MainForm : Form {
         _engine.Message += m => BeginInvoke(() => AddLog(m));
         _engine.JobStarted += j => BeginInvoke(() => AddLog($"{Strings.T("msg.jobStart")}  {j.SourceCity} -> {j.DestinationCity} ({j.Cargo})"));
         _engine.JobResumed += j => BeginInvoke(() => AddLog($"{Strings.T("msg.jobResume")}  {j.SourceCity} -> {j.DestinationCity}"));
+        _engine.Noted += e => BeginInvoke(() => AddLog(NoteLine(e)));
         _engine.JobFinished += r => BeginInvoke(() => {
             AddLog($"{Strings.T("msg.jobEnd")}  {r.SourceCity} -> {r.DestinationCity}: {r.DistanceKm:0.0} km, {r.Validation.Status}");
             ReloadHistory();
@@ -736,6 +737,33 @@ public class MainForm : Form {
         ReloadHistory();
         ReloadStats();
         StartDiscord();
+    }
+
+    /// <summary>One thing that happened, written out with its figure in the units in
+    /// use. "Fine" on its own says nothing that the driver did not already know from
+    /// the game; the amount is the part worth reading.</summary>
+    private string NoteLine(JobEvent e) {
+        var u = CurrentUnits();
+        var name = Strings.T("event." + e.Type);
+        if (e.Value is not { } v) return name;
+
+        var figure = e.Type switch {
+            "fine" or "tollgate" or "ferry" or "train" or "refuel" => u.FormatMoney(v),
+            // Damage steps and shares are already percentages of the whole.
+            "collision" => $"{v:0.00} %",
+            "rest" or "save_loaded" => $"{v:0} {Strings.T("unit.gameMinutes")}",
+            _ => v.ToString("0.##"),
+        };
+
+        // Only where the detail adds something: what the fine was for, and which
+        // crossing a ferry made. Elsewhere it holds the unit, which is already in
+        // the figure.
+        var extra = e.Type switch {
+            "fine" => Label(e.Detail ?? ""),
+            "ferry" or "train" => e.Detail ?? "",
+            _ => "",
+        };
+        return extra.Length > 0 ? $"{name}: {figure}  ({extra})" : $"{name}: {figure}";
     }
 
     private void AddLog(string text) {

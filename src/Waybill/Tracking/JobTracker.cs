@@ -80,12 +80,15 @@ public class TrackerConfig {
     public double SaveLoadWindowMs = 10000;
 }
 
-public enum TrackerEventType { JobStarted, JobResumed, JobFinished }
+public enum TrackerEventType { JobStarted, JobResumed, JobFinished, Noted }
 
 public class TrackerEvent {
     public TrackerEventType Type;
     public JobInfo? Job; // JobStarted / JobResumed
     public JobRecord? Record; // JobFinished
+    /// <summary>Something that just happened during the drive: a fine, a collision,
+    /// a refuel. The same entry that ends up on the delivery's timeline.</summary>
+    public JobEvent? Note; // Noted
 }
 
 /// <summary>
@@ -301,7 +304,15 @@ public class JobTracker {
         if (_current == null) return outEvents;
 
         _current.MissingJobSinceMs = null;
+
+        // Anything the accumulation adds to the timeline is raised as it happens, so
+        // the live log can say what occurred instead of only the delivery's card
+        // learning about it once the job is over.
+        var timelineWas = _current.Timeline.Count;
         Accumulate(snap, prev, dtMs, gap, reloaded, instant, nowMs);
+        for (var i = timelineWas; i < _current.Timeline.Count; i++) {
+            outEvents.Add(new TrackerEvent { Type = TrackerEventType.Noted, Note = _current.Timeline[i] });
+        }
 
         if (_state == State.Accepted && _current.DistanceKm > 0.05) {
             _state = State.Driving;

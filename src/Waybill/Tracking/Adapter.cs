@@ -294,6 +294,15 @@ public static class Adapter {
         };
     }
 
+    /// <summary>The offence as the SDK names it. Already a name on the live path,
+    /// a bare number in a recording.</summary>
+    private static string OffenceName(JToken? token) {
+        var text = S(token);
+        if (text.Length == 0) return "";
+        if (!int.TryParse(text, out var code)) return text;
+        return Enum.IsDefined(typeof(Offence), code) ? ((Offence)code).ToString() : text;
+    }
+
     private static double TrailerWearJson(JToken? dv) {
         if (dv == null) return 0;
         return Math.Max(N(dv["Body"]), Math.Max(N(dv["Chassis"]), N(dv["Wheels"])));
@@ -336,7 +345,9 @@ public static class Adapter {
             case "Fined": {
                 var f = gp["FinedEvent"];
                 if (f == null) break;
-                e.Fined = new FinedEvent { Amount = N(f["Amount"]), Offence = S(f["Offence"]) };
+                // Recorded as the raw enum value, the same way Game is, so a replay
+                // has to name it or the delivery ends up saying it was fined for a 6.
+                e.Fined = new FinedEvent { Amount = N(f["Amount"]), Offence = OffenceName(f["Offence"]) };
                 break;
             }
             case "Tollgate": {

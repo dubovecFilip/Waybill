@@ -112,6 +112,11 @@ public class TrackerEngine : IDisposable {
     public event Action<JobInfo>? JobResumed;
     public event Action<JobRecord>? JobFinished;
 
+    /// <summary>Something that happened mid drive, as it happens. Carries the figure
+    /// with it, so the log can say how much the fine was rather than only that there
+    /// was one.</summary>
+    public event Action<JobEvent>? Noted;
+
     public TrackerEngine(DeliveryStore store) {
         _store = store;
 
@@ -188,27 +193,23 @@ public class TrackerEngine : IDisposable {
         Hook("Tollgate", h => _telemetry.Tollgate += h);
         Hook("Ferry", h => _telemetry.Ferry += h);
         Hook("Train", h => _telemetry.Train += h);
-        // The pump opening and closing is not news, and worse, it is not always
-        // true: servicing or modifying the truck at a dealer fires both with the
-        // tank untouched and the old amount still sitting in the event, which read
-        // as a refuel that never happened. Only paying for one is real, and only
-        // paying for one is what the tracker counts. Both are still recorded.
-        Hook("RefuelStart", h => _telemetry.RefuelStart += h, announce: false);
-        Hook("RefuelEnd", h => _telemetry.RefuelEnd += h, announce: false);
+        // The pump opening and closing carry no amount and are not always true:
+        // servicing the truck at a dealer fires both with the tank untouched. Only
+        // paying for fuel is real, and only that reaches the tracker.
+        Hook("RefuelStart", h => _telemetry.RefuelStart += h);
+        Hook("RefuelEnd", h => _telemetry.RefuelEnd += h);
         Hook("RefuelPayed", h => _telemetry.RefuelPayed += h);
 
         return true;
     }
 
-    /// <summary><paramref name="announce"/> controls only whether the event reaches
-    /// the log the user reads. The recording gets it either way: what is worth
-    /// telling someone about and what is worth keeping as evidence are different
-    /// questions.</summary>
-    private void Hook(string name, Action<EventHandler> subscribe, bool announce = true) {
-        subscribe((_, _) => {
-            Write(name, _last);
-            if (announce) Message?.Invoke($"[{DateTime.Now:HH:mm:ss}] {name}");
-        });
+    /// <summary>Records the event. Nothing is said about it here: the log is fed
+    /// from <see cref="Noted"/> instead, which carries the figures and has already
+    /// been through the tracker, so a refuel that moved no fuel never reaches it.
+    /// What is worth keeping as evidence and what is worth telling someone about
+    /// are different questions.</summary>
+    private void Hook(string name, Action<EventHandler> subscribe) {
+        subscribe((_, _) => Write(name, _last));
     }
 
     private void Write(string kind, SCSTelemetry? data) {
@@ -237,6 +238,9 @@ public class TrackerEngine : IDisposable {
                 ActiveJob = ev.Job;
                 JobStarted?.Invoke(ev.Job);
                 SaveInProgress(force: true);
+            }
+            if (ev.Type == TrackerEventType.Noted && ev.Note != null) {
+                Noted?.Invoke(ev.Note);
             }
             if (ev.Type == TrackerEventType.JobResumed && ev.Job != null) {
                 ActiveJob = ev.Job;
