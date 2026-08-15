@@ -13,6 +13,14 @@ using Waybill.Tracking;
 // user typed the command instead of vanishing.
 if (args.Length > 0) NativeConsole.AttachToParent();
 
+// Numbers read the same everywhere: 283.0 km, not 283,0 km. Left to the machine's
+// own locale a Slovak Windows writes a comma, which then disagrees with the units,
+// the documentation and every figure in an exported CSV. Dates are unaffected: the
+// dots in "dd.MM.yyyy" are literals, and ":" is the time separator in this culture
+// too.
+System.Globalization.CultureInfo.DefaultThreadCurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+
 // One saved preference drives both the window and the CLI, so `--list` and the
 // grid never disagree about what units the user asked for.
 ConsoleFormat.UnitSetting = Settings.Load().Units;
