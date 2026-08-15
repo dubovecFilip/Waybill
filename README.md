@@ -70,6 +70,7 @@ Every state, flag and anomaly is listed with its meaning in
 * Stores route coordinates for a map view later on
 * Resumes an interrupted job after a crash or after quitting mid drive
 * Launches the game from the window, including a telemetry plugin check
+* Shows the current delivery on Discord, over the local pipe, with no account
 * Imports history from TrucksBook
 * Stores in SQLite, exports to CSV and JSON, backs up and restores
 * Interface in English and Slovak
@@ -129,6 +130,27 @@ that drive, and what happened along the way.
 
 ![The statistics page](assets/screenshot-statistics.png)
 
+## Discord
+
+*Settings → Discord* puts the current delivery on the Discord profile: the route,
+the cargo, how far along the drive is, and a counter of how long it has been
+running. Between jobs it says so, and with the game closed it shows nothing at
+all.
+
+It talks to the Discord client on the same machine through its local pipe, so
+nothing leaves the computer and no account is involved. Discord not running
+simply means nothing is shown.
+
+Setting it up takes one value. Create an application at
+[discord.com/developers](https://discord.com/developers/applications), whose name
+is what appears above the presence, and paste its Application ID into *Settings →
+Discord → Application ID*. The ID is public by design and is not a password.
+Until it is filled in, nothing is sent anywhere.
+
+Uploading three images to that application under *Rich Presence → Art Assets*,
+named `ets2`, `ats` and `waybill`, gets the icons as well. Without them the text
+still shows.
+
 ## Command line
 
 The window is the usual way to use it, but everything also works from a script:
@@ -156,7 +178,7 @@ rebuild or a `dotnet clean` cannot take any of it with it.
 | Backups | `backups/` |
 | Raw telemetry recordings | `sessions/` |
 | Job in progress | `in-progress.json` |
-| Settings | `settings.json` |
+| Settings, including the Discord application ID | `settings.json` |
 
 Recordings are packed into `.gz` once a session ends, roughly 13x less space.
 They are never deleted: they are the input for `--rebuild` and `--replay`, both
@@ -214,6 +236,7 @@ are left alone, as there is nothing to recompute them from.
 src/Waybill/
 ├── Tracking/       job state machine, SDK adapter, engine, formatting
 ├── Storage/        SQLite (deliveries, events, trip_points), TrucksBook import
+├── Integrations/   Discord Rich Presence over the local pipe
 ├── SCSSdkClient/   vendored C# SDK client (MIT, with local fixes)
 ├── GameLauncher.cs finding and launching the games through Steam
 ├── MainForm.cs     the window
@@ -228,7 +251,7 @@ archive/            retired, no longer used
 
 Working: automatic tracking and saving, launching the game from the app, resume
 after a restart, history with search and notes, statistics, event timeline,
-TrucksBook import, export and backups.
+Discord Rich Presence, TrucksBook import, export and backups.
 
 Missing: the map and route replay, although the coordinates are already being
 collected, plus achievements and whole session statistics. Details in
