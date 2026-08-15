@@ -1,5 +1,20 @@
 namespace Waybill.Tracking;
 
+/// <summary>One unit of the coupled set as it ended the delivery.</summary>
+public class TrailerUnitRecord {
+    public string Id = "";
+    public string Name = "";
+    public string Plate = "";
+    public string BodyType = "";
+    /// <summary>"trailer" or "dolly". A dolly carries no cargo and takes its own
+    /// damage, so counting it among the trailers would flatter the average.</summary>
+    public string Kind = "";
+    public bool Owned;
+    /// <summary>Damage taken during this delivery, as a share, measured from the
+    /// condition the unit was in when it was hitched.</summary>
+    public double Damage;
+}
+
 public class FineRecord {
     public double Amount;
     public string Offence = "";
@@ -82,6 +97,15 @@ public class JobRecord {
     public string TruckId = "";
     public string? TrailerName;
     public string TrailerId = "";
+    /// <summary>The game's own word for the configuration: `single`, `double`,
+    /// `triple`. Read from the leading unit, the only one that carries it.</summary>
+    public string TrailerChainType = "";
+    /// <summary>The driver's own trailer rather than one handed over with the job.</summary>
+    public bool TrailerOwned;
+    /// <summary>Every coupled unit in hitching order, with what each of them took.
+    /// A double or a triple is one condition as far as the game is concerned, and
+    /// this is the only place the parts survive.</summary>
+    public List<TrailerUnitRecord> TrailerUnits = new();
 
     /// <summary>Distance in the game's own "simulated km" - the units the job offer,
     /// the dashboard odometer, the payout and the delivery screen all use. This is

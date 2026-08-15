@@ -55,6 +55,12 @@ public class DeliveryDetail {
     /// <summary>Which market the job came from, as the SDK names it. Empty for rows
     /// recorded before it was stored, and for imports.</summary>
     public string JobType = "";
+    /// <summary>The coupled set: how the game names it, whether it was the driver's
+    /// own, and each unit in hitching order. Empty on older rows, which a rebuild
+    /// fills in from their recordings.</summary>
+    public string TrailerChainType = "";
+    public bool TrailerOwned;
+    public List<Waybill.Tracking.TrailerUnitRecord> TrailerUnits = new();
 }
 
 /// <summary>One row in the per-delivery event timeline.</summary>

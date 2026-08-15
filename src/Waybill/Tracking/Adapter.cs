@@ -90,6 +90,18 @@ public static class Adapter {
                     .DefaultIfEmpty(TrailerWear(trailer))
                     .Max(),
                 CargoDamage = trailer?.DamageValues?.Cargo ?? 0,
+                Units = (d.TrailerValues ?? Array.Empty<SCSTelemetry.Trailer>())
+                    .Where(t => t.Attached)
+                    .Select(t => new TrailerUnit {
+                        Id = t.Id ?? "",
+                        Name = t.Name ?? "",
+                        Plate = t.LicensePlate ?? "",
+                        BodyType = t.BodyType ?? "",
+                        ChainType = t.ChainType ?? "",
+                        Wear = TrailerWear(t),
+                        CargoDamage = t.DamageValues?.Cargo ?? 0,
+                    })
+                    .ToList(),
             },
 
             PosX = pos?.X ?? 0,
@@ -279,6 +291,18 @@ public static class Adapter {
                 TrailerId = S(trailer?["Id"]),
                 Wear = TrailerWearJson(trailer?["DamageValues"]),
                 CargoDamage = N(trailer?["DamageValues"]?["Cargo"]),
+                Units = (trailerValues ?? new JArray())
+                    .Where(t => B(t["Attached"]))
+                    .Select(t => new TrailerUnit {
+                        Id = S(t["Id"]),
+                        Name = S(t["Name"]),
+                        Plate = S(t["LicensePlate"]),
+                        BodyType = S(t["BodyType"]),
+                        ChainType = S(t["ChainType"]),
+                        Wear = TrailerWearJson(t["DamageValues"]),
+                        CargoDamage = N(t["DamageValues"]?["Cargo"]),
+                    })
+                    .ToList(),
             },
 
             PosX = N(pos?["X"]),

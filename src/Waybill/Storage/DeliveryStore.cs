@@ -58,6 +58,13 @@ public class DeliveryStore : IDisposable {
             ("deliveries", "source", "TEXT DEFAULT 'waybill'"),
             ("deliveries", "xp", "INTEGER"),
             ("deliveries", "job_type", "TEXT"),
+            // The coupled set: how the game names the configuration, whether the
+            // trailer was the driver's own, and each unit with what it took. Stored
+            // as JSON because it is a list whose length is the point, and the events
+            // table already keeps its extra detail the same way.
+            ("deliveries", "trailer_chain_type", "TEXT"),
+            ("deliveries", "trailer_owned", "INTEGER"),
+            ("deliveries", "trailer_units", "TEXT"),
         };
 
         foreach (var group in expected.GroupBy(e => e.Table)) {
@@ -199,7 +206,7 @@ public class DeliveryStore : IDisposable {
                     cruise_control_share, rest_stops, rest_minutes,
                     fines_count, fines_total,
                     started_at_ms, finished_at_ms, real_duration_ms, game_duration_min,
-                    job_type
+                    job_type, trailer_chain_type, trailer_owned, trailer_units
                 ) VALUES (
                     $job_uid, $game, $game_version, $outcome, $validation_status, $validation_flags,
                     $truck_make, $truck_model, $truck_id, $trailer_name, $trailer_id,
@@ -215,7 +222,7 @@ public class DeliveryStore : IDisposable {
                     $cruise_control_share, $rest_stops, $rest_minutes,
                     $fines_count, $fines_total,
                     $started_at_ms, $finished_at_ms, $real_duration_ms, $game_duration_min,
-                    $job_type
+                    $job_type, $trailer_chain_type, $trailer_owned, $trailer_units
                 );
                 """;
 
@@ -224,6 +231,10 @@ public class DeliveryStore : IDisposable {
             cmd.Parameters.AddWithValue("$game_version", r.GameVersion);
             cmd.Parameters.AddWithValue("$outcome", r.Outcome);
             cmd.Parameters.AddWithValue("$job_type", r.JobType);
+            cmd.Parameters.AddWithValue("$trailer_chain_type", r.TrailerChainType);
+            cmd.Parameters.AddWithValue("$trailer_owned", r.TrailerOwned ? 1 : 0);
+            cmd.Parameters.AddWithValue("$trailer_units",
+                r.TrailerUnits.Count > 0 ? Newtonsoft.Json.JsonConvert.SerializeObject(r.TrailerUnits) : "");
             cmd.Parameters.AddWithValue("$validation_status", r.Validation.Status);
             cmd.Parameters.AddWithValue("$validation_flags", string.Join(",", r.Validation.Flags));
             cmd.Parameters.AddWithValue("$truck_make", r.TruckMake);
@@ -547,7 +558,9 @@ public class DeliveryStore : IDisposable {
                        -- Appended rather than slotted in beside the other distances:
                        -- the reader below indexes by position, so a column added in
                        -- the middle silently shifts every one after it.
-                       sim_speed_distance_km, COALESCE(job_type, ''), cargo_damage_pct
+                       sim_speed_distance_km, COALESCE(job_type, ''), cargo_damage_pct,
+                       COALESCE(trailer_chain_type, ''), COALESCE(trailer_owned, 0),
+                       COALESCE(trailer_units, '')
                 FROM deliveries WHERE id = $id;
                 """;
             cmd.Parameters.AddWithValue("$id", id);
@@ -584,7 +597,22 @@ public class DeliveryStore : IDisposable {
                 SimSpeedDistanceKm = Num(41),
                 JobType = r.GetString(42),
                 CargoDamage = Num(43),
+                TrailerChainType = r.GetString(44),
+                TrailerOwned = r.GetInt32(45) != 0,
+                TrailerUnits = ReadUnits(r.GetString(46)),
             };
+        }
+    }
+
+    /// <summary>Rows recorded before the coupled set was kept have nothing here, and
+    /// a damaged one must not stop a delivery from opening.</summary>
+    private static List<TrailerUnitRecord> ReadUnits(string json) {
+        if (json.Length == 0) return new List<TrailerUnitRecord>();
+        try {
+            return Newtonsoft.Json.JsonConvert.DeserializeObject<List<TrailerUnitRecord>>(json)
+                   ?? new List<TrailerUnitRecord>();
+        } catch {
+            return new List<TrailerUnitRecord>();
         }
     }
 

@@ -110,6 +110,12 @@ public class JobState {
     public string TruckId = "";
     public string? TrailerName;
     public string TrailerId = "";
+    /// <summary>The coupled set at its longest, and how worn each unit was when it
+    /// was first seen and last seen. Keyed by plate, which is unique per unit.</summary>
+    public List<TrailerUnit> TrailerChain = new();
+    public Dictionary<string, double> TrailerStartWear = new();
+    public Dictionary<string, double> TrailerLastWear = new();
+
     public double StartTruckWear;
     public double StartTrailerWear;
     public double StartFuelL;
@@ -359,6 +365,9 @@ public class JobTracker {
             TruckId = j.TruckId,
             TrailerName = j.TrailerName,
             TrailerId = j.TrailerId,
+            TrailerChainType = ChainType(j),
+            TrailerOwned = j.TrailerChain.Any(u => u.IsOwned),
+            TrailerUnits = TrailerUnits(j),
             DistanceKm = Math.Round(j.DistanceKm, 3),
             WorldDistanceKm = Math.Round(j.WorldDistanceKm, 3),
             SimSpeedDistanceKm = Math.Round(j.SimSpeedDistanceKm, 3),
@@ -408,6 +417,54 @@ public class JobTracker {
     /// what tells them apart: one flatbed load of scrapped cars moved the clock 25
     /// minutes a minute into the job and was recorded as the driver having slept.
     /// </summary>
+    /// <summary>
+    /// Keeps the coupled set and how each unit of it fared. The set is remembered at
+    /// its longest rather than at the end, because a triple is only a triple while
+    /// everything is hitched, and telemetry drops units during a loading screen.
+    /// Wear is read per unit, since the game only ever shows the worst of them.
+    /// </summary>
+    private static void TrackTrailerChain(JobState j, Snapshot snap) {
+        var units = snap.Trailer.Units;
+        if (units.Count == 0) return;
+
+        foreach (var unit in units) {
+            var key = UnitKey(unit);
+            // First sight of a unit is its condition on being hitched, so damage
+            // over this job is measured from there and a trailer handed over already
+            // scratched does not count against the driver.
+            if (!j.TrailerStartWear.ContainsKey(key)) j.TrailerStartWear[key] = unit.Wear;
+            j.TrailerLastWear[key] = unit.Wear;
+        }
+
+        if (units.Count >= j.TrailerChain.Count) j.TrailerChain = units;
+    }
+
+    /// <summary>The configuration as the game names it. Only the leading unit
+    /// carries it; a dolly and the sections behind it report nothing.</summary>
+    private static string ChainType(JobState j) =>
+        j.TrailerChain.FirstOrDefault(u => u.ChainType.Length > 0)?.ChainType ?? "";
+
+    private static List<TrailerUnitRecord> TrailerUnits(JobState j) =>
+        j.TrailerChain.Select(u => {
+            var key = UnitKey(u);
+            var start = j.TrailerStartWear.TryGetValue(key, out var s) ? s : u.Wear;
+            var last = j.TrailerLastWear.TryGetValue(key, out var l) ? l : u.Wear;
+            return new TrailerUnitRecord {
+                Id = u.Id,
+                Name = u.Name,
+                Plate = u.Plate,
+                BodyType = u.BodyType,
+                Kind = u.IsDolly ? "dolly" : "trailer",
+                Owned = u.IsOwned,
+                // Never negative: a unit repaired mid job would otherwise read as
+                // having taken away damage.
+                Damage = Math.Max(0, Math.Round(last - start, 6)),
+            };
+        }).ToList();
+
+    private static string UnitKey(TrailerUnit unit) =>
+        unit.Plate.Length > 0 ? unit.Plate : unit.Id;
+
     private static bool CargoChangedHands(Snapshot snap, Snapshot prev) =>
         (snap.Job?.CargoLoaded ?? false) != (prev.Job?.CargoLoaded ?? false);
 
@@ -658,6 +715,8 @@ public class JobTracker {
             j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "collision", Value = Math.Round(damageStep * 100, 3), Detail = Waybill.Strings.T("unit.damagePercent") });
         }
 
+        TrackTrailerChain(j, snap);
+
         // Fuel. An increase means a refuel, not negative consumption.
         var fuelDelta = prev.Truck.FuelL - snap.Truck.FuelL;
         if (fuelDelta > 0) j.FuelUsedL += fuelDelta;
@@ -810,6 +869,9 @@ public class JobTracker {
             TruckId = j.TruckId,
             TrailerName = j.TrailerName,
             TrailerId = j.TrailerId,
+            TrailerChainType = ChainType(j),
+            TrailerOwned = j.TrailerChain.Any(u => u.IsOwned),
+            TrailerUnits = TrailerUnits(j),
             DistanceKm = Math.Round(j.DistanceKm, 3),
             WorldDistanceKm = Math.Round(j.WorldDistanceKm, 3),
             SimSpeedDistanceKm = Math.Round(j.SimSpeedDistanceKm, 3),

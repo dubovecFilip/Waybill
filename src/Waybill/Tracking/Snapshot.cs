@@ -58,6 +58,33 @@ public class JobInfo {
     public bool CargoLoaded;
 }
 
+/// <summary>
+/// One coupled unit, in the order the game reports them, which is the order they
+/// are hitched. A double or a triple arrives as several of these and the game shows
+/// a single condition for the lot, so the parts are only visible here.
+/// </summary>
+public class TrailerUnit {
+    public string Id = "";
+    public string Name = "";
+    public string Plate = "";
+    /// <summary>Empty on a unit that is not the head of the set. A dolly has no body
+    /// of its own, and neither do the follow on sections of a car transporter.</summary>
+    public string BodyType = "";
+    /// <summary>The game's own word for the configuration, on the head unit only:
+    /// `single`, `double`, `triple`.</summary>
+    public string ChainType = "";
+    public double Wear;
+    public double CargoDamage;
+
+    /// <summary>A converter dolly rather than something that carries cargo. Named in
+    /// the identifier, which is the only place the game says so.</summary>
+    public bool IsDolly => Id.Contains("dolly", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Bought and owned rather than handed over with the job. Owned units
+    /// are identified the way trucks are, as `vehicle.something`, and carry a name.</summary>
+    public bool IsOwned => Id.StartsWith("vehicle.", StringComparison.OrdinalIgnoreCase);
+}
+
 public class TruckWear {
     public double Engine;
     public double Transmission;
@@ -89,6 +116,9 @@ public class TrailerInfo {
     public bool Present;
     public double Wear;
     public double CargoDamage;
+    /// <summary>Every coupled unit in hitching order. <see cref="Wear"/> stays the
+    /// worst of them, which is the set's condition and what the game itself shows.</summary>
+    public List<TrailerUnit> Units = new();
 }
 
 public class SnapshotEvents {
