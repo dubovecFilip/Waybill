@@ -773,6 +773,12 @@ public class DeliveryStore : IDisposable {
     /// labelled. Reading it three times would mean three passes over the same
     /// twenty thousand rows.
     ///
+    /// A route here is the load's journey, not the driver's day: it opens where the
+    /// trailer was hitched, so the run out to a World of Trucks trailer is not part
+    /// of it. Note that those kilometres are still in the delivery's distance,
+    /// because the game counts them from the moment the offer is accepted, so a
+    /// drawn line can be shorter than the figure beside it.
+    ///
     /// Imported deliveries are left out because they have no telemetry behind
     /// them, so there is nothing to draw and nothing to learn a position from.
     /// </summary>
@@ -845,37 +851,40 @@ public class DeliveryStore : IDisposable {
                 }
                 l.Add((p.X, p.Z));
             }
+            // A route starts where the load did.
+            //
+            // On a World of Trucks contract the trailer spawns when the offer is
+            // accepted and the odometer starts running from wherever the driver was
+            // standing, so the recording opens with the drive out to the trailer.
+            // That stretch is the driver getting to work, not the consignment moving,
+            // and it is cut: what the map and the sheet draw is the load's journey.
+            //
+            // Cut here rather than in each thing that draws, so the map on a card, the
+            // map of the whole history and the exported sheet cannot disagree about
+            // where a delivery began. A job that recorded no coupling is left whole;
+            // its leading teleport is dealt with when the line is drawn.
+            foreach (var (id, points) in result.Routes) {
+                if (!coupled.TryGetValue(id, out var at)) continue;
+                var from = points.FindIndex(p => p.AtMs >= at);
+                if (from > 0) points.RemoveRange(0, from);
+            }
+
             // Where two positions along the route can be trusted to be the city named
             // on the job, and where they cannot.
             //
-            // The pickup is the awkward one. On a quick job the truck is placed at the
-            // depot, so the second point is it. On a World of Trucks contract the
-            // trailer spawns when the offer is taken and the odometer starts running
-            // from wherever the driver happened to be standing, which can be another
-            // city: the job's second point is not the load, it is the driver. So the
-            // moment the trailer was hitched is used when the job recorded one, and
-            // failing that only a job that began with a jump counts, since that jump
-            // is the truck being put down at the depot. Seven of the nineteen
-            // deliveries here began with no jump at all.
+            // The pickup is the awkward one. Trimmed above, a route now opens at the
+            // coupling, so its first point is the load. Failing a coupling only a job
+            // that began with a jump counts, since that jump is the truck being put
+            // down at the depot by a quick job. Seven of the nineteen deliveries here
+            // began with no jump at all.
             //
             // The drop is simpler but not automatic: a delivered job ends at the
             // destination, a cancelled one ends nowhere in particular.
             foreach (var (id, points) in result.Routes) {
                 if (points.Count < 3 || !ends.TryGetValue(id, out var e)) continue;
 
-                if (coupled.TryGetValue(id, out var at)) {
-                    var hitched = points[0];
-                    var best = long.MaxValue;
-                    foreach (var p in points) {
-                        var off = Math.Abs(p.AtMs - at);
-                        if (off >= best) continue;
-                        best = off;
-                        hitched = p;
-                    }
-                    Saw(e.From, hitched);
-                } else if (Jumped(points[0], points[1])) {
-                    Saw(e.From, points[1]);
-                }
+                if (coupled.ContainsKey(id)) Saw(e.From, points[0]);
+                else if (Jumped(points[0], points[1])) Saw(e.From, points[1]);
 
                 if (e.Delivered) Saw(e.To, points[^1]);
             }

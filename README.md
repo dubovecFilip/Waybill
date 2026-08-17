@@ -213,6 +213,20 @@ position is exactly where the game put it:
 Nothing on the map ever reports a distance, and it never will. The length of a
 line on it is not kilometres; the odometer answers that.
 
+### A route is the load's journey
+
+It begins where the trailer was hitched, not where the job was accepted. A World
+of Trucks contract spawns its trailer the moment you take the offer and starts
+counting kilometres from wherever you happen to be standing, so the recording
+opens with the drive out to the load. That stretch is getting to work rather than
+the consignment moving, and it is left off.
+
+One consequence is worth knowing: the game counts those kilometres, so on such a
+job the drawn line covers less ground than the distance beside it. On the
+deliveries here the run-up reaches about three kilometres of world space, and on
+a quick job, where the truck is put down at the depot already loaded, there is
+none at all.
+
 ### What is not drawn as driving
 
 Two stretches are deliberately shown as a dashed break rather than a line. The
