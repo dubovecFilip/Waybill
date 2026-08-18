@@ -171,6 +171,10 @@ public class RouteView : Control {
         if (marks is null || _focus is null) return placed;
 
         foreach (var mark in marks) {
+            // The route already opens where the load went on, drawn as its own
+            // marker, so a pin saying the same thing sits on top of it saying it
+            // twice.
+            if (mark.Type is "trailer_coupled" or "cargo_loaded") continue;
             var best = long.MaxValue;
             RoutePoint at = default;
             foreach (var p in _focus.All) {
@@ -519,7 +523,7 @@ public class RouteView : Control {
         "rest" => (Color.FromArgb(150, 160, 175), 0),
         "tollgate" => (Color.FromArgb(150, 160, 175), 4),
         "save_loaded" => (Color.FromArgb(180, 150, 200), 3),
-        "trailer_coupled" => (Color.FromArgb(200, 210, 224), 4),
+        "cargo_loaded" => (Color.FromArgb(200, 210, 224), 4),
         _ => (Color.FromArgb(150, 160, 175), 0),
     };
 

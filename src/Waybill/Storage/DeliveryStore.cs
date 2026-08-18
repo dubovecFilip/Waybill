@@ -603,8 +603,37 @@ public class DeliveryStore : IDisposable {
                     Type = type,
                 });
             }
-            return rows;
+            return Merge(rows);
         }
+    }
+
+    /// <summary>
+    /// Folds a collision and the fine it earned into one entry.
+    ///
+    /// Hitting something and being fined for hitting something are one event with two
+    /// consequences, and the game reports them in the same instant. Two lines saying
+    /// "Collision 1.94 %" and "Fine 700, crash" made a driver read twice to find out
+    /// that one thing had happened.
+    ///
+    /// Only a fine for crashing merges. Being fined for speeding a second after an
+    /// impact is genuinely two things, and the offence is what tells them apart.
+    /// </summary>
+    private static List<TimelineRow> Merge(List<TimelineRow> rows) {
+        const long SameMomentMs = 2000;
+        var merged = new List<TimelineRow>();
+
+        foreach (var row in rows) {
+            var crashFine = row.Type == "fine"
+                && row.Detail.Equals(Strings.T("value.Crash"), StringComparison.OrdinalIgnoreCase);
+            var into = crashFine
+                ? merged.LastOrDefault(m => m.Type == "collision" && row.AtMs - m.AtMs <= SameMomentMs)
+                : null;
+
+            if (into is null) { merged.Add(row); continue; }
+
+            into.Detail = $"{Strings.T("timeline.fined")} {row.Hodnota}";
+        }
+        return merged;
     }
 
     /// <summary>Free-text note the user can attach to a delivery (roadmap: "edit notes").</summary>

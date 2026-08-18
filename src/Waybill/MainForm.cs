@@ -1895,6 +1895,97 @@ public class MainForm : Form {
 
     private static Image? _eyeOpen, _eyeShut;
 
+    private static readonly Dictionary<string, Image> EventIcons = new();
+
+    /// <summary>
+    /// A small mark for each kind of thing that happens on a drive, so a timeline can
+    /// be scanned rather than read.
+    ///
+    /// Drawn rather than typed, for the same reason as the eye on the layer menu: the
+    /// glyphs for these live in fonts that may not be installed, and a missing one
+    /// comes out as an empty box exactly where the meaning was. Simplified on
+    /// purpose too. Two cars meeting is what a collision is, and at fourteen pixels
+    /// it would be two smudges; a burst is what an impact looks like at this size and
+    /// nobody has to squint at it.
+    /// </summary>
+    private static Image? EventIcon(string type) {
+        if (EventIcons.TryGetValue(type, out var made)) return made;
+
+        var colour = type switch {
+            "collision" => Color.FromArgb(226, 116, 104),
+            "fine" => Color.FromArgb(232, 168, 74),
+            "refuel" => Color.FromArgb(112, 172, 214),
+            "ferry" or "train" => Color.FromArgb(96, 176, 168),
+            "cargo_loaded" or "trailer_coupled" => Color.FromArgb(200, 210, 224),
+            _ => Muted,
+        };
+
+        var bmp = new Bitmap(14, 14);
+        using (var g = Graphics.FromImage(bmp)) {
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using var pen = new Pen(colour, 1.4f) { StartCap = System.Drawing.Drawing2D.LineCap.Round, EndCap = System.Drawing.Drawing2D.LineCap.Round };
+            using var fill = new SolidBrush(colour);
+
+            switch (type) {
+                case "collision":
+                    // An impact: spokes out of a point, longer where it was struck.
+                    for (var i = 0; i < 8; i++) {
+                        var a = i * Math.PI / 4;
+                        var reach = i % 2 == 0 ? 6f : 4f;
+                        g.DrawLine(pen, 7f, 7f,
+                            7f + (float)Math.Cos(a) * reach, 7f + (float)Math.Sin(a) * reach);
+                    }
+                    break;
+                case "fine":
+                    // A ticket, written and torn off.
+                    g.DrawRectangle(pen, 2.5f, 3.5f, 9f, 7f);
+                    g.DrawLine(pen, 4.5f, 6.5f, 9.5f, 6.5f);
+                    g.DrawLine(pen, 4.5f, 8.5f, 8f, 8.5f);
+                    break;
+                case "refuel":
+                    // A drop.
+                    g.DrawBezier(pen, 7f, 2.5f, 12f, 8f, 11f, 12f, 7f, 12f);
+                    g.DrawBezier(pen, 7f, 2.5f, 2f, 8f, 3f, 12f, 7f, 12f);
+                    break;
+                case "rest":
+                    // A crescent, which is what sleeping looks like everywhere.
+                    g.DrawArc(pen, 2.5f, 2.5f, 9f, 9f, 40, 280);
+                    break;
+                case "ferry":
+                case "train":
+                    // A hull on water.
+                    g.DrawLine(pen, 3f, 7.5f, 11f, 7.5f);
+                    g.DrawLine(pen, 4f, 7.5f, 5.5f, 10.5f);
+                    g.DrawLine(pen, 10f, 7.5f, 8.5f, 10.5f);
+                    g.DrawLine(pen, 5.5f, 10.5f, 8.5f, 10.5f);
+                    g.DrawLine(pen, 7f, 3f, 7f, 7f);
+                    break;
+                case "tollgate":
+                    // A barrier across the road.
+                    g.DrawLine(pen, 3f, 11f, 3f, 4f);
+                    g.DrawLine(pen, 3f, 5f, 12f, 8f);
+                    break;
+                case "save_loaded":
+                    // Back round to somewhere already passed.
+                    g.DrawArc(pen, 3f, 3f, 8f, 8f, 40, 280);
+                    g.FillPolygon(fill, new[] { new PointF(3.4f, 4.6f), new PointF(7f, 4.2f), new PointF(4.6f, 7.4f) });
+                    break;
+                case "cargo_loaded":
+                case "trailer_coupled":
+                    // A crate on the deck.
+                    g.DrawRectangle(pen, 2.5f, 4.5f, 9f, 6f);
+                    g.DrawLine(pen, 2.5f, 6.5f, 11.5f, 6.5f);
+                    break;
+                default:
+                    g.DrawEllipse(pen, 5f, 5f, 4f, 4f);
+                    break;
+            }
+        }
+
+        EventIcons[type] = bmp;
+        return bmp;
+    }
+
     /// <summary>
     /// The hazard stripes an oversize load carries on its own bumper.
     ///
@@ -2220,12 +2311,17 @@ public class MainForm : Form {
 
         var detail = new Label { Dock = DockStyle.Fill, Text = e.Detail, ForeColor = Muted, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
         var value = new Label { Dock = DockStyle.Right, Width = 90, Text = e.Hodnota, ForeColor = Accent, TextAlign = ContentAlignment.MiddleRight, Font = new Font("Segoe UI", 9F, FontStyle.Bold) };
-        var what = new Label { Dock = DockStyle.Left, Width = 110, Text = e.Udalost, ForeColor = Ink, TextAlign = ContentAlignment.MiddleLeft };
+        var what = new Label { Dock = DockStyle.Left, Width = 98, Text = e.Udalost, ForeColor = Ink, TextAlign = ContentAlignment.MiddleLeft };
         var time = new Label { Dock = DockStyle.Left, Width = 66, Text = e.Cas, ForeColor = Muted, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Consolas", 8.5F) };
+        var icon = new PictureBox {
+            Dock = DockStyle.Left, Width = 20, SizeMode = PictureBoxSizeMode.CenterImage,
+            Image = EventIcon(e.Type), BackColor = Color.Transparent,
+        };
 
         line.Controls.Add(detail);
         line.Controls.Add(value);
         line.Controls.Add(what);
+        line.Controls.Add(icon);
         line.Controls.Add(time);
         return line;
     }
