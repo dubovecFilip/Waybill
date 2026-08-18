@@ -11,12 +11,15 @@
 | `map.png` | The map page, with one route lit under the pointer. |
 | `statistics.png` | The statistics page. |
 | `waybill-sheet.png` | A delivery exported as an A4 sheet. |
+| `legend.png` | Every mark the window uses, with what it means. |
 
 Screenshots are taken at 1180x760, which is roughly the window's default size and
 wide enough for the delivery list to show most of its columns without scrolling.
 `waybill-sheet.png` is the exception: it is not a screenshot but a real export,
 downscaled from the 300 dpi original to 1000 px tall, so it keeps A4's proportions
-rather than the window's.
+rather than the window's. `legend.png` is the other: it is a dialog, so it is its
+own width, and it was stretched tall enough to show every entry at once rather
+than shown at its default size with half the list below the fold.
 Each is named for what it shows rather than for where it happens to appear, so
 moving one around the README does not leave the name lying.
 

@@ -365,6 +365,11 @@ rather than only tested.
   seven trailer units, while a file is a fixed size by definition and can run onto
   a second sheet
 - Which market a job came from, and whether the trailer was the driver's own
+- Driving between jobs kept as well, counted apart from the deliveries and drawn
+  in a quieter line, so the map fills in without the totals being flattered
+- A legend, because most of what the window says it says by drawing: the verdict
+  dots, the signs on the timeline, the colour of a route, the stripes on an
+  oversize load. None of that was in the plan, and all of it needed explaining
 - Discord Rich Presence, over the local pipe, no account and nothing sent anywhere
 - Export to CSV and JSON, backup and restore, TrucksBook import
 - Rebuild from the raw recordings, which is what makes every judgement above

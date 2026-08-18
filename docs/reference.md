@@ -108,6 +108,17 @@ each thing happened.
 | `trailer_coupled` | | |
 | `cargo_loaded` | | |
 
+A fine with the offence `Crash` is folded into the collision it belongs to rather
+than listed beside it. The game reports both within a second of each other, and
+two marks for one moment read as two things going wrong; the collision keeps its
+place and carries the amount. Both rows stay in the database, so the fine totals
+are unaffected and a reader from outside sees what the game actually said.
+
+The interface draws each type as a sign rather than writing it out, and the same
+sign is used everywhere the type appears. `train` shares the ferry's, being the
+same thing to a driver, and `fine` takes a different one when the offence is
+`Speeding`. *Help → Legend* names them all.
+
 `trailer_coupled` and `cargo_loaded` are the two halves of the load being on, and
 which of them comes last depends on the kind of job:
 
@@ -122,9 +133,16 @@ writes nothing. **The later of whatever was recorded is when the load was on**,
 which covers all three without asking what kind of job it was, and a job that
 recorded neither was loaded and hitched from the start.
 
-Two things read that moment. It is where the map anchors a city, and it is where a
-delivery's own line begins: the map and the exported sheet show the load's journey,
-so getting to the trailer and driving to the dock are not part of it.
+Three things read that moment. It is where the map anchors a city, it is where a
+delivery's own line begins, and it is where the timeline starts: the map, the
+sheet and the list of what happened all show the load's journey, so getting to the
+trailer and driving to the dock are not part of any of them.
+
+**Nothing before it is recorded at all.** A fine picked up on the way out to the
+trailer, or a refuel taken before the dock, is not the consignment's history.
+`trailer_coupled` and `cargo_loaded` are written, because that is how the moment
+is found, but neither is shown: they mark the beginning rather than something that
+happened along the way.
 
 The map still draws that stretch, in the quieter style it uses for any other
 driving off the job, because the driver went that way and the roads are real. It
@@ -202,6 +220,25 @@ handed over with the job is named for its type and has none.
 
 `trailer_damage_pct` stays the worst across the set, which is the set's condition
 and what the game itself shows.
+
+The name a unit is shown under is worked out for display only; nothing about it is
+stored, so improving it improves every past delivery at once. An owned unit uses
+the name its driver gave it. One handed over with the job has none, so the
+identifier is read instead: `blade_hauler.chassis_40x2esii` gives its body type
+and the length in feet, shown as *Blade hauler, 40 ft*. A body type beginning with
+an underscore is the game's own marker rather than a description and is skipped,
+which is what keeps `_oversize` out of the name. A dolly says it is a dolly.
+
+## Special transport
+
+Column `special_transport`. True when the job was an oversize load, which the game
+reports on the job itself.
+
+It changes nothing about the verdict, the distance or the pay. It is shown because
+it changes what the drive was: an escorted convoy at half the usual speed is not
+the same delivery as the same route with a curtainsider. The interface marks it
+with hazard stripes, on the card and in the list, and the exported sheet carries a
+band across its head.
 
 ## Job market
 

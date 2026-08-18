@@ -76,6 +76,9 @@ Every state, flag and anomaly is listed with its meaning in
 * Says which market a job came from, and whether the trailer was your own
 * Explains every verdict in words rather than leaving a label on the row
 * Draws where each delivery went, with every fine and collision marked on it
+* Marks each thing that happened with a sign of its own, and explains every sign
+* Names a trailer for what it is instead of for the file it came out of
+* Marks an oversize load as one, on its card and in the list
 * Draws the whole history as one map, built entirely from your own drives
 * Writes a delivery out as a printable A4 waybill, route and stamp included
 * Keeps the driving between jobs too, as distance and as lines on the map
@@ -125,7 +128,9 @@ Start order does not matter, the app connects to the game as soon as it finds it
 Jobs are detected and saved without any input.
 
 Four pages down the left. *Deliveries* is the history, with search, a filter and
-the verdict on each drive.
+the verdict on each drive. Clicking a column heading sorts by it, and the order
+chosen is kept: opening a delivery and coming back leaves the list the way it was
+left rather than back on date order.
 
 *Current job* is what the engine sees right now: the route, the cargo, how far
 along the drive is, and a log of what has happened, each entry with its figure,
@@ -146,6 +151,34 @@ and worth nothing when nothing did, so they stay out of the way until asked for.
 
 ![The statistics page](assets/statistics.png)
 
+Distance driven with nothing on the hook has its own tile there, beside the
+deliveries rather than folded into them, and the delivery figure carries both
+together underneath it.
+
+## What the window says without words
+
+A good deal of it is drawn rather than written. The dot beside a delivery is its
+verdict, the colour of a route is speed, stripes down the side of a card mean an
+oversize load, and each thing that happened on a drive gets a sign of its own on
+the timeline: a burst for an impact, a dial for a speeding fine, a note for any
+other one, a drop, a moon, a hull, a barrier, two chevrons back for a save
+loaded.
+
+The signs are drawn by the app itself rather than taken from a font, because the
+glyphs for most of them live in fonts that may not be installed, and a missing one
+comes out as an empty box exactly where the meaning was.
+
+*Help → Legend* names all of them in one window, along with the marks on the map
+and the two shades in the progress bar. The samples in it are painted by the same
+code the rest of the window paints with, so it cannot quietly drift away from what
+it explains.
+
+![Every mark, with what it means](assets/legend.png)
+
+One sign is deliberately missing. A fine for a crash is not listed apart from the
+crash: the game reports both, and two marks a second apart for one moment read as
+two things going wrong. The impact keeps its place and carries the amount.
+
 ## Doubles and triples
 
 The game shows one condition for the whole set however many units are behind the
@@ -155,6 +188,12 @@ The *Trailer* line folds the set away: closed it says what the set is, opened it
 lists every unit in the order they are hitched, with its plate and the damage it
 took. A dolly is named as a dolly, so counting or averaging does not treat the
 converter as cargo capacity, and a trailer you own says so.
+
+A unit you own carries the name you gave it. One handed over with the job has
+none, and the game identifies it by the file it came out of, so
+`blade_hauler.chassis_40x2esii` is read for what it holds: the body type and the
+length, giving *Blade hauler, 40 ft*. That is what a driver would say about it,
+and it is what fits in a column.
 
 ![The coupled set, opened](assets/trailer-chain.png)
 
@@ -174,17 +213,23 @@ Position has been recorded once a second since the first delivery, so every driv
 already had a shape long before anything drew one.
 
 A delivery's card shows its own route, coloured by speed, over every other route
-the profile has driven. Fines, collisions, refuels, rests and the moment the
-trailer was hitched are marked on it, each tied to the position the truck was in
-when it happened. The *Map* page shows the same thing without a delivery singled
-out: every drive of one game at once, where pointing at a route names it and
-clicking one opens its card. It is a second way into the history, since the list
-answers when something was driven and this answers where.
+the profile has driven. Fines, collisions, refuels and rests are marked on it,
+each tied to the position the truck was in when it happened. The *Map* page shows
+the same thing without a delivery singled out: every drive of one game at once,
+where pointing at a route names it and clicking one opens its card. It is a second
+way into the history, since the list answers when something was driven and this
+answers where.
 
 ![The map of everywhere driven](assets/map.png)
 
-Wheel zooms, dragging moves, double clicking fits. Three buttons sit over the top
-right: what to draw, fit the view, and full screen.
+Wheel zooms, dragging moves, double clicking fits. Two buttons sit over the top
+right: what to draw, and fit the view. The eye beside each layer says whether it
+is being drawn, and a layer that is hidden cannot be picked either, so nothing
+opens from a line that is not on the screen. Cities stay visible whatever else is
+turned off, since they are what makes the rest readable.
+
+The same map, smaller, sits in the panel a delivery's card slides out, where a
+third button opens it full screen.
 
 ### There is no real map underneath, on purpose
 
@@ -225,6 +270,11 @@ Whichever it was, the recording usually opens with a drive that is getting to wo
 rather than the consignment moving. That stretch is still drawn, in the same quiet
 style as any other driving off the job, but it belongs to no delivery: it cannot be
 pointed at or opened, and it is not part of the line the delivery owns.
+
+Nothing that happened during it is recorded either. A fine picked up on the way to
+the trailer is not the consignment's history, so the timeline starts where the load
+does, and the hitching itself is not listed on it: it is the first line's own
+beginning, not something that happened along the way.
 
 The kilometres are still counted, and now counted separately. A delivery's card
 shows the two legs on their own line, and the progress bar on *Current job* draws
