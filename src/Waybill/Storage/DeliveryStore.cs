@@ -577,6 +577,12 @@ public class DeliveryStore : IDisposable {
                 SELECT at_ms, event_type, value, extra_json
                 FROM events
                 WHERE delivery_id = $id AND event_type NOT LIKE 'anomaly:%'
+                  -- Kept in the table because the map reads them to find where the
+                  -- load's journey begins, and left out of the reading because the
+                  -- route already opens there: an entry saying the delivery started
+                  -- where the delivery started is not something that happened along
+                  -- the way.
+                  AND event_type NOT IN ('trailer_coupled', 'cargo_loaded')
                 ORDER BY at_ms;
                 """;
             cmd.Parameters.AddWithValue("$id", deliveryId);

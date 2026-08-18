@@ -162,6 +162,9 @@ public class JobState {
     /// <summary>Whether the cargo is on the trailer yet. Separate from the coupling
     /// because which of the two comes last depends on the kind of job.</summary>
     public bool CargoOn;
+    /// <summary>When both became true, which is when the delivery starts being about
+    /// the consignment. Zero until then.</summary>
+    public long LoadOnAtMs;
     /// <summary>The part of <see cref="DistanceKm"/> driven before the load was on.
     ///
     /// A World of Trucks contract starts the odometer where the offer was accepted,
@@ -679,6 +682,16 @@ public class JobTracker {
             j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "cargo_loaded" });
         }
 
+        // The instant the consignment starts moving. Damage is measured from here
+        // rather than from the job being accepted: a scratch picked up on the way to
+        // the trailer is the driver's, not the load's, and it is no longer counted as
+        // a collision either, so leaving it in the damage would report an impact that
+        // the delivery says never happened.
+        if (j.LoadOnAtMs == 0 && j.TrailerCoupled && j.CargoOn) {
+            j.LoadOnAtMs = nowMs;
+            j.StartTruckWear = snap.Truck.Wear.Total();
+        }
+
         // Same instant as the previous snapshot, kept only because it carries an
         // event. There is no interval to measure anything over: distance would be
         // noise, and the teleport check divides by the elapsed time, so any position
@@ -740,7 +753,7 @@ public class JobTracker {
 
             j.LastOdometerKm = snap.Truck.OdometerKm;
             found.Add(new Anomaly { Code = "save_loaded", Delta = Math.Round(rewindKm, 3), DtMs = (long)rewindMin });
-            j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "save_loaded", Value = Math.Round(rewindMin, 0), Detail = Waybill.Strings.T("unit.gameMinutes") });
+            if (j.LoadOnAtMs != 0) j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "save_loaded", Value = Math.Round(rewindMin, 0), Detail = Waybill.Strings.T("unit.gameMinutes") });
             Record(found, j, nowMs);
             return found;
         }
@@ -861,7 +874,7 @@ public class JobTracker {
             var isTransport = snap.Events.FerryUsed != null || snap.Events.TrainUsed != null;
             var cargoMoved = CargoChangedHands(snap, prev);
             if (cargoMoved) found.Add(new Anomaly { AtMs = nowMs, Code = "cargo_handling", DtMs = dtMs, Delta = jumpedMin });
-            if (!isTransport && !cargoMoved) {
+            if (!isTransport && !cargoMoved && j.LoadOnAtMs != 0) {
                 j.RestStops += 1;
                 j.RestMinutes += jumpedMin;
                 j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = Math.Round(jumpedMin, 1), Detail = Waybill.Strings.T("unit.gameMinutes") });
@@ -887,9 +900,13 @@ public class JobTracker {
             : 0;
         var damageStep = Math.Max(truckDamageStep, trailerDamageStep);
         if (damageStep > _config.CollisionDamageStep) {
-            j.Collisions += 1;
             found.Add(new Anomaly { Code = "collision", Delta = damageStep });
-            j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "collision", Value = Math.Round(damageStep * 100, 3), Detail = Waybill.Strings.T("unit.damagePercent") });
+            // Still noted as an anomaly, which is debugging detail about the drive,
+            // but only counted against the delivery once the load is on it.
+            if (j.LoadOnAtMs != 0) {
+                j.Collisions += 1;
+                j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "collision", Value = Math.Round(damageStep * 100, 3), Detail = Waybill.Strings.T("unit.damagePercent") });
+            }
         }
 
         TrackTrailerChain(j, snap);
@@ -958,7 +975,7 @@ public class JobTracker {
                 if (cargoMoved) {
                     found.Add(new Anomaly { AtMs = nowMs, Code = "cargo_handling", DtMs = dtMs, Delta = gameMinutesPassed });
                 }
-                if (!isTransport && !cargoMoved) {
+                if (!isTransport && !cargoMoved && j.LoadOnAtMs != 0) {
                     j.RestStops += 1;
                     j.RestMinutes += gameMinutesPassed;
                     j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = Math.Round(gameMinutesPassed, 1), Detail = Waybill.Strings.T("unit.gameMinutes") });
@@ -975,7 +992,17 @@ public class JobTracker {
     /// <summary>The gameplay events carried by one snapshot. Separate from the rest of
     /// accumulation because a snapshot can arrive in the same instant as the previous
     /// one and still carry an event that has to be kept (see the instant branch).</summary>
+    /// <summary>
+    /// What happened while the load was on.
+    ///
+    /// Nothing before that belongs to the delivery. Getting to the trailer is the
+    /// driver's own business, and a fine collected on the way there, or a tank filled
+    /// before the job really began, has nothing to do with the consignment. It is not
+    /// counted and it is not written down, so the figures on the card and the entries
+    /// under them are about the same stretch of road.
+    /// </summary>
     private static void RecordEvents(Snapshot snap, JobState j, List<Anomaly> found, bool inGrace, long nowMs) {
+        if (j.LoadOnAtMs == 0) return;
         var e = snap.Events;
         if (e.Fined != null) {
             j.Fines.Add(new FineRecord { Amount = e.Fined.Amount, Offence = e.Fined.Offence });

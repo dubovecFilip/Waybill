@@ -171,10 +171,7 @@ public class RouteView : Control {
         if (marks is null || _focus is null) return placed;
 
         foreach (var mark in marks) {
-            // The route already opens where the load went on, drawn as its own
-            // marker, so a pin saying the same thing sits on top of it saying it
-            // twice.
-            if (mark.Type is "trailer_coupled" or "cargo_loaded") continue;
+
             var best = long.MaxValue;
             RoutePoint at = default;
             foreach (var p in _focus.All) {
