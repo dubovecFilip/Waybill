@@ -1825,14 +1825,83 @@ public class MainForm : Form {
     /// <summary>What the map draws, as three switches. Anything the delivery does
     /// not have is simply not offered: a filter for something there is none of is
     /// noise on a menu that has to stay glanceable.</summary>
+    /// <summary>The stock menu renderer paints a light gutter beside the icons and a
+    /// bright blue highlight, both of which arrive from the system theme and land on
+    /// a dark window looking like somebody else's menu. Only the few colours that
+    /// show are overridden.</summary>
+    private sealed class DarkMenuColours : ProfessionalColorTable {
+        public override Color ToolStripDropDownBackground => Surface;
+        public override Color ImageMarginGradientBegin => Surface;
+        public override Color ImageMarginGradientMiddle => Surface;
+        public override Color ImageMarginGradientEnd => Surface;
+        public override Color MenuItemSelected => Raised;
+        public override Color MenuItemSelectedGradientBegin => Raised;
+        public override Color MenuItemSelectedGradientEnd => Raised;
+        public override Color MenuItemBorder => Line;
+        public override Color MenuBorder => Line;
+        public override Color SeparatorDark => Line;
+        public override Color SeparatorLight => Line;
+    }
+
+    private static Image? _eyeOpen, _eyeShut;
+
+    /// <summary>An eye for whether a layer is being drawn: open and looking at you,
+    /// or closed. Drawn rather than typed, because the glyphs for this are scattered
+    /// across fonts that may or may not be installed, and a missing one comes out as
+    /// an empty box exactly where the meaning was.</summary>
+    private static Image Eye(bool open) {
+        if (open && _eyeOpen != null) return _eyeOpen;
+        if (!open && _eyeShut != null) return _eyeShut;
+
+        var bmp = new Bitmap(16, 16);
+        using (var g = Graphics.FromImage(bmp)) {
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using var pen = new Pen(open ? Ink : Color.FromArgb(150, 128, 138, 152), 1.4f);
+            if (open) {
+                using var lid = new System.Drawing.Drawing2D.GraphicsPath();
+                lid.AddBezier(1.5f, 8, 5, 3, 11, 3, 14.5f, 8);
+                lid.AddBezier(14.5f, 8, 11, 13, 5, 13, 1.5f, 8);
+                g.DrawPath(pen, lid);
+                using var pupil = new SolidBrush(Ink);
+                g.FillEllipse(pupil, 5.9f, 5.9f, 4.4f, 4.4f);
+            } else {
+                // A closed lid, with the lashes that make it read as shut rather than
+                // as an arbitrary curve.
+                g.DrawBezier(pen, 1.8f, 6.4f, 5, 11.6f, 11, 11.6f, 14.2f, 6.4f);
+                g.DrawLine(pen, 4.6f, 10.2f, 3.6f, 12.4f);
+                g.DrawLine(pen, 8f, 11.4f, 8f, 13.6f);
+                g.DrawLine(pen, 11.4f, 10.2f, 12.4f, 12.4f);
+            }
+        }
+
+        if (open) _eyeOpen = bmp; else _eyeShut = bmp;
+        return bmp;
+    }
+
     private ContextMenuStrip LayerMenu(RouteView map) {
         var menu = new ContextMenuStrip {
-            BackColor = Surface, ForeColor = Ink, ShowImageMargin = false,
-            Renderer = new ToolStripProfessionalRenderer(),
+            BackColor = Surface, ForeColor = Ink, ShowImageMargin = true,
+            Renderer = new ToolStripProfessionalRenderer(new DarkMenuColours()),
+        };
+        // Turning one layer off is rarely the whole intent, so the menu survives a
+        // click and stays under the pointer until it is dismissed.
+        menu.Closing += (_, e) => {
+            if (e.CloseReason == ToolStripDropDownCloseReason.ItemClicked) e.Cancel = true;
         };
         void Item(string label, bool on, Action<bool> set) {
-            var item = new ToolStripMenuItem(label) { Checked = on, CheckOnClick = true, BackColor = Surface, ForeColor = Ink };
-            item.Click += (_, _) => { set(item.Checked); map.Invalidate(); };
+            var item = new ToolStripMenuItem(label) { BackColor = Surface, Image = Eye(on) };
+            item.ForeColor = on ? Ink : Muted;
+            var shown = on;
+            item.Click += (_, _) => {
+                shown = !shown;
+                set(shown);
+                // The eye and the weight of the text say the same thing twice, which
+                // is on purpose: a row of near-identical entries is hard to read at a
+                // glance if only one small mark separates them.
+                item.Image = Eye(shown);
+                item.ForeColor = shown ? Ink : Muted;
+                map.Invalidate();
+            };
             menu.Items.Add(item);
         }
         Item(Strings.T("map.layerHistory"), map.ShowHistory, v => map.ShowHistory = v);

@@ -99,8 +99,21 @@ public class RouteView : Control {
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool ShowCities { get; set; } = true;
 
+    /// <summary>Whether the deliveries are drawn. A hidden route is also not there to
+    /// be pointed at or opened: leaving it hit-testable meant the map named and
+    /// offered a line that was not on the screen.</summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public bool ShowHistory { get; set; } = true;
+    public bool ShowHistory {
+        get => _showHistory;
+        set {
+            if (_showHistory == value) return;
+            _showHistory = value;
+            if (!value) _lit = 0;
+            Discard();
+            Invalidate();
+        }
+    }
+    private bool _showHistory = true;
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool ShowFreeroam { get; set; } = true;
@@ -336,6 +349,7 @@ public class RouteView : Control {
     /// point is enough: they are 19 m apart and the tolerance is a dozen pixels,
     /// so three out of four are asking the same question twice.</summary>
     private long NearestRoute(Point at) {
+        if (!ShowHistory) return 0;
         long best = 0;
         var bestDist = 12f * 12f;
         foreach (var d in _drawn)
