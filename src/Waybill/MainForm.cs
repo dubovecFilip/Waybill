@@ -65,6 +65,7 @@ public class MainForm : Form {
     private Panel? _progressRow;
     private readonly Panel _progressTrack = new();
     private readonly Panel _progressFill = new();
+    private readonly Panel _progressLead = new();
     private readonly Label _progressText = new();
     private readonly ListBox _log = new();
 
@@ -766,7 +767,15 @@ public class MainForm : Form {
         _progressFill.Dock = DockStyle.Left;
         _progressFill.Width = 0;
         _progressFill.BackColor = Accent;
+        // The run out to the trailer, in the quieter colour, ahead of the loaded
+        // stretch. Docked left and added last so it sits leftmost, which is where it
+        // happened: the bar then reads as the whole job from the moment it was taken,
+        // with the commute told apart from the consignment moving.
+        _progressLead.Dock = DockStyle.Left;
+        _progressLead.Width = 0;
+        _progressLead.BackColor = Muted;
         _progressTrack.Controls.Add(_progressFill);
+        _progressTrack.Controls.Add(_progressLead);
 
         progressRow.Controls.Add(_progressTrack);
         progressRow.Controls.Add(_progressText);
@@ -876,6 +885,7 @@ public class MainForm : Form {
             _jobDetail.Text = "";
             _progressText.Text = "";
             _progressFill.Width = 0;
+            _progressLead.Width = 0;
             if (_progressRow != null) _progressRow.Visible = false;
             // Between jobs the profile says so; with the game closed it says nothing
             // at all, rather than leaving Waybill sitting there all evening.
@@ -898,10 +908,23 @@ public class MainForm : Form {
 
         // Planned distance is the game's own route length, in the same simulated km
         // the odometer counts, so this genuinely tracks progress toward the drop-off.
-        var ratio = planned > 0 ? Math.Clamp(driven / planned, 0, 1) : 0;
+        // Progress is the loaded leg against the plan, because that is what the plan
+        // describes: measured across this history the planned figure agrees with the
+        // loaded distance to about a percent, while the total ran as much as twelve
+        // percent over it on a contract that started far from its trailer.
+        var toLoad = state?.DistanceToLoadKm ?? 0;
+        var loaded = Math.Max(0, driven - toLoad);
+        var ratio = planned > 0 ? Math.Clamp(loaded / planned, 0, 1) : 0;
+        // The track spans everything this job will cover, so the run-up takes its own
+        // share of the width instead of pushing the loaded stretch off the scale.
+        var whole = planned + toLoad;
+        var leadShare = whole > 0 ? Math.Clamp(toLoad / whole, 0, 1) : 0;
         if (_progressRow != null) _progressRow.Visible = true;
-        _progressFill.Width = (int)(_progressTrack.ClientSize.Width * ratio);
-        _progressText.Text = $"{u.Distance(driven):0.0} / {u.Distance(planned):0} {u.DistanceUnit}   ·   {ratio * 100:0} %";
+        var track = _progressTrack.ClientSize.Width;
+        _progressLead.Width = (int)(track * leadShare);
+        _progressFill.Width = (int)(track * (1 - leadShare) * ratio);
+        _progressText.Text = $"{u.Distance(loaded):0.0} / {u.Distance(planned):0} {u.DistanceUnit}   ·   {ratio * 100:0} %"
+            + (toLoad > 0.05 ? $"   (+{u.Distance(toLoad):0.0} {Strings.T("live.toLoad")})" : "");
 
         // The same three numbers the page shows, in one line each for Discord. The
         // start time is sent raw so Discord runs the elapsed counter itself, which
@@ -910,7 +933,7 @@ public class MainForm : Form {
         _discord?.Update(new DiscordPresence.Activity {
             Details = $"{job.SourceCity} → {job.DestinationCity}",
             State = planned > 0
-                ? $"{job.Cargo} · {u.Distance(driven):0} / {u.Distance(planned):0} {u.DistanceUnit} ({ratio * 100:0} %)"
+                ? $"{job.Cargo} · {u.Distance(loaded):0} / {u.Distance(planned):0} {u.DistanceUnit} ({ratio * 100:0} %)"
                 : job.Cargo,
             StartUnix = state != null ? state.StartedAtMs / 1000 : null,
             LargeImage = game.ToLowerInvariant() is "ats" or "ets2" ? game.ToLowerInvariant() : "waybill",
@@ -1798,6 +1821,12 @@ public class MainForm : Form {
         var reported = d.ReportedDistanceKm is > 0 ? $"{u.Distance(d.ReportedDistanceKm.Value):0}" : "?";
         Row(Strings.T("detail.distances"),
             $"{u.Distance(d.PlannedDistanceKm):0}  /  {u.Distance(d.DistanceKm):0.0}  /  {reported} {u.DistanceUnit}");
+        // Only where there was one. On a quick job the truck is set down at the depot
+        // already loaded, so a row saying "0" would be a line about nothing.
+        if (d.DistanceToLoadKm > 0.05) {
+            Row(Strings.T("detail.legs"),
+                $"{u.Distance(d.DistanceKm - d.DistanceToLoadKm):0.0}  +  {u.Distance(d.DistanceToLoadKm):0.0} {u.DistanceUnit}");
+        }
         Row(Strings.T("detail.timeGame"), $"{d.DrivingGameMin / 60:0.0} {Strings.T("stats.gameTime")}");
         Row(Strings.T("detail.timeReal"), $"{d.RealDurationMs / 60000.0:0} min");
         Row(Strings.T("detail.rest"), $"{d.RestStops}x  ·  {d.RestMinutes:0} {Strings.T("unit.gameMinutes")}");

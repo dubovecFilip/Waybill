@@ -111,6 +111,11 @@ public class JobRecord {
     /// the dashboard odometer, the payout and the delivery screen all use. This is
     /// the number a delivery tracker reports.</summary>
     public double DistanceKm;
+    /// <summary>How much of <see cref="DistanceKm"/> was driven before the trailer
+    /// was hitched. Zero on a quick job, where the truck is put down at the depot
+    /// already loaded; on a World of Trucks contract it is the run out to the load,
+    /// which the game starts counting the moment the offer is accepted.</summary>
+    public double DistanceToLoadKm;
     /// <summary>Distance actually covered in world space. The map is compressed
     /// (~13.5x on the routes measured), so this is much smaller than DistanceKm.
     /// Kept for route/map work and as an independent anti-cheat signal.</summary>

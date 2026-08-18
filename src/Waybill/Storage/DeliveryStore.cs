@@ -65,6 +65,9 @@ public class DeliveryStore : IDisposable {
             ("deliveries", "trailer_chain_type", "TEXT"),
             ("deliveries", "trailer_owned", "INTEGER"),
             ("deliveries", "trailer_units", "TEXT"),
+            // The part of the distance driven before the trailer was hitched, kept
+            // apart from the total because the game plans its route from the load.
+            ("deliveries", "distance_to_load_km", "REAL"),
         };
 
         foreach (var group in expected.GroupBy(e => e.Table)) {
@@ -221,7 +224,8 @@ public class DeliveryStore : IDisposable {
                     cruise_control_share, rest_stops, rest_minutes,
                     fines_count, fines_total,
                     started_at_ms, finished_at_ms, real_duration_ms, game_duration_min,
-                    job_type, trailer_chain_type, trailer_owned, trailer_units
+                    job_type, trailer_chain_type, trailer_owned, trailer_units,
+                    distance_to_load_km
                 ) VALUES (
                     $job_uid, $game, $game_version, $outcome, $validation_status, $validation_flags,
                     $truck_make, $truck_model, $truck_id, $trailer_name, $trailer_id,
@@ -237,7 +241,8 @@ public class DeliveryStore : IDisposable {
                     $cruise_control_share, $rest_stops, $rest_minutes,
                     $fines_count, $fines_total,
                     $started_at_ms, $finished_at_ms, $real_duration_ms, $game_duration_min,
-                    $job_type, $trailer_chain_type, $trailer_owned, $trailer_units
+                    $job_type, $trailer_chain_type, $trailer_owned, $trailer_units,
+                    $distance_to_load_km
                 );
                 """;
 
@@ -248,6 +253,7 @@ public class DeliveryStore : IDisposable {
             cmd.Parameters.AddWithValue("$job_type", r.JobType);
             cmd.Parameters.AddWithValue("$trailer_chain_type", r.TrailerChainType);
             cmd.Parameters.AddWithValue("$trailer_owned", r.TrailerOwned ? 1 : 0);
+            cmd.Parameters.AddWithValue("$distance_to_load_km", r.DistanceToLoadKm);
             cmd.Parameters.AddWithValue("$trailer_units",
                 r.TrailerUnits.Count > 0 ? Newtonsoft.Json.JsonConvert.SerializeObject(r.TrailerUnits) : "");
             cmd.Parameters.AddWithValue("$validation_status", r.Validation.Status);
@@ -603,7 +609,7 @@ public class DeliveryStore : IDisposable {
                        -- the middle silently shifts every one after it.
                        sim_speed_distance_km, COALESCE(job_type, ''), cargo_damage_pct,
                        COALESCE(trailer_chain_type, ''), COALESCE(trailer_owned, 0),
-                       COALESCE(trailer_units, '')
+                       COALESCE(trailer_units, ''), COALESCE(distance_to_load_km, 0)
                 FROM deliveries WHERE id = $id;
                 """;
             cmd.Parameters.AddWithValue("$id", id);
@@ -643,6 +649,7 @@ public class DeliveryStore : IDisposable {
                 TrailerChainType = r.GetString(44),
                 TrailerOwned = r.GetInt32(45) != 0,
                 TrailerUnits = ReadUnits(r.GetString(46)),
+                DistanceToLoadKm = Num(47),
             };
         }
     }

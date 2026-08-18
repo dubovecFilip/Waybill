@@ -221,11 +221,16 @@ counting kilometres from wherever you happen to be standing, so the recording
 opens with the drive out to the load. That stretch is getting to work rather than
 the consignment moving, and it is left off.
 
-One consequence is worth knowing: the game counts those kilometres, so on such a
-job the drawn line covers less ground than the distance beside it. On the
-deliveries here the run-up reaches about three kilometres of world space, and on
-a quick job, where the truck is put down at the depot already loaded, there is
-none at all.
+The kilometres are still counted, and now counted separately. A delivery's card
+shows the two legs on their own line, and the progress bar on *Current job* draws
+the run-up as a quieter stretch at its head so the loaded part reads against the
+plan. That matters more than it sounds: the game plans its route from the load, so
+measured across the deliveries here the loaded leg lands within a few percent of
+the planned figure on every delivered job, while the total ran as much as twelve
+percent over it.
+
+On a quick job, where the truck is put down at the depot already loaded, there is
+no run-up at all.
 
 ### What is not drawn as driving
 

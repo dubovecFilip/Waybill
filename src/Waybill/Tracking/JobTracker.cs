@@ -146,6 +146,16 @@ public class JobState {
     /// <summary>Whether the load has been hitched up yet. Only the first coupling of
     /// a job is worth marking; dropping and re-hitching later is the same load.</summary>
     public bool TrailerCoupled;
+    /// <summary>The part of <see cref="DistanceKm"/> driven before the load was on.
+    ///
+    /// A World of Trucks contract starts the odometer where the offer was accepted,
+    /// so getting to the trailer counts as the job. It is real driving and stays in
+    /// the total, but it is not the consignment moving, and the game plans its route
+    /// from the load rather than from the driver: measured over this history the
+    /// planned figure matches the loaded leg to within about a percent, while the
+    /// total ran up to twelve percent over it. Kept apart so progress can be shown
+    /// against the thing the plan actually describes.</summary>
+    public double DistanceToLoadKm;
     public long? MissingJobSinceMs;
     /// <summary>When an earlier save was last loaded, so a job that disappears in the
     /// wake of one is recognised as gone with the save rather than unresolved.</summary>
@@ -276,6 +286,7 @@ public class JobTracker {
                 var sameTruck = snap.Truck.Make == _current.TruckMake && snap.Truck.Model == _current.TruckModel;
                 if (sameTruck && bridgeKm > 0 && bridgeKm < _config.MaxResumeBridgeKm) {
                     _current.DistanceKm += bridgeKm;
+                    if (!_current.TrailerCoupled) _current.DistanceToLoadKm += bridgeKm;
                     _current.Anomalies.Add(new Anomaly { AtMs = nowMs, Code = "resume_gap", Delta = bridgeKm });
                 }
                 _current.LastOdometerKm = snap.Truck.OdometerKm;
@@ -330,9 +341,12 @@ public class JobTracker {
         return outEvents;
     }
 
-    /// <summary>Distance covered so far and the job's planned distance, for a live progress display. Null when no job is active.</summary>
-    public (double DistanceKm, double PlannedDistanceKm)? Progress() =>
-        _current == null ? null : (_current.DistanceKm, _current.Job.PlannedDistanceKm);
+    /// <summary>Distance covered so far, how much of it was driven before the load
+    /// was on, and the job's planned distance, for a live progress display. Null when
+    /// no job is active.</summary>
+    public (double DistanceKm, double DistanceToLoadKm, double PlannedDistanceKm)? Progress() =>
+        _current == null ? null
+            : (_current.DistanceKm, _current.DistanceToLoadKm, _current.Job.PlannedDistanceKm);
 
     /// <summary>How long an unfinished job stays resumable. A week covers coming back
     /// to a delivery after a crash, a reinstall or simply a break; past that the offer
@@ -372,6 +386,7 @@ public class JobTracker {
             TrailerOwned = j.TrailerChain.Any(u => u.IsOwned),
             TrailerUnits = TrailerUnits(j),
             DistanceKm = Math.Round(j.DistanceKm, 3),
+            DistanceToLoadKm = Math.Round(j.DistanceToLoadKm, 3),
             WorldDistanceKm = Math.Round(j.WorldDistanceKm, 3),
             SimSpeedDistanceKm = Math.Round(j.SimSpeedDistanceKm, 3),
             DrivingGameMinutes = Math.Round(j.DrivingGameMinutes, 1),
@@ -580,6 +595,9 @@ public class JobTracker {
             // fire on the discrepancy the rewind itself created.
             j.DistanceKm = Math.Max(0, j.DistanceKm - rewindKm);
             j.SimSpeedDistanceKm = Math.Max(0, j.SimSpeedDistanceKm - rewindKm);
+            // Only while still empty: a reload after the hitch winds back loaded
+            // kilometres, which were never in this figure to begin with.
+            if (!j.TrailerCoupled) j.DistanceToLoadKm = Math.Max(0, j.DistanceToLoadKm - rewindKm);
             j.DrivingGameMinutes = Math.Max(0, j.DrivingGameMinutes - rewindMin);
 
             // The save gives the fuel back along with the distance. Leaving it spent
@@ -694,6 +712,11 @@ public class JobTracker {
             });
         } else if (!teleported && odoDelta > 0) {
             j.DistanceKm += odoDelta;
+            // Before the hitch this is the driver getting to the load, not the load
+            // moving. Counted in both, because it is real driving, but kept apart so
+            // progress can be measured against the plan, which describes only the
+            // loaded leg.
+            if (!j.TrailerCoupled) j.DistanceToLoadKm += odoDelta;
         }
 
         // Kept current on every tick so a resume can measure against it (see the
@@ -910,6 +933,7 @@ public class JobTracker {
             TrailerOwned = j.TrailerChain.Any(u => u.IsOwned),
             TrailerUnits = TrailerUnits(j),
             DistanceKm = Math.Round(j.DistanceKm, 3),
+            DistanceToLoadKm = Math.Round(j.DistanceToLoadKm, 3),
             WorldDistanceKm = Math.Round(j.WorldDistanceKm, 3),
             SimSpeedDistanceKm = Math.Round(j.SimSpeedDistanceKm, 3),
             DrivingGameMinutes = Math.Round(j.DrivingGameMinutes, 1),

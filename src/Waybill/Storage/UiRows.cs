@@ -41,6 +41,9 @@ public class DeliveryDetail {
     public string Game = "", SourceCity = "", SourceCompany = "", DestinationCity = "", DestinationCompany = "";
     public string Cargo = "", Truck = "", Trailer = "";
     public double CargoMassKg, PlannedDistanceKm, DistanceKm;
+    /// <summary>The part of <see cref="DistanceKm"/> driven before the trailer was
+    /// hitched, which the plan does not describe. Zero on most jobs.</summary>
+    public double DistanceToLoadKm;
     /// <summary>The second, independent distance measurement. Only shown when the
     /// two disagree, which is the whole reason a delivery gets flagged for it.</summary>
     public double SimSpeedDistanceKm;

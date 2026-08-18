@@ -130,6 +130,26 @@ The offence is stored under the SDK's own name: `Crash`, `Speeding`,
 `Generic`. A recording keeps it as the raw number the game publishes, so a replay
 names it on the way back in.
 
+## Distance, in two parts
+
+`actual_distance_km` is everything the odometer counted for the job.
+`distance_to_load_km` is the part of it driven before the trailer was hitched.
+
+They are kept apart because the game plans its route from the load, not from the
+driver. On a World of Trucks contract the odometer starts where the offer was
+accepted, so the run out to the trailer inflates the total against a plan that
+never described it. Measured across this history, the loaded leg agrees with the
+planned figure to within a few percent on every delivered job, while the total ran
+up to twelve percent over it.
+
+The split is measured from the odometer as the job runs, never derived afterwards
+from the recorded positions. Deriving it was tried and came out wrong by up to
+three and a half times, because the world is compressed unevenly even inside one
+drive: the same reason nothing else here treats world space as distance.
+
+Progress on the live page is the loaded leg against the plan, with the run-up
+shown as its own quieter stretch at the head of the bar.
+
 ## The coupled set
 
 Columns `trailer_chain_type`, `trailer_owned` and `trailer_units`.
