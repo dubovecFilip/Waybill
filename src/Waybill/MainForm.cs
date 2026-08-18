@@ -72,7 +72,10 @@ public class MainForm : Form {
 
     private readonly DataGridView _grid = new();
     private readonly TextBox _search = new();
-    private readonly ComboBox _statusFilter = new();
+    private readonly TriSwitch _gameFilter =
+        new(GameName("Ets2"), Strings.T("filter.both"), GameName("Ats"));
+    private readonly TriSwitch _cargoFilter =
+        new(Strings.T("filter.ordinary"), Strings.T("filter.both"), Strings.T("filter.oversize"));
     private readonly TableLayoutPanel _statsGrid = new();
 
     /// <summary>Which sidebar page is showing. Kept across a language change, which
@@ -1142,27 +1145,29 @@ public class MainForm : Form {
         };
         searchBox.Controls.Add(_search);
 
-        _statusFilter.Width = 130;
-        _statusFilter.Margin = new Padding(0, 3, 16, 3);
-        _statusFilter.DropDownStyle = ComboBoxStyle.DropDownList;
-        _statusFilter.FlatStyle = FlatStyle.Flat;
-        _statusFilter.BackColor = Raised;
-        _statusFilter.ForeColor = Ink;
-        // The controls are reused when the layout is rebuilt for a language change,
-        // so the old entries have to go first. Left in place they pile up and, worse,
-        // the still-selected entry is in the previous language while the filter
-        // compares against the new one, which quietly empties the list.
-        _statusFilter.Items.Clear();
-        _statusFilter.Items.AddRange(new object[] { Strings.T("filter.all"), "accepted", "review", "rejected", "imported" });
-        _statusFilter.SelectedIndex = 0;
-        _statusFilter.SelectedIndexChanged -= OnFilterChanged;
-        _statusFilter.SelectedIndexChanged += OnFilterChanged;
+        // Two switches rather than a list of states. Filtering by verdict was
+        // filtering by something that is already a dot on every row and that almost
+        // never has more than one value worth asking for; which game and which kind
+        // of load are the two questions the history is actually read with, and both
+        // have a natural middle meaning both.
+        _cargoFilter.RightBadge = (g, r) => HazardStripes(g, r, 210);
+        // The controls outlive the layout, which is rebuilt when the language
+        // changes, so the words are set here rather than only where they are made.
+        _gameFilter.Retext(GameName("Ets2"), Strings.T("filter.both"), GameName("Ats"));
+        _cargoFilter.Retext(Strings.T("filter.ordinary"), Strings.T("filter.both"), Strings.T("filter.oversize"));
+        foreach (var filter in new[] { _gameFilter, _cargoFilter }) {
+            filter.Margin = new Padding(0, 3, 10, 3);
+            filter.BackColor = Canvas;
+            filter.Changed -= OnFilterChanged;
+            filter.Changed += OnFilterChanged;
+        }
 
         // Only what changes the view of the list. Exporting, backing up and restoring
         // used to sit here too, which put "show me fewer rows" and "replace the whole
         // database" one button apart; they live under Data now.
         bar.Controls.Add(searchBox);
-        bar.Controls.Add(_statusFilter);
+        bar.Controls.Add(_gameFilter);
+        bar.Controls.Add(_cargoFilter);
         bar.Controls.Add(MakeButton(Strings.T("button.refresh"), () => { ReloadHistory(); ReloadStats(); }));
 
         _grid.Dock = DockStyle.Fill;
@@ -1176,12 +1181,12 @@ public class MainForm : Form {
         // them into unreadable slivers.
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
         _grid.ScrollBars = ScrollBars.Both;
-        // A narrow gutter down the left of the list, where an oversize load carries
-        // its markings. The row header is already there and already sits left of the
-        // date, so it needs a width and something to paint rather than a column of
-        // its own squeezed in among the figures.
+        // The gutter down the left of the list, carrying the two things a row says
+        // without words: its verdict, and whether the load was oversize. The row
+        // header is already there and already sits left of the date, so both live in
+        // it rather than in columns of their own squeezed in among the figures.
         _grid.RowHeadersVisible = true;
-        _grid.RowHeadersWidth = 14;
+        _grid.RowHeadersWidth = GutterWidth;
         _grid.RowHeadersWidthSizeMode = DataGridViewRowHeadersWidthSizeMode.DisableResizing;
         _grid.RowHeadersDefaultCellStyle.BackColor = Canvas;
         _grid.RowHeadersDefaultCellStyle.SelectionBackColor = Canvas;
@@ -1200,8 +1205,6 @@ public class MainForm : Form {
         _grid.CellEndEdit += OnGridCellEndEdit;
         _grid.CellFormatting -= OnGridCellFormatting;
         _grid.CellFormatting += OnGridCellFormatting;
-        _grid.CellToolTipTextNeeded -= OnGridToolTip;
-        _grid.CellToolTipTextNeeded += OnGridToolTip;
 
         // Opening a delivery is a double click: a single one is how a row gets
         // selected while walking the list, and it would fling the card open on every
@@ -1241,8 +1244,22 @@ public class MainForm : Form {
 
     private void OnFilterChanged(object? sender, EventArgs e) => ApplyFilter();
 
+    /// <summary>How wide the gutter is: a verdict dot, then the oversize band.</summary>
+    private const int GutterWidth = 28;
+    private const int StripeWidth = 9;
+
     /// <summary>
-    /// Paints the oversize marker in the row's left gutter.
+    /// Paints the row's left gutter: the verdict as a dot, and the oversize load's
+    /// markings as a band down the edge of it.
+    ///
+    /// The dot replaced a column of words. A verdict is one of four things and is
+    /// read at a glance or not at all, so it does not need the width of a column,
+    /// and the row already had a gutter waiting for it. The word is not lost: the
+    /// gutter names it on hover and the delivery's own card explains it.
+    ///
+    /// The band fills its share of the cell edge to edge rather than sitting inside
+    /// a margin, so consecutive oversize loads read as one marked stretch of the
+    /// list instead of a column of dashes.
     ///
     /// Taken over from the grid entirely rather than drawn before it: a row header
     /// paints itself after the row does, so anything put there first was covered up
@@ -1255,26 +1272,51 @@ public class MainForm : Form {
         if (e.Graphics is not { } g) return;
 
         using (var clear = new SolidBrush(Canvas)) g.FillRectangle(clear, e.CellBounds);
-        if (_grid.Rows[e.RowIndex].DataBoundItem is DeliveryRow { Special: true }) {
-            var gutter = new RectangleF(
-                e.CellBounds.Left + 4, e.CellBounds.Top + 2,
-                5, Math.Max(e.CellBounds.Height - 4, 1));
-            HazardStripes(g, gutter, 210);
+        if (_grid.Rows[e.RowIndex].DataBoundItem is DeliveryRow row) {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            var dot = new RectangleF(
+                e.CellBounds.Left + (GutterWidth - StripeWidth - 9) / 2f,
+                e.CellBounds.Top + (e.CellBounds.Height - 9) / 2f, 9, 9);
+            using (var brush = new SolidBrush(VerdictColour(row.Stav))) g.FillEllipse(brush, dot);
+
+            if (row.Special) {
+                HazardStripes(g, new RectangleF(
+                    e.CellBounds.Right - StripeWidth, e.CellBounds.Top,
+                    StripeWidth, Math.Max(e.CellBounds.Height, 1)), 210);
+            }
         }
         e.Handled = true;
     }
 
-    /// <summary>Hovering the verdict names what was found, so a row saying "review"
-    /// does not have to be opened just to learn whether it matters. The full
-    /// explanation stays on the card.</summary>
-    private void OnGridToolTip(object? sender, DataGridViewCellToolTipTextNeededEventArgs e) {
-        if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
-        if (_grid.Columns[e.ColumnIndex].DataPropertyName != nameof(DeliveryRow.Stav)) return;
-        if (_grid.Rows[e.RowIndex].DataBoundItem is not DeliveryRow row || row.Flags.Length == 0) return;
+    /// <summary>The verdict as a colour, in one place, so the dot in the list and the
+    /// sample in the legend cannot end up meaning different things.</summary>
+    private static Color VerdictColour(string status) => status switch {
+        "rejected" => Color.FromArgb(226, 116, 104),
+        "review" => Color.FromArgb(226, 168, 74),
+        "imported" => Color.FromArgb(112, 172, 214),
+        _ => Color.FromArgb(96, 176, 128),
+    };
 
-        e.ToolTipText = string.Join(Environment.NewLine, row.Flags
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(f => "•  " + Strings.T("flag." + f)));
+    /// <summary>
+    /// What the gutter's marks say, in words, for anyone who wants them.
+    ///
+    /// The verdict is a dot and the oversize load is a band, which is enough to scan
+    /// a list by and not enough to learn from, so hovering names both and lists what
+    /// was found. The full explanation stays on the card.
+    ///
+    /// Written onto the header cells rather than answered from an event: the grid
+    /// asks for a cell's tooltip, and the row header is not a cell it asks about.
+    /// </summary>
+    private void SetGutterTips() {
+        foreach (DataGridViewRow line in _grid.Rows) {
+            if (line.DataBoundItem is not DeliveryRow row) continue;
+            var said = new List<string> { Label(row.Stav) };
+            if (row.Special) said.Add(Strings.T("detail.special"));
+            said.AddRange(row.Flags
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(f => "•  " + Strings.T("flag." + f)));
+            line.HeaderCell.ToolTipText = string.Join(Environment.NewLine, said);
+        }
     }
 
     private void OnGridCellEndEdit(object? sender, DataGridViewCellEventArgs e) {
@@ -1336,7 +1378,6 @@ public class MainForm : Form {
                 [nameof(DeliveryRow.Kolizie)] = 70,
                 [nameof(DeliveryRow.Vysledok)] = 90,
                 [nameof(DeliveryRow.Styl)] = 80,
-                [nameof(DeliveryRow.Stav)] = 90,
                 [nameof(DeliveryRow.Poznamky)] = 160,
             };
             foreach (DataGridViewColumn col in _grid.Columns) {
@@ -1360,7 +1401,6 @@ public class MainForm : Form {
                 [nameof(DeliveryRow.Kolizie)] = Strings.T("col.collisions"),
                 [nameof(DeliveryRow.Vysledok)] = Strings.T("col.outcome"),
                 [nameof(DeliveryRow.Styl)] = Strings.T("col.style"),
-                [nameof(DeliveryRow.Stav)] = Strings.T("col.status"),
                 [nameof(DeliveryRow.Poznamky)] = Strings.T("col.notes"),
             };
             foreach (DataGridViewColumn col in _grid.Columns) {
@@ -1372,6 +1412,7 @@ public class MainForm : Form {
             foreach (var numeric in new[] { nameof(DeliveryRow.Vzdialenost), nameof(DeliveryRow.Odmena), nameof(DeliveryRow.Pokuty), nameof(DeliveryRow.Kolizie) }) {
                 if (_grid.Columns[numeric] is { } c) c.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
             }
+            SetGutterTips();
         }
     }
 
@@ -1977,9 +2018,10 @@ public class MainForm : Form {
 
         Heading(Strings.T("legend.verdicts"));
         Note(Strings.T("legend.verdictsNote"));
-        Entry((g, r) => Dot(g, r, Color.FromArgb(96, 176, 128)), Strings.T("value.accepted"), Strings.T("legend.accepted"));
-        Entry((g, r) => Dot(g, r, Color.FromArgb(226, 168, 74)), Strings.T("value.review"), Strings.T("legend.review"));
-        Entry((g, r) => Dot(g, r, Color.FromArgb(226, 116, 104)), Strings.T("value.rejected"), Strings.T("legend.rejected"));
+        foreach (var verdict in new[] { "accepted", "review", "rejected", "imported" }) {
+            Entry((g, r) => Dot(g, r, VerdictColour(verdict)),
+                Strings.T("value." + verdict), Strings.T("legend." + verdict));
+        }
 
         Heading(Strings.T("legend.marks"));
         Mark("collision", "", Strings.T("event.collision"), Strings.T("legend.collision"));
@@ -2024,6 +2066,14 @@ public class MainForm : Form {
         }, Strings.T("legend.layers"), Strings.T("legend.layersWhy"));
 
         Heading(Strings.T("legend.elsewhere"));
+        Entry((g, r) => {
+            using var back = new SolidBrush(Surface);
+            g.FillRectangle(back, 8, 0, 30, r.Height);
+            using var brush = new SolidBrush(VerdictColour("accepted"));
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.FillEllipse(brush, 13, r.Height / 2 - 5, 9, 9);
+            HazardStripes(g, new RectangleF(29, 0, 9, r.Height), 210);
+        }, Strings.T("legend.gutter"), Strings.T("legend.gutterWhy"));
         Entry((g, r) => HazardStripes(g, new RectangleF(16, 4, 14, r.Height - 8), 210),
             Strings.T("detail.special"), Strings.T("legend.specialWhy"));
         Entry((g, r) => {
@@ -2602,10 +2652,16 @@ public class MainForm : Form {
 
     private void ApplyFilter() {
         var text = _search.Text.Trim();
-        var status = _statusFilter.SelectedItem as string ?? Strings.T("filter.all");
-
         IEnumerable<DeliveryRow> filtered = _rows;
-        if (status != Strings.T("filter.all")) filtered = filtered.Where(r => r.Stav == status);
+        // Each switch does nothing in the middle, which is where both of them start.
+        if (_gameFilter.Position != 0) {
+            var game = _gameFilter.Position < 0 ? "Ets2" : "Ats";
+            filtered = filtered.Where(r => r.Hra == game);
+        }
+        if (_cargoFilter.Position != 0) {
+            var oversize = _cargoFilter.Position > 0;
+            filtered = filtered.Where(r => r.Special == oversize);
+        }
         if (text.Length > 0) {
             filtered = filtered.Where(r =>
                 r.Odkial.Contains(text, StringComparison.OrdinalIgnoreCase) ||
@@ -2636,7 +2692,7 @@ public class MainForm : Form {
             nameof(DeliveryRow.Id), nameof(DeliveryRow.DistanceKm), nameof(DeliveryRow.Zarobok),
             nameof(DeliveryRow.Hra), nameof(DeliveryRow.Tahac), nameof(DeliveryRow.Pokuty),
             nameof(DeliveryRow.Kolizie), nameof(DeliveryRow.Styl), nameof(DeliveryRow.Poznamky),
-            nameof(DeliveryRow.Flags), nameof(DeliveryRow.Special),
+            nameof(DeliveryRow.Flags), nameof(DeliveryRow.Special), nameof(DeliveryRow.Stav),
         }) {
             if (_grid.Columns[hidden] is { } col) col.Visible = false;
         }
