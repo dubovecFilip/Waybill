@@ -40,7 +40,7 @@ internal class DarkMenuColours : ProfessionalColorTable {
     public override Color SeparatorLight => Edge;
 }
 
-public class MainForm : Form {
+public partial class MainForm : Form {
     // One dark palette for the whole window, so nothing has to invent a colour
     // inline. There is no light variant on purpose: two of them means every control
     // has to be checked twice and one of them is always the neglected one.
@@ -80,7 +80,7 @@ public class MainForm : Form {
 
     /// <summary>Which sidebar page is showing. Kept across a language change, which
     /// rebuilds every control from scratch.</summary>
-    private string _page = "deliveries";
+    private string _page = "home";
     private readonly Panel _content = new();
     private readonly Panel _detailPage = new();
     /// <summary>The timeline column, which lives at width zero until asked for.</summary>
@@ -189,6 +189,7 @@ public class MainForm : Form {
         bar.Controls.Add(NavButton("map", Strings.T("tab.map")));
         bar.Controls.Add(NavButton("deliveries", Strings.T("tab.deliveries")));
         bar.Controls.Add(NavButton("live", Strings.T("tab.live")));
+        bar.Controls.Add(NavButton("home", Strings.T("tab.home")));
         bar.Controls.Add(edge);
         return bar;
     }
@@ -238,6 +239,8 @@ public class MainForm : Form {
         _content.BackColor = Canvas;
         _content.Controls.Clear();
 
+        var home = BuildHomePage();
+        home.Tag = "home";
         var live = BuildLivePage();
         live.Tag = "live";
         _detailPage.Dock = DockStyle.Fill;
@@ -253,6 +256,7 @@ public class MainForm : Form {
         var stats = BuildStatsPage();
         stats.Tag = "stats";
 
+        _content.Controls.Add(home);
         _content.Controls.Add(live);
         _content.Controls.Add(deliveries);
         _content.Controls.Add(map);
@@ -898,6 +902,7 @@ public class MainForm : Form {
 
     private void RefreshLive() {
         if (_engine == null) return;
+        RefreshHome();
 
         var job = _engine.ActiveJob;
         if (job == null) {
@@ -2681,6 +2686,7 @@ public class MainForm : Form {
         _routes.Clear();
         ApplyFilter();
         ReloadMapPage();
+        FillHomeRecent();
     }
 
     /// <summary>
