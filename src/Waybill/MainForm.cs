@@ -1419,12 +1419,17 @@ public class MainForm : Form {
         var page = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16), BackColor = Canvas };
         _statsGrid.Dock = DockStyle.Fill;
         _statsGrid.BackColor = Canvas;
-        _statsGrid.ColumnCount = 4;
+        // One column of sections, each section holding its own row of tiles. The
+        // outer grid used to be four columns wide and a section was laid straight
+        // into it, which meant adding a fifth figure to any section silently pushed
+        // the next heading out of its cell and shifted every tile below it along by
+        // one. A section now owns its own width and can hold as many as it likes.
+        _statsGrid.ColumnCount = 1;
         _statsGrid.RowCount = 8;
         _statsGrid.Padding = new Padding(0);
 
         _statsGrid.ColumnStyles.Clear();
-        for (var i = 0; i < 4; i++) _statsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        _statsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 
         // Four sections, each a heading of its own height above a row of tiles that
         // takes an equal quarter of what is left.
@@ -1448,27 +1453,117 @@ public class MainForm : Form {
             Padding = new Padding(16, 10, 16, 10),
         };
 
-        var captionLabel = new Label {
-            Dock = DockStyle.Top, Height = 18, Text = caption.ToUpperInvariant(),
-            ForeColor = Muted, Font = new Font("Segoe UI", 7.5F, FontStyle.Bold),
+        // Three rows that take what they need rather than what they were given: the
+        // caption and the note as tall as one line of their own type, the figure
+        // everything left over. Fixed heights meant a tile in a shorter section
+        // wasted space and one in a crowded window clipped.
+        var inner = new TableLayoutPanel {
+            Dock = DockStyle.Fill, BackColor = Surface, Margin = new Padding(0), Padding = new Padding(0),
+            ColumnCount = 1, RowCount = 4,
         };
-        // A truck name is far longer than a number and would be cut off at the size a
-        // figure wants, so the type steps down rather than the text disappearing.
-        var size = value.Length > 22 ? 11F : value.Length > 13 ? 13.5F : 17F;
+        inner.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        // Each line takes exactly its own height and the slack goes to the bottom, so
+        // the three of them stay together at the top of the tile. Giving the figure
+        // the slack instead pushed the note down to the floor, away from what it was
+        // a note about.
+        inner.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        inner.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        inner.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        inner.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+        // One line each, shortened with an ellipsis rather than wrapped. A wrapped
+        // note grew past the height a tile has and lost its last line off the bottom
+        // with nothing to show for it; shortened, it says how much is missing and the
+        // tooltip has the rest.
+        var captionLabel = new Label {
+            Dock = DockStyle.Fill, AutoSize = false, Height = 17, Text = caption.ToUpperInvariant(),
+            ForeColor = Muted, Font = new Font("Segoe UI", 7.5F, FontStyle.Bold),
+            Margin = new Padding(0), AutoEllipsis = true,
+        };
         var valueLabel = new Label {
-            Dock = DockStyle.Top, Height = 34, Text = value,
-            ForeColor = Ink, Font = new Font("Segoe UI", size, FontStyle.Bold),
-            AutoEllipsis = true,
+            Dock = DockStyle.Fill, AutoSize = true, Text = value, ForeColor = Ink,
+            Font = new Font("Segoe UI", 17F, FontStyle.Bold),
+            Margin = new Padding(0, 3, 0, 3), AutoEllipsis = true,
         };
         var noteLabel = new Label {
-            Dock = DockStyle.Top, Height = 18, Text = note ?? "",
-            ForeColor = Muted, Font = new Font("Segoe UI", 8F), AutoEllipsis = true,
+            Dock = DockStyle.Fill, AutoSize = false, Height = 18, Text = note ?? "",
+            ForeColor = Muted, Font = new Font("Segoe UI", 8F),
+            Margin = new Padding(0), AutoEllipsis = true,
         };
 
-        card.Controls.Add(noteLabel);
-        card.Controls.Add(valueLabel);
-        card.Controls.Add(captionLabel);
+
+        inner.Controls.Add(captionLabel, 0, 0);
+        inner.Controls.Add(valueLabel, 0, 1);
+        inner.Controls.Add(noteLabel, 0, 2);
+        card.Controls.Add(inner);
+
+        // Nothing is allowed to disappear silently: whatever ends up shortened still
+        // says the whole of itself when pointed at.
+        var tips = new ToolTip();
+        tips.SetToolTip(captionLabel, caption);
+        tips.SetToolTip(valueLabel, value);
+        if (!string.IsNullOrEmpty(note)) tips.SetToolTip(noteLabel, note);
+        // Handed to the row, which sizes every figure in a section together.
+        card.Tag = valueLabel;
         return card;
+    }
+
+    /// <summary>
+    /// Sizes a section's figures together: the largest type that fits all of them.
+    ///
+    /// One at a time was the obvious thing and read badly. "Cars" would sit at full
+    /// size beside a shrunken "Yuma to Tucson", so a row of equal figures came out
+    /// looking like a ransom note. Deciding once for the row keeps them equal and
+    /// still lets a long one force the whole row down rather than be cut off.
+    ///
+    /// Re-measured whenever the row changes width, so it holds at any window size.
+    /// </summary>
+    private static void FitTogether(Control host, List<Label> labels, float largest, float smallest) {
+        if (labels.Count == 0) return;
+        var family = labels[0].Font.FontFamily;
+
+        void Refit() {
+            var measurable = labels.Where(l => l.Parent is { Width: > 24 } && l.Text.Length > 0).ToList();
+            if (measurable.Count == 0) return;
+
+            var chosen = smallest;
+            for (var size = largest; size >= smallest; size -= 0.5F) {
+                using var probe = new Font(family, size, FontStyle.Bold);
+                // Against the tile's inside width rather than the label's own, which
+                // is still whatever the last font made it while auto-sizing.
+                var fits = measurable.All(l =>
+                    TextRenderer.MeasureText(l.Text, probe).Width <= l.Parent!.Width - l.Parent.Padding.Horizontal - 4);
+                if (fits) { chosen = size; break; }
+            }
+
+            foreach (var label in labels) {
+                if (Math.Abs(label.Font.Size - chosen) < 0.01F) continue;
+                var previous = label.Font;
+                label.Font = new Font(family, chosen, FontStyle.Bold);
+                previous.Dispose();
+            }
+        }
+
+        host.Resize += (_, _) => Refit();
+        host.HandleCreated += (_, _) => Refit();
+    }
+
+    /// <summary>One section's figures, sharing the width equally however many there
+    /// are. Equal shares rather than a fixed four, so a section can grow a figure
+    /// without the ones beside it being squeezed out of the page.</summary>
+    private static Control TileRow(Control[] tiles) {
+        var row = new TableLayoutPanel {
+            Dock = DockStyle.Fill, BackColor = Canvas,
+            Margin = new Padding(0), Padding = new Padding(0),
+            ColumnCount = Math.Max(tiles.Length, 1), RowCount = 1,
+        };
+        row.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        for (var i = 0; i < tiles.Length; i++) {
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F / tiles.Length));
+            row.Controls.Add(tiles[i], i, 0);
+        }
+        FitTogether(row, tiles.Select(t => t.Tag as Label).OfType<Label>().ToList(), 17F, 9F);
+        return row;
     }
 
     private static Control StatHeading(string text) => new Label {
@@ -2057,13 +2152,18 @@ public class MainForm : Form {
 
         void Section(int row, string heading, params Control[] tiles) {
             _statsGrid.Controls.Add(StatHeading(heading), 0, row);
-            _statsGrid.SetColumnSpan(_statsGrid.GetControlFromPosition(0, row)!, 4);
-            for (var i = 0; i < tiles.Length; i++) _statsGrid.Controls.Add(tiles[i], i, row + 1);
+            _statsGrid.Controls.Add(TileRow(tiles), 0, row + 1);
         }
 
         Section(0, Strings.T("stats.headingOverall"),
+            // Only the states there are any of. Spelling out "0 review · 0 rejected"
+            // took the width of the tile to say nothing.
             StatTile(Strings.T("stats.deliveries"), s.TotalDeliveries.ToString(),
-                $"{s.Accepted} accepted · {s.Review} review · {s.Rejected} rejected"),
+                string.Join(" · ", new[] {
+                    s.Accepted > 0 ? $"{s.Accepted} {Label("accepted")}" : null,
+                    s.Review > 0 ? $"{s.Review} {Label("review")}" : null,
+                    s.Rejected > 0 ? $"{s.Rejected} {Label("rejected")}" : null,
+                }.OfType<string>())),
             StatTile(Strings.T("stats.distance"), u.FormatDistance(s.TotalDistanceKm),
                 roam.DistanceKm > 0
                     ? $"{u.FormatDistance(s.TotalDistanceKm + roam.DistanceKm)} {Strings.T("stats.withFreeroam")}"
