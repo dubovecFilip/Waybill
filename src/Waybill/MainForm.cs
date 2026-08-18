@@ -1,4 +1,5 @@
 using System.Data;
+using System.Drawing.Drawing2D;
 using System.Diagnostics;
 using System.Windows.Forms;
 using Waybill.Integrations;
@@ -1900,19 +1901,30 @@ public class MainForm : Form {
 
     private static readonly Dictionary<string, Image> EventIcons = new();
 
+    /// <summary>How large an icon is drawn before it is shrunk to size. Drawn
+    /// straight into fourteen pixels, every curve landed on a pixel boundary and it
+    /// showed; drawn four times over and averaged down, the same shapes come out
+    /// smooth.</summary>
+    private const int IconSuper = 4;
+    private const int IconSize = 20;
+
     /// <summary>
-    /// A small mark for each kind of thing that happens on a drive, so a timeline can
-    /// be scanned rather than read.
+    /// A mark for each kind of thing that happens on a drive, so a timeline can be
+    /// scanned rather than read.
     ///
-    /// Drawn rather than typed, for the same reason as the eye on the layer menu: the
-    /// glyphs for these live in fonts that may not be installed, and a missing one
-    /// comes out as an empty box exactly where the meaning was. Simplified on
-    /// purpose too. Two cars meeting is what a collision is, and at fourteen pixels
-    /// it would be two smudges; a burst is what an impact looks like at this size and
-    /// nobody has to squint at it.
+    /// Drawn rather than typed: the glyphs for these live in fonts that may not be
+    /// installed, and a missing one comes out as an empty box exactly where the
+    /// meaning was. Filled shapes rather than outlines, because a one pixel line at
+    /// this size is a suggestion and a filled shape is a shape.
+    ///
+    /// A fine takes its mark from the offence, since being fined for speeding and
+    /// being fined for anything else are not the same thing to look at.
     /// </summary>
-    private static Image? EventIcon(string type) {
-        if (EventIcons.TryGetValue(type, out var made)) return made;
+    private static Image? EventIcon(string type, string detail = "") {
+        var speeding = type == "fine"
+            && detail.Equals(Strings.T("value.Speeding"), StringComparison.OrdinalIgnoreCase);
+        var key = speeding ? "fine.speeding" : type;
+        if (EventIcons.TryGetValue(key, out var made)) return made;
 
         var colour = type switch {
             "collision" => Color.FromArgb(226, 116, 104),
@@ -1920,73 +1932,142 @@ public class MainForm : Form {
             "refuel" => Color.FromArgb(112, 172, 214),
             "ferry" or "train" => Color.FromArgb(96, 176, 168),
             "cargo_loaded" or "trailer_coupled" => Color.FromArgb(200, 210, 224),
+            "save_loaded" => Color.FromArgb(180, 150, 200),
             _ => Muted,
         };
+        var deep = Color.FromArgb(colour.A, colour.R * 45 / 100, colour.G * 45 / 100, colour.B * 45 / 100);
 
-        var bmp = new Bitmap(14, 14);
-        using (var g = Graphics.FromImage(bmp)) {
-            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            using var pen = new Pen(colour, 1.4f) { StartCap = System.Drawing.Drawing2D.LineCap.Round, EndCap = System.Drawing.Drawing2D.LineCap.Round };
+        const int Big = IconSize * IconSuper;
+        var large = new Bitmap(Big, Big);
+        using (var g = Graphics.FromImage(large)) {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.ScaleTransform(Big / 80f, Big / 80f);
             using var fill = new SolidBrush(colour);
+            using var cut = new SolidBrush(deep);
+            using var pen = new Pen(colour, 9f) {
+                StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round,
+            };
 
-            switch (type) {
+            if (speeding) {
+                // A dial with the needle swung round to the right: too fast, plainly.
+                g.DrawArc(pen, 12, 16, 56, 56, 165, 210);
+                g.DrawLine(pen, 40, 44, 63, 25);
+                g.FillEllipse(fill, 32, 36, 16, 16);
+            } else switch (type) {
                 case "collision":
-                    // An impact: spokes out of a point, longer where it was struck.
-                    for (var i = 0; i < 8; i++) {
-                        var a = i * Math.PI / 4;
-                        var reach = i % 2 == 0 ? 6f : 4f;
-                        g.DrawLine(pen, 7f, 7f,
-                            7f + (float)Math.Cos(a) * reach, 7f + (float)Math.Sin(a) * reach);
-                    }
+                    // The burst an impact leaves, filled rather than drawn in spokes.
+                    g.FillPolygon(fill, Star(40, 40, 37, 14, 10));
                     break;
                 case "fine":
-                    // A ticket, written and torn off.
-                    g.DrawRectangle(pen, 2.5f, 3.5f, 9f, 7f);
-                    g.DrawLine(pen, 4.5f, 6.5f, 9.5f, 6.5f);
-                    g.DrawLine(pen, 4.5f, 8.5f, 8f, 8.5f);
+                    // A note handed over: the shape of money, with its face knocked
+                    // out in a darker shade rather than in the panel behind it, so it
+                    // reads the same on either row colour.
+                    using (var note = Rounded(new RectangleF(6, 22, 68, 36), 7)) g.FillPath(fill, note);
+                    g.FillEllipse(cut, 30, 30, 20, 20);
                     break;
                 case "refuel":
-                    // A drop.
-                    g.DrawBezier(pen, 7f, 2.5f, 12f, 8f, 11f, 12f, 7f, 12f);
-                    g.DrawBezier(pen, 7f, 2.5f, 2f, 8f, 3f, 12f, 7f, 12f);
+                    using (var drop = new GraphicsPath()) {
+                        drop.AddBezier(40, 8, 76, 44, 68, 72, 40, 72);
+                        drop.AddBezier(40, 72, 12, 72, 4, 44, 40, 8);
+                        g.FillPath(fill, drop);
+                    }
                     break;
                 case "rest":
-                    // A crescent, which is what sleeping looks like everywhere.
-                    g.DrawArc(pen, 2.5f, 2.5f, 9f, 9f, 40, 280);
+                    // A crescent: a disc with a second one taken out of it, which is
+                    // a moon rather than the letter C an arc was coming out as.
+                    using (var moon = new GraphicsPath { FillMode = FillMode.Alternate }) {
+                        moon.AddEllipse(10, 10, 60, 60);
+                        moon.AddEllipse(30, 2, 60, 60);
+                        g.FillPath(fill, moon);
+                    }
                     break;
                 case "ferry":
                 case "train":
-                    // A hull on water.
-                    g.DrawLine(pen, 3f, 7.5f, 11f, 7.5f);
-                    g.DrawLine(pen, 4f, 7.5f, 5.5f, 10.5f);
-                    g.DrawLine(pen, 10f, 7.5f, 8.5f, 10.5f);
-                    g.DrawLine(pen, 5.5f, 10.5f, 8.5f, 10.5f);
-                    g.DrawLine(pen, 7f, 3f, 7f, 7f);
+                    // A hull with a funnel above it.
+                    g.FillPolygon(fill, new[] {
+                        new PointF(8, 44), new PointF(72, 44), new PointF(59, 70), new PointF(21, 70),
+                    });
+                    using (var funnel = Rounded(new RectangleF(33, 12, 15, 28), 4)) g.FillPath(fill, funnel);
                     break;
                 case "tollgate":
-                    // A barrier across the road.
-                    g.DrawLine(pen, 3f, 11f, 3f, 4f);
-                    g.DrawLine(pen, 3f, 5f, 12f, 8f);
+                    // A barrier down across the road, on its post, striped.
+                    using (var post = Rounded(new RectangleF(8, 22, 14, 50), 4)) g.FillPath(fill, post);
+                    var bar = new[] {
+                        new PointF(18, 30), new PointF(74, 44), new PointF(74, 58), new PointF(18, 44),
+                    };
+                    g.FillPolygon(fill, bar);
+                    using (var clip = PathOf(bar)) {
+                        var was = g.Clip;
+                        g.SetClip(clip);
+                        for (var s = 22f; s < 78f; s += 19f) {
+                            g.FillPolygon(cut, new[] {
+                                new PointF(s, 24), new PointF(s + 9, 24),
+                                new PointF(s + 9, 64), new PointF(s, 64),
+                            });
+                        }
+                        g.Clip = was;
+                    }
                     break;
                 case "save_loaded":
-                    // Back round to somewhere already passed.
-                    g.DrawArc(pen, 3f, 3f, 8f, 8f, 40, 280);
-                    g.FillPolygon(fill, new[] { new PointF(3.4f, 4.6f), new PointF(7f, 4.2f), new PointF(4.6f, 7.4f) });
+                    // Round to somewhere already passed.
+                    g.DrawArc(pen, 16, 16, 48, 48, 35, 285);
+                    g.FillPolygon(fill, new[] {
+                        new PointF(10, 24), new PointF(38, 14), new PointF(26, 42),
+                    });
                     break;
                 case "cargo_loaded":
                 case "trailer_coupled":
-                    // A crate on the deck.
-                    g.DrawRectangle(pen, 2.5f, 4.5f, 9f, 6f);
-                    g.DrawLine(pen, 2.5f, 6.5f, 11.5f, 6.5f);
+                    // A crate, strapped.
+                    using (var crate = Rounded(new RectangleF(10, 22, 60, 42), 5)) g.FillPath(fill, crate);
+                    g.FillRectangle(cut, 10, 37, 60, 9);
                     break;
                 default:
-                    g.DrawEllipse(pen, 5f, 5f, 4f, 4f);
+                    g.FillEllipse(fill, 28, 28, 24, 24);
                     break;
             }
         }
 
-        EventIcons[type] = bmp;
-        return bmp;
+        // Averaged down, which is where the smoothness comes from.
+        var small = new Bitmap(IconSize, IconSize);
+        using (var g = Graphics.FromImage(small)) {
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            g.DrawImage(large, new Rectangle(0, 0, IconSize, IconSize));
+        }
+        large.Dispose();
+
+        EventIcons[key] = small;
+        return small;
+    }
+
+    private static GraphicsPath PathOf(PointF[] points) {
+        var path = new GraphicsPath();
+        path.AddPolygon(points);
+        return path;
+    }
+
+    /// <summary>A rectangle with its corners taken off, which GDI+ has no primitive
+    /// for and every filled shape here wants.</summary>
+    private static GraphicsPath Rounded(RectangleF r, float radius) {
+        var path = new GraphicsPath();
+        var d = radius * 2;
+        path.AddArc(r.Left, r.Top, d, d, 180, 90);
+        path.AddArc(r.Right - d, r.Top, d, d, 270, 90);
+        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+        path.AddArc(r.Left, r.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
+
+    /// <summary>The points of a star, for the burst an impact leaves.</summary>
+    private static PointF[] Star(float cx, float cy, float outer, float inner, int spikes) {
+        var points = new PointF[spikes * 2];
+        for (var i = 0; i < points.Length; i++) {
+            var reach = i % 2 == 0 ? outer : inner;
+            var a = Math.PI * i / spikes - Math.PI / 2;
+            points[i] = new PointF(cx + (float)Math.Cos(a) * reach, cy + (float)Math.Sin(a) * reach);
+        }
+        return points;
     }
 
     /// <summary>
@@ -2317,8 +2398,8 @@ public class MainForm : Form {
         var what = new Label { Dock = DockStyle.Left, Width = 98, Text = e.Udalost, ForeColor = Ink, TextAlign = ContentAlignment.MiddleLeft };
         var time = new Label { Dock = DockStyle.Left, Width = 66, Text = e.Cas, ForeColor = Muted, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Consolas", 8.5F) };
         var icon = new PictureBox {
-            Dock = DockStyle.Left, Width = 20, SizeMode = PictureBoxSizeMode.CenterImage,
-            Image = EventIcon(e.Type), BackColor = Color.Transparent,
+            Dock = DockStyle.Left, Width = 26, SizeMode = PictureBoxSizeMode.CenterImage,
+            Image = EventIcon(e.Type, e.Detail), BackColor = Color.Transparent,
         };
 
         line.Controls.Add(detail);
