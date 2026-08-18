@@ -34,6 +34,79 @@ public class FreeroamRecord {
     public List<TripPoint> TripPoints = new();
 }
 
+/// <summary>
+/// Turns a trailer's identifier into something a person would say.
+///
+/// The game gives no readable name for a job trailer: <c>Name</c> comes back empty
+/// on every one of them and the identifier is all there is, so
+/// "blade_hauler.chassis_40x2esii" is what a delivery ended up showing. Nothing
+/// here is invented; it is only the parts of what the game already said, arranged
+/// so they read:
+///
+///   scs_box.ins_53_3ax2esii        insulated  ->  Insulated, 53 ft
+///   scs_flatbed.curtain28_hookx..  curtainside -> Curtainside, 28 ft
+///   blade_hauler.chassis_40x2esii  (none)     ->  Blade hauler, 40 ft
+///   scs_flatbed.dolly_cx2esii      (none)     ->  Dolly
+///
+/// The body type is the game's own word for what the trailer is and is preferred
+/// wherever it exists. Only the leading unit of a coupled set carries one, so the
+/// ones behind it fall back to the family in the identifier. The raw identifier is
+/// still worth keeping to hand: it is what the data actually says, and the reading
+/// of it is a convenience.
+/// </summary>
+public static class TrailerNames {
+    public static string Describe(TrailerUnitRecord unit) {
+        if (unit.Name.Length > 0) return unit.Name;
+        if (unit.Kind == "dolly") return Pretty(Waybill.Strings.T("value.dolly"));
+
+        var head = unit.BodyType.Length > 0 ? Pretty(unit.BodyType) : Family(unit.Id);
+        var feet = Length(unit.Id);
+        if (head.Length == 0) return unit.Id;
+        return feet > 0 ? $"{head}, {feet} ft" : head;
+    }
+
+    /// <summary>The part before the dot, which names the kind of trailer. The "scs_"
+    /// on the studio's own ones says nothing to anybody.</summary>
+    private static string Family(string id) {
+        // A trailer the driver owns is filed under "vehicle.", which names nothing;
+        // what it is comes after that.
+        if (id.StartsWith("vehicle.", StringComparison.OrdinalIgnoreCase)) id = id["vehicle.".Length..];
+        var dot = id.IndexOf('.');
+        var family = (dot > 0 ? id[..dot] : id).Replace("scs_", "");
+        return Pretty(family.Replace('_', ' '));
+    }
+
+    /// <summary>
+    /// The trailer's length, when the identifier plainly carries one.
+    ///
+    /// Deliberately narrow: only a bare two digit run inside the variant, and only
+    /// in the range trailers actually come in. The identifier also holds axle counts
+    /// and a suffix full of digits, and a number pulled out of those would be a
+    /// confident lie rather than a missing figure.
+    /// </summary>
+    private static int Length(string id) {
+        var dot = id.IndexOf('.');
+        if (dot < 0 || dot + 1 >= id.Length) return 0;
+
+        var variant = id[(dot + 1)..];
+        for (var i = 0; i < variant.Length - 1; i++) {
+            if (!char.IsDigit(variant[i])) continue;
+            if (i > 0 && char.IsDigit(variant[i - 1])) continue;
+            if (!char.IsDigit(variant[i + 1])) continue;
+            // Two digits, and nothing but a separator after them: "53_3a" yes,
+            // "40x2esii" yes, but "28_hook" only up to the underscore.
+            var after = i + 2 < variant.Length ? variant[i + 2] : '_';
+            if (char.IsDigit(after)) continue;
+            var feet = (variant[i] - '0') * 10 + (variant[i + 1] - '0');
+            if (feet is >= 20 and <= 60) return feet;
+        }
+        return 0;
+    }
+
+    private static string Pretty(string text) =>
+        text.Length == 0 ? "" : char.ToUpperInvariant(text[0]) + text[1..];
+}
+
 public class FineRecord {
     public double Amount;
     public string Offence = "";

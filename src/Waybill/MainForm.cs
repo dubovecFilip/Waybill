@@ -987,11 +987,15 @@ public class MainForm : Form {
         }
         for (var i = 0; i < units.Count; i++) {
             var unit = units[i];
-            var name = unit.Name.Length > 0 ? unit.Name : unit.Id;
+            var name = TrailerNames.Describe(unit);
             var label = $"{i + 1}.  {Strings.T("value." + unit.Kind)}"
                       + (unit.Owned ? $"  ({Strings.T("detail.owned")})" : "");
-            lines.Add(UnitLine(label, $"{name}   ·   {unit.Plate}   ·   {Damage(unit.Damage)}",
-                unit.Kind == "dolly" ? Muted : Ink, lineHeight));
+            var line = UnitLine(label, $"{name}   ·   {unit.Plate}   ·   {Damage(unit.Damage)}",
+                unit.Kind == "dolly" ? Muted : Ink, lineHeight);
+            // The reading is a convenience; the identifier is what the data says, and
+            // it stays one hover away.
+            foreach (Control part in line.Controls) _tips.SetToolTip(part, unit.Id);
+            lines.Add(line);
         }
         // Docked children stack in reverse, so the summary ends up under the units.
         for (var i = lines.Count - 1; i >= 0; i--) body.Controls.Add(lines[i]);
@@ -1020,7 +1024,7 @@ public class MainForm : Form {
         return string.Join("  ·  ", parts);
     }
 
-    private static Control UnitLine(string label, string value, Color colour, int height) {
+    private Control UnitLine(string label, string value, Color colour, int height) {
         var line = new Panel { Dock = DockStyle.Top, Height = height, Padding = new Padding(28, 4, 16, 4), BackColor = Raised };
         line.Controls.Add(new Label {
             Dock = DockStyle.Fill, Text = value, ForeColor = colour,
@@ -2188,10 +2192,20 @@ public class MainForm : Form {
                 r.Tahac.Contains(text, StringComparison.OrdinalIgnoreCase));
         }
 
-        _grid.DataSource = new SortableBindingList<DeliveryRow>(filtered.ToList(), new Dictionary<string, string> {
+        // Rebinding throws the sort away, and the list is rebound whenever anything
+        // sends the user back to it: opening a delivery and pressing Back left them
+        // looking at a list ordered by date again, having asked for it by distance a
+        // moment earlier. The order they chose is theirs until they change it.
+        var sortedBy = _grid.SortedColumn?.DataPropertyName;
+        var sortedWay = _grid.SortOrder == SortOrder.Descending
+            ? System.ComponentModel.ListSortDirection.Descending
+            : System.ComponentModel.ListSortDirection.Ascending;
+
+        var bound = new SortableBindingList<DeliveryRow>(filtered.ToList(), new Dictionary<string, string> {
             [nameof(DeliveryRow.Vzdialenost)] = nameof(DeliveryRow.DistanceKm),
             [nameof(DeliveryRow.Odmena)] = nameof(DeliveryRow.Zarobok),
         });
+        _grid.DataSource = bound;
         // Two kinds of hidden column. The raw metric values stay bound so sorting by
         // distance or pay compares numbers rather than formatted text. The rest are
         // simply not what a list is for: they are on the delivery's own card, where
@@ -2203,6 +2217,12 @@ public class MainForm : Form {
             nameof(DeliveryRow.Flags),
         }) {
             if (_grid.Columns[hidden] is { } col) col.Visible = false;
+        }
+
+        // Put the order back. After the columns are hidden, or sorting by one that
+        // has just been taken off the screen throws.
+        if (sortedBy is not null && _grid.Columns[sortedBy] is { Visible: true } column) {
+            _grid.Sort(column, sortedWay);
         }
     }
 

@@ -265,13 +265,13 @@ public static class WaybillSheet {
         if (d.TrailerUnits.Count > 0) {
             var rows = d.TrailerUnits.Select((unit, i) => new[] {
                 $"{i + 1}.",
-                unit.Kind,
-                unit.Plate.Length > 0 ? unit.Plate : unit.Id,
+                Waybill.Tracking.TrailerNames.Describe(unit),
+                unit.Plate,
                 $"{unit.Damage * 100:0.00} %",
             }).ToList();
             pieces.AddRange(Table(Strings.T("sheet.equipment"),
                 new[] { Strings.T("sheet.pos"), Strings.T("sheet.kind"), Strings.T("sheet.plate"), Strings.T("sheet.condition") },
-                new[] { 14f, 34f, 90f, ContentW - 138f }, rows, new[] { false, false, true, true }));
+                new[] { 14f, 78f, 46f, ContentW - 138f }, rows, new[] { false, true, true, true }));
             pieces.Add(Gap(3.5f));
         }
 
