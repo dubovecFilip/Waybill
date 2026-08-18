@@ -316,7 +316,10 @@ public static class WaybillSheet {
             }).ToList();
             pieces.AddRange(Table(Strings.T("sheet.equipment"),
                 new[] { Strings.T("sheet.pos"), Strings.T("sheet.kind"), Strings.T("sheet.plate"), Strings.T("sheet.condition") },
-                new[] { 14f, 78f, 46f, ContentW - 138f }, rows, new[] { false, true, true, true },
+                new[] { 14f, 78f, 46f, ContentW - 138f }, rows,
+                // The position numbers are written in too: they are part of what the
+                // driver put on the form, not part of what was printed on it.
+                new[] { true, true, true, true },
                 PrintedEquipmentLines));
             pieces.Add(Gap(3.5f));
         }
@@ -329,7 +332,11 @@ public static class WaybillSheet {
             var rows = events.Select(e => new[] { e.Cas, e.Udalost, e.Hodnota, e.Detail }).ToList();
             pieces.AddRange(Table(Strings.T("sheet.remarks"),
                 new[] { Strings.T("sheet.time"), Strings.T("sheet.entry"), Strings.T("sheet.figure"), Strings.T("sheet.note") },
-                new[] { 20f, 62f, 26f, ContentW - 108f }, rows, new[] { false, true, true, false },
+                new[] { 20f, 62f, 26f, ContentW - 108f }, rows,
+                // The time is written as well: it is when the driver noticed, not a
+                // heading. The note stays printed, since it is the game's own name for
+                // the offence rather than anybody's hand.
+                new[] { true, true, true, false },
                 PrintedRemarkLines));
             pieces.Add(Gap(3.5f));
         }
