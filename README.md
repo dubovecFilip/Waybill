@@ -129,16 +129,22 @@ live in `%LOCALAPPDATA%\Waybill\`, independent of where the exe sits.
 Start order does not matter, the app connects to the game as soon as it finds it.
 Jobs are detected and saved without any input.
 
-Five pages down the left. *Overview* is where the window opens, and it is the
-only page that answers "what is going on" rather than a question you have to
-already have. It holds the drive in progress with its route drawn beside it as
-it goes, the last five deliveries, and the three settings worth reaching for.
+Five pages down the left.
+
+*Overview* is where the window opens, and it is the only page that answers "what
+is going on" rather than a question you have to arrive with. It holds the drive
+in progress with its route drawn beside it as it goes, the last five deliveries,
+each opening its own card, and the three settings anybody actually reaches for.
 Nothing on it is new: everything has a page of its own, one click away, and the
-tracker's log stays on *Current job* where it belongs. *Deliveries* is the history. Every row carries its
-verdict as a dot in the gutter on the left, and an oversize load carries hazard
-stripes beside it; hovering the gutter says both in words. Clicking a column
-heading sorts by it, and the order chosen is kept: opening a delivery and coming
-back leaves the list the way it was left rather than back on date order.
+tracker's log stays on *Current job* where it belongs.
+
+![The page the window opens on](assets/overview.png)
+
+*Deliveries* is the history. Every row carries its verdict as a dot in the
+gutter on the left, and an oversize load carries hazard stripes beside it;
+hovering the gutter says both in words. Clicking a column heading sorts by it,
+and the order chosen is kept: opening a delivery and coming back leaves the list
+the way it was left rather than back on date order.
 
 Above the list, a search box and two switches. Each switch has a middle position
 meaning both, one end for **ETS2** and the other for **ATS**, and one end for an

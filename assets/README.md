@@ -4,6 +4,7 @@
 |---|---|
 | `logo.png` | Full resolution logo (700x700). Source for the application icon. |
 | `logo.psd` | Layered source file for editing the logo. |
+| `overview.png` | The page the window opens on. |
 | `deliveries.png` | The delivery history, used at the top of the README. |
 | `delivery-card.png` | One delivery on its own card. |
 | `delivery-route.png` | The same card with the route and timeline slid out. |
@@ -13,27 +14,34 @@
 | `waybill-sheet.png` | A delivery exported as an A4 sheet. |
 | `legend.png` | Every mark the window uses, with what it means. |
 
-Screenshots are taken at 1180x760, which is roughly the window's default size and
-wide enough for the delivery list to show most of its columns without scrolling.
+Screenshots are the window's own area at a size of 1180x760, which is roughly its
+default and wide enough for the delivery list to show most of its columns without
+scrolling. What is kept is the client area only: no title bar, no border, and
+nothing of whatever happened to be behind the window on the desktop. They are
+rendered from the window itself rather than copied off the screen, so nothing
+else can end up in the picture and the window does not have to be in front.
+
 `waybill-sheet.png` is the exception: it is not a screenshot but a real export,
 downscaled from the 300 dpi original to 1000 px tall, so it keeps A4's proportions
 rather than the window's. `legend.png` is the other: it is a dialog, so it is its
 own width, and it was stretched tall enough to show every entry at once rather
 than shown at its default size with half the list below the fold.
+
 Each is named for what it shows rather than for where it happens to appear, so
 moving one around the README does not leave the name lying.
 
 They are captured from a real database rather than staged, which is why the
 figures in them are ordinary rather than tidy.
 
-There is no shot of the *Current job* page, and none of *Overview* either. Both
-only have anything to show while a delivery is actually running, and one taken
-with the game closed says nothing but "waiting for the game" across the part that
-matters, so they are better left out than faked.
+There is no shot of the *Current job* page. It only has anything to show while a
+delivery is actually running, and one taken with the game closed says nothing but
+"waiting for the game", so it is better left out than faked. `overview.png` was
+taken the same way and shows the same empty line across its top card, which is
+kept rather than faked: the rest of the page is what it is there to show.
 
-There is none of the route drawing itself. It is two and a half seconds of
-movement, and a still frame of it is a picture of half a route, which looks like
-a bug rather than like a feature.
+There is none of the route drawing itself either. It is a couple of seconds of
+movement, and a still frame of it is a picture of half a route, which reads as a
+bug rather than as a feature.
 
 There is none of the map at full screen either. It fills whatever monitor it is
 opened on, so the shot would be the size of that monitor rather than the size
