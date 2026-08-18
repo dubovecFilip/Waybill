@@ -2015,20 +2015,16 @@ public class MainForm : Form {
                     }
                     break;
                 case "save_loaded":
-                    // Back round to somewhere already passed. The head is placed on
-                    // the arc and turned to its tangent rather than dropped at a
-                    // guessed corner, which is why it used to float beside the curve
-                    // instead of finishing it.
-                    const float Ring = 25f, Opens = 55f, Sweeps = 265f;
-                    g.DrawArc(pen, 40 - Ring, 40 - Ring, Ring * 2, Ring * 2, Opens, Sweeps);
-                    var tip = Opens * Math.PI / 180;
-                    var state2 = g.Save();
-                    g.TranslateTransform(40 + Ring * (float)Math.Cos(tip), 40 + Ring * (float)Math.Sin(tip));
-                    g.RotateTransform(Opens - 90);
-                    g.FillPolygon(fill, new[] {
-                        new PointF(-13, -3), new PointF(13, -3), new PointF(0, 19),
-                    });
-                    g.Restore(state2);
+                    // Wound back to somewhere already passed.
+                    //
+                    // This was a circular arrow twice and read as neither. At twenty
+                    // pixels the head has to be about as wide as the arc is thick to
+                    // be seen at all, and then it swallows the curve it is supposed
+                    // to finish. Two chevrons have no such fight: they are the same
+                    // shape at any size, and everybody already knows what rewind
+                    // looks like.
+                    g.FillPolygon(fill, new[] { new PointF(38, 14), new PointF(38, 66), new PointF(6, 40) });
+                    g.FillPolygon(fill, new[] { new PointF(74, 14), new PointF(74, 66), new PointF(42, 40) });
                     break;
                 case "cargo_loaded":
                 case "trailer_coupled":
