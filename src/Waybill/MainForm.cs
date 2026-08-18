@@ -85,6 +85,7 @@ public class MainForm : Form {
     private readonly Panel _detailPage = new();
     /// <summary>The timeline column, which lives at width zero until asked for.</summary>
     private Panel? _detailSide;
+    private RouteView? _cardMap;
     private System.Windows.Forms.Timer? _detailSlide;
 
     private List<DeliveryRow> _rows = new();
@@ -1817,7 +1818,12 @@ public class MainForm : Form {
             side.Width = Math.Abs(left) <= step ? target : side.Width + Math.Sign(left) * step;
             if (side.Width == target) {
                 _detailSlide!.Stop();
-                if (target > 0) UseDarkScrollbars(side);
+                if (target > 0) {
+                    UseDarkScrollbars(side);
+                    // The card is rebuilt whenever another delivery is opened, so
+                    // the map held here can be one that no longer exists.
+                    if (_cardMap is { IsDisposed: false } shown) shown.Replay();
+                }
             }
         };
         _detailSlide.Start();
@@ -1897,8 +1903,18 @@ public class MainForm : Form {
         map.Show(Layers(RoutesFor(d.Game)), d.Id, RoutesFor(d.Game).Cities,
                  _store.TimelineRows(d.Id), RoutesFor(d.Game).RunUps.Concat(_store.FreeroamRoutes(d.Game)));
 
+        // Drawn out once, when the panel it sits in is actually on the screen.
+        // Watching the line grow says the order things happened in, which a finished
+        // line cannot: the same picture with a collision near the end reads quite
+        // differently from one with a collision on the way out.
+        //
+        // Held here rather than started here, because the panel is built while it is
+        // still slid shut. A replay nobody can see is a replay wasted.
+        _cardMap = map;
+        if (_detailSide is { Width: > 0 }) map.HandleCreated += (_, _) => map.BeginInvoke(() => map.Replay());
+
         box.Controls.Add(map);
-        MapButtons(box, map, () => BigMap(d, u));
+        MapButtons(box, map, () => BigMap(d, u), replay: true);
         return box;
     }
 
@@ -1920,7 +1936,7 @@ public class MainForm : Form {
     /// spare. Placed by hand on every resize because the map underneath them is
     /// docked to fill, so there is no layout to anchor to.
     /// </summary>
-    private void MapButtons(Control host, RouteView map, Action? expand) {
+    private void MapButtons(Control host, RouteView map, Action? expand, bool replay = false) {
         var bar = new Panel { BackColor = Color.Transparent, Height = 26, Width = 0 };
 
         Button Glyph(string text, string tip, Action click) {
@@ -1940,6 +1956,9 @@ public class MainForm : Form {
 
         var layers = Glyph("≡", Strings.T("map.layers"), () => { });
         layers.Click += (_, _) => LayerMenu(map).Show(layers, new Point(0, layers.Height));
+        // Only where one delivery is singled out: there is nothing to replay on the
+        // map of everything, where no drive is more the subject than any other.
+        if (replay) Glyph("▶", Strings.T("map.replay"), () => map.Replay());
         Glyph("⟲", Strings.T("map.fit"), map.Fit);
         if (expand is not null) Glyph("⤢", Strings.T("map.expand"), expand);
 
@@ -2421,12 +2440,15 @@ public class MainForm : Form {
         var map = NewMap(u);
         map.Hint = Strings.T("map.hintBig");
         window.Controls.Add(map);
-        MapButtons(window, map, null);
+        MapButtons(window, map, null, replay: true);
         // Shown before the data, so the map measures itself against the size it will
         // actually have rather than fitting the route to a window that is about to
         // be maximised.
-        window.Shown += (_, _) => map.Show(Layers(RoutesFor(d.Game)), d.Id, RoutesFor(d.Game).Cities,
-                                           _store.TimelineRows(d.Id), RoutesFor(d.Game).RunUps.Concat(_store.FreeroamRoutes(d.Game)));
+        window.Shown += (_, _) => {
+            map.Show(Layers(RoutesFor(d.Game)), d.Id, RoutesFor(d.Game).Cities,
+                     _store.TimelineRows(d.Id), RoutesFor(d.Game).RunUps.Concat(_store.FreeroamRoutes(d.Game)));
+            map.Replay();
+        };
         window.Load += (_, _) => UseDarkTitleBar(window);
         window.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) window.Close(); };
         window.ShowDialog(this);

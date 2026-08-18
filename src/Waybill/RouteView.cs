@@ -49,11 +49,23 @@ public class RouteView : Control {
 
     private const float Pad = 18f;
 
-    /// <summary>One route, split into the stretches that were actually driven.</summary>
+    /// <summary>One route, split into the stretches that were actually driven.
+    /// <see cref="RunStart"/> says where each stretch begins in the whole drive,
+    /// which is what lets the drawing stop partway through it.</summary>
     private class Drawn {
         public long Id;
         public List<RoutePoint> All = new();
         public List<List<RoutePoint>> Runs = new();
+        public List<int> RunStart = new();
+
+        public void Index() {
+            RunStart = new List<int>(Runs.Count);
+            var at = 0;
+            foreach (var run in Runs) {
+                RunStart.Add(at);
+                at += run.Count;
+            }
+        }
     }
 
     private List<Drawn> _drawn = new();
@@ -61,7 +73,7 @@ public class RouteView : Control {
     private List<List<RoutePoint>> _secondary = new();
     private Drawn? _focus;
     private List<CityAnchor> _cities = new();
-    private List<(TimelineRow Row, RoutePoint At)> _marks = new();
+    private List<(TimelineRow Row, RoutePoint At, int Index)> _marks = new();
 
     private float _fitScale = 1f;
     private float _zoom = 1f;
@@ -77,6 +89,14 @@ public class RouteView : Control {
     private int _hoverPoint = -1;
     private int _hoverMark = -1;
     private long _lit;
+
+    /// <summary>How much of the singled out route is drawn, from nothing to all of
+    /// it. Only a replay ever moves it, and it is left at the end when one finishes,
+    /// so every other use of this control is unaffected.</summary>
+    private double _sweep = 1;
+    private System.Windows.Forms.Timer? _replay;
+    private int _replayMs;
+    private int _replayFrom;
 
     // Set from code and never from a designer, which is what the attribute says:
     // this control is built by hand like the rest of the window.
@@ -150,6 +170,7 @@ public class RouteView : Control {
                      List<TimelineRow>? marks = null, IEnumerable<List<RoutePoint>>? secondary = null) {
         _drawn = routes.Select(r => new Drawn { Id = r.Id, All = r.Points, Runs = Split(r.Points) })
                        .Where(d => d.Runs.Count > 0).ToList();
+        foreach (var d in _drawn) d.Index();
         _secondary = (secondary ?? Enumerable.Empty<List<RoutePoint>>())
                      .SelectMany(Split).Where(r => r.Count > 1).ToList();
         _focus = _drawn.FirstOrDefault(d => d.Id == focus);
@@ -158,9 +179,56 @@ public class RouteView : Control {
         _lit = 0;
         _hoverPoint = _hoverMark = -1;
         _fitted = false;
+        StopReplay();
         Discard();
         Invalidate();
     }
+
+    /// <summary>
+    /// Draws the singled out route again from its beginning, at a steady rate, as
+    /// though the drive were being watched from above.
+    ///
+    /// It is playing back time rather than distance: the points are one second of
+    /// driving apart, so the line grows quickly on an open road and dawdles through
+    /// a city, which is what the drive actually did. Pins arrive as the line reaches
+    /// them, so a collision is seen happening rather than found afterwards.
+    ///
+    /// Only the route on top is animated. Everything behind it is a cached picture
+    /// that is not redrawn, which is what keeps this cheap enough to run at sixty
+    /// frames a second on a route of twenty thousand points.
+    /// </summary>
+    public void Replay(int milliseconds = 2400) {
+        if (_focus is null || _focus.All.Count < 2 || milliseconds <= 0) return;
+        StopReplay();
+        _sweep = 0;
+        _replayMs = milliseconds;
+        _replayFrom = Environment.TickCount;
+        _replay = new System.Windows.Forms.Timer { Interval = 16 };
+        _replay.Tick += (_, _) => {
+            var gone = (Environment.TickCount - _replayFrom) / (double)_replayMs;
+            // Easing out at the end, so the line arrives rather than stops dead.
+            _sweep = gone >= 1 ? 1 : 1 - Math.Pow(1 - gone, 1.6);
+            if (_sweep >= 1) StopReplay();
+            Invalidate();
+        };
+        _replay.Start();
+        Invalidate();
+    }
+
+    /// <summary>Ends a replay wherever it is and shows the whole route. Called by
+    /// anything the driver does to the map: a replay is worth watching until you
+    /// want to look at something, and then it is in the way.</summary>
+    public void StopReplay() {
+        _replay?.Stop();
+        _replay?.Dispose();
+        _replay = null;
+        _sweep = 1;
+    }
+
+    /// <summary>How many of the route's points have been reached, as an index into
+    /// the whole drive.</summary>
+    private int Reached(Drawn route) =>
+        _sweep >= 1 ? route.All.Count : (int)Math.Ceiling(_sweep * route.All.Count);
 
     /// <summary>
     /// Ties each event to the position the truck was in when it happened, by time.
@@ -171,21 +239,24 @@ public class RouteView : Control {
     /// route stopped being recorded around it, and a pin in the wrong place says
     /// something false about where the driver was.
     /// </summary>
-    private List<(TimelineRow, RoutePoint)> PlaceMarks(List<TimelineRow>? marks) {
-        var placed = new List<(TimelineRow, RoutePoint)>();
+    private List<(TimelineRow, RoutePoint, int)> PlaceMarks(List<TimelineRow>? marks) {
+        var placed = new List<(TimelineRow, RoutePoint, int)>();
         if (marks is null || _focus is null) return placed;
 
         foreach (var mark in marks) {
 
             var best = long.MaxValue;
             RoutePoint at = default;
-            foreach (var p in _focus.All) {
+            var index = -1;
+            for (var i = 0; i < _focus.All.Count; i++) {
+                var p = _focus.All[i];
                 var off = Math.Abs(p.AtMs - mark.AtMs);
                 if (off >= best) continue;
                 best = off;
                 at = p;
+                index = i;
             }
-            if (best <= 60_000) placed.Add((mark, at));
+            if (best <= 60_000) placed.Add((mark, at, index));
         }
         return placed;
     }
@@ -256,6 +327,7 @@ public class RouteView : Control {
     protected override void OnMouseWheel(MouseEventArgs e) {
         base.OnMouseWheel(e);
         if (_drawn.Count == 0) return;
+        StopReplay();
 
         // Zoom about the pointer: whatever is under it stays under it, which is what
         // makes zooming feel like moving closer rather than being thrown somewhere.
@@ -271,6 +343,7 @@ public class RouteView : Control {
 
     protected override void OnMouseDown(MouseEventArgs e) {
         base.OnMouseDown(e);
+        StopReplay();
         Focus();
         _dragging = true;
         _dragged = false;
@@ -467,9 +540,13 @@ public class RouteView : Control {
     }
 
     private void DrawRoute(Graphics g, Drawn route) {
+        var reached = Reached(route);
+
         // The stretches that were not driven, drawn first so the route sits on top.
+        // A break only appears once the drive has come out the other side of it.
         using (var skip = new Pen(Color.FromArgb(90, 150, 160, 175), 1f) { DashStyle = DashStyle.Dash }) {
             for (var i = 1; i < route.Runs.Count; i++) {
+                if (route.RunStart[i] >= reached) break;
                 var a = ToScreen(route.Runs[i - 1][^1].X, route.Runs[i - 1][^1].Z);
                 var b = ToScreen(route.Runs[i][0].X, route.Runs[i][0].Z);
                 g.DrawLine(skip, a, b);
@@ -481,10 +558,14 @@ public class RouteView : Control {
             pens[i] = new Pen(Ramp[i], 2.4f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
 
         try {
-            foreach (var run in route.Runs) {
+            for (var r = 0; r < route.Runs.Count; r++) {
+                var run = route.Runs[r];
+                var upTo = Math.Min(run.Count, reached - route.RunStart[r]);
+                if (upTo < 2) continue;
+
                 var band = Band(run[0].SpeedKmh);
                 var stretch = new List<PointF> { ToScreen(run[0].X, run[0].Z) };
-                for (var i = 1; i < run.Count; i++) {
+                for (var i = 1; i < upTo; i++) {
                     stretch.Add(ToScreen(run[i].X, run[i].Z));
                     var next = Band(run[i].SpeedKmh);
                     if (next == band) continue;
@@ -502,8 +583,8 @@ public class RouteView : Control {
     }
 
     private void DrawEnds(Graphics g, Drawn route) {
+        var reached = Reached(route);
         var start = ToScreen(route.Runs[0][0].X, route.Runs[0][0].Z);
-        var end = ToScreen(route.Runs[^1][^1].X, route.Runs[^1][^1].Z);
 
         using var ring = new Pen(Ink, 2f);
         using var back = new SolidBrush(Backdrop);
@@ -511,7 +592,20 @@ public class RouteView : Control {
         g.DrawEllipse(ring, start.X - 5, start.Y - 5, 10, 10);
 
         using var fill = new SolidBrush(Accent);
-        g.FillEllipse(fill, end.X - 5.5f, end.Y - 5.5f, 11, 11);
+        if (reached >= route.All.Count) {
+            var end = ToScreen(route.Runs[^1][^1].X, route.Runs[^1][^1].Z);
+            g.FillEllipse(fill, end.X - 5.5f, end.Y - 5.5f, 11, 11);
+            return;
+        }
+
+        // Mid replay the far end has not been reached yet, so the marker rides the
+        // head of the line instead of sitting on a place the truck has not got to.
+        if (reached < 1) return;
+        var head = route.All[Math.Min(reached, route.All.Count) - 1];
+        var at = ToScreen(head.X, head.Z);
+        using var glow = new SolidBrush(Color.FromArgb(70, Accent));
+        g.FillEllipse(glow, at.X - 9, at.Y - 9, 18, 18);
+        g.FillEllipse(fill, at.X - 4.5f, at.Y - 4.5f, 9, 9);
     }
 
     /// <summary>Colour and shape for an event, by its stored identifier. Shape as
@@ -530,8 +624,11 @@ public class RouteView : Control {
     };
 
     private void DrawMarks(Graphics g) {
+        var reached = _focus is { } f ? Reached(f) : int.MaxValue;
         for (var i = 0; i < _marks.Count; i++) {
-            var (row, point) = _marks[i];
+            var (row, point, index) = _marks[i];
+            // A pin arrives when the line reaches it, not before.
+            if (index >= reached) continue;
             var at = ToScreen(point.X, point.Z);
             var (colour, sides) = Pin(row.Type);
             var r = i == _hoverMark ? 6.5f : 4.5f;
@@ -596,7 +693,7 @@ public class RouteView : Control {
         PointF at;
 
         if (_hoverMark >= 0 && _hoverMark < _marks.Count) {
-            var (row, point) = _marks[_hoverMark];
+            var (row, point, _) = _marks[_hoverMark];
             at = ToScreen(point.X, point.Z);
             label = row.Udalost;
             if (row.Hodnota.Length > 0) label += $"   {row.Hodnota}";
@@ -639,7 +736,10 @@ public class RouteView : Control {
     private static PointF[] Reduce(PointF[] pts, float tolerance) => RouteGeometry.Reduce(pts, tolerance);
 
     protected override void Dispose(bool disposing) {
-        if (disposing) Discard();
+        if (disposing) {
+            StopReplay();
+            Discard();
+        }
         base.Dispose(disposing);
     }
 }
