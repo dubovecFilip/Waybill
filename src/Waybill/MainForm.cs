@@ -128,7 +128,15 @@ public class MainForm : Form {
             StartEngine();
         };
         // Rebuilt controls are new windows, so they need asking again.
+        //
+        // The repaint afterwards is for the delivery list. Its very first painting
+        // comes out with pale vertical lines between some of the columns, which no
+        // later painting draws: they went away a cell at a time as the list was
+        // clicked through, and a resize cleared them all at once. Posting the
+        // repaint rather than asking for it here is the whole point, since asking
+        // now is asking before that first painting has happened.
         Shown += (_, _) => UseDarkScrollbars(this);
+        _grid.Paint += DrawTheListAgainOnce;
         FormClosing += (_, _) => {
             _engine?.Dispose();
             _discord?.Dispose();
@@ -1240,6 +1248,22 @@ public class MainForm : Form {
         // Otherwise Enter also steps the selection down a row behind the card.
         e.Handled = e.SuppressKeyPress = true;
         ShowDetail(row.Id);
+    }
+
+    /// <summary>
+    /// Throws the list's first painting away and asks for another one.
+    ///
+    /// That first painting comes out with pale vertical lines between some of the
+    /// columns, which no later painting draws: they went away a cell at a time as
+    /// the list was clicked through, and all at once when the window was resized.
+    /// Asking for the repaint any earlier does not work, because a paint is the
+    /// last thing a window does and anything posted before it is dealt with first.
+    /// So it is asked for from inside the painting itself, once, and then never
+    /// again.
+    /// </summary>
+    private void DrawTheListAgainOnce(object? sender, PaintEventArgs e) {
+        _grid.Paint -= DrawTheListAgainOnce;
+        BeginInvoke(() => _grid.Invalidate());
     }
 
     private void OnFilterChanged(object? sender, EventArgs e) => ApplyFilter();
