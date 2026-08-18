@@ -1239,13 +1239,16 @@ public class MainForm : Form {
     /// </summary>
     private void OnRowMarker(object? sender, DataGridViewCellPaintingEventArgs e) {
         if (e.ColumnIndex != -1 || e.RowIndex < 0 || e.RowIndex >= _grid.Rows.Count) return;
+        // The surface is declared as one that may not be there, so it is taken once
+        // and checked rather than reached through twice on trust.
+        if (e.Graphics is not { } g) return;
 
-        using (var clear = new SolidBrush(Canvas)) e.Graphics.FillRectangle(clear, e.CellBounds);
+        using (var clear = new SolidBrush(Canvas)) g.FillRectangle(clear, e.CellBounds);
         if (_grid.Rows[e.RowIndex].DataBoundItem is DeliveryRow { Special: true }) {
             var gutter = new RectangleF(
                 e.CellBounds.Left + 4, e.CellBounds.Top + 2,
                 5, Math.Max(e.CellBounds.Height - 4, 1));
-            HazardStripes(e.Graphics, gutter, 210);
+            HazardStripes(g, gutter, 210);
         }
         e.Handled = true;
     }
