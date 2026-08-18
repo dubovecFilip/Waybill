@@ -59,7 +59,12 @@ public static class TrailerNames {
         if (unit.Name.Length > 0) return unit.Name;
         if (unit.Kind == "dolly") return Pretty(Waybill.Strings.T("value.dolly"));
 
-        var head = unit.BodyType.Length > 0 ? Pretty(unit.BodyType) : Family(unit.Id);
+        // A body type beginning with an underscore is not one. An oversize load
+        // reports "_oversize" there, which is the game marking the job rather than
+        // saying what the trailer is, and printing it left a delivery reading
+        // "_oversize, 40 ft".
+        var body = unit.BodyType.StartsWith('_') ? "" : unit.BodyType;
+        var head = body.Length > 0 ? Pretty(body) : Family(unit.Id);
         var feet = Length(unit.Id);
         if (head.Length == 0) return unit.Id;
         return feet > 0 ? $"{head}, {feet} ft" : head;

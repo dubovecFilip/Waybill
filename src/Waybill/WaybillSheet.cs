@@ -46,6 +46,9 @@ public static class WaybillSheet {
         public Action<Graphics, float> Draw = (_, _) => { };
         public Action<Graphics, float>? Reprint;
         public float ReprintHeight;
+        /// <summary>Space between blocks rather than a block. Never worth a sheet of
+        /// its own.</summary>
+        public bool Filler;
     }
 
     /// <summary>Renders the delivery, one bitmap per sheet. 150 dpi is enough to
@@ -54,19 +57,28 @@ public static class WaybillSheet {
         var pieces = Build(d, events, route, u);
         var endorsement = Endorsement(d);
 
+        // A gap left hanging at the end is not content. Left in, it could be the one
+        // thing that would not fit, which started a sheet holding nothing but that
+        // gap and then let the endorsement land on it alone: the very page the
+        // reflow below exists to prevent, arrived at by the back door.
+        while (pieces.Count > 0 && pieces[^1].Filler) pieces.RemoveAt(pieces.Count - 1);
+
         // Flow the blocks down the page, starting a new one when the next will not
         // fit. Most deliveries never reach a second sheet; a triple with a long list
         // of remarks does, which is exactly what paper has always done about it.
         List<List<(Piece Piece, float Y)>> Flow(float limit) {
             var flowed = new List<List<(Piece, float)>>();
             var page = new List<(Piece, float)>();
-            var y = Margin + MastheadHeight;
+            // Where a sheet's content starts, on this sheet and on every one after
+            // it: the masthead, plus the hazard band when the load carries one.
+            var top = Margin + MastheadHeight + (d.SpecialTransport ? SpecialBandHeight : 0);
+            var y = top;
 
             foreach (var piece in pieces) {
                 if (y + piece.Height > limit && page.Count > 0) {
                     flowed.Add(page);
                     page = new List<(Piece, float)>();
-                    y = Margin + MastheadHeight;
+                    y = top;
                     // A table broken across sheets reprints its heading, or the rows
                     // on the second one are a list of figures with nothing saying
                     // what they are figures of.
@@ -90,7 +102,7 @@ public static class WaybillSheet {
         var pages = Flow(Bottom);
         var used = pages[^1].Count > 0
             ? pages[^1][^1].Y + pages[^1][^1].Piece.Height
-            : Margin + MastheadHeight;
+            : Bottom;
         if (used + endorsement.Height > Bottom) pages = Flow(Bottom - endorsement.Height);
         pages[^1].Add((endorsement, Bottom - endorsement.Height));
 
@@ -148,6 +160,16 @@ public static class WaybillSheet {
     // ---------- the sheet ----------
 
     private const float MastheadHeight = 20f;
+    /// <summary>The extra the hazard band and its legend take on an oversize load.</summary>
+    private const float SpecialBandHeight = 7f;
+
+    // How many lines the form is printed with. Chosen so a sheet is full without
+    // being crowded: everything above plus these plus the endorsement comes to about
+    // 259 mm of the 273 the page has. A coupled set longer than five units, or a
+    // drive with more than six remarks, runs onto a second sheet.
+    private const int PrintedEquipmentLines = 5;
+    private const int PrintedRemarkLines = 6;
+    private const float RoutePanelHeight = 76f;
 
     private static Bitmap Paint(DeliveryDetail d, List<(Piece Piece, float Y)> page, int number, int of, float dpi) {
         var bmp = new Bitmap((int)MathF.Round(PageW / 25.4f * dpi), (int)MathF.Round(PageH / 25.4f * dpi));
@@ -200,6 +222,28 @@ public static class WaybillSheet {
         using var thin = new Pen(Print, 0.25f);
         g.DrawLine(thick, Margin, Margin + 14.4f, Margin + ContentW, Margin + 14.4f);
         g.DrawLine(thin, Margin, Margin + 15.6f, Margin + ContentW, Margin + 15.6f);
+
+        // An oversize load is marked on the document the way it is marked on the
+        // truck: a band of hazard stripes, struck across the rule rather than said
+        // in another word.
+        if (d.SpecialTransport) {
+            var band = new RectangleF(Margin, Margin + 16.6f, ContentW, 2.4f);
+            var state = g.Save();
+            g.SetClip(band);
+            using (var dark = new SolidBrush(Print))
+            using (var pale = new SolidBrush(Color.FromArgb(60, 255, 255, 255))) {
+                g.FillRectangle(dark, band);
+                for (var bx = band.Left - band.Height; bx < band.Right + 2.4f; bx += 4.8f) {
+                    g.FillPolygon(pale, new[] {
+                        new PointF(bx, band.Bottom), new PointF(bx + 2.4f, band.Bottom),
+                        new PointF(bx + 2.4f + band.Height, band.Top), new PointF(bx + band.Height, band.Top),
+                    });
+                }
+            }
+            g.Restore(state);
+            using var banner = F(FormFace, 2.2f, FontStyle.Bold);
+            Spread(g, Strings.T("detail.special").ToUpperInvariant(), banner, light, Margin, Margin + 19.6f, 0.55f);
+        }
     }
 
     /// <summary>Draws text with the letters pushed apart, which is how the small
@@ -238,8 +282,11 @@ public static class WaybillSheet {
         var paid = d.Outcome == "delivered" ? d.Revenue : -d.Penalty;
 
         pieces.Add(Boxes(new[] {
-            (Strings.T("sheet.shipper"), $"{d.SourceCompany}, {d.SourceCity}", true),
-            (Strings.T("sheet.consignee"), $"{d.DestinationCompany}, {d.DestinationCity}", true),
+            // Joined rather than glued together with a comma. A special transport
+            // names no company at either end, and the comma was printed anyway, so
+            // the box read ", Stockton" as though something had gone missing.
+            (Strings.T("sheet.shipper"), Where(d.SourceCompany, d.SourceCity), true),
+            (Strings.T("sheet.consignee"), Where(d.DestinationCompany, d.DestinationCity), true),
             (Strings.T("detail.jobType"), d.JobType.Length > 0 ? Label(d.JobType) : "—", false),
             (Strings.T("sheet.commodity"), d.Cargo, true),
             (Strings.T("sheet.weight"), $"{u.MassTonnes(d.CargoMassKg):0.0} {u.MassUnit}", false),
@@ -257,12 +304,10 @@ public static class WaybillSheet {
 
         pieces.Add(Gap(3.5f));
 
-        if (route.Count > 1) {
-            pieces.Add(RouteBox(route, 86f));
-            pieces.Add(Gap(3.5f));
-        }
+        pieces.Add(RouteBox(route, RoutePanelHeight));
+        pieces.Add(Gap(3.5f));
 
-        if (d.TrailerUnits.Count > 0) {
+        {
             var rows = d.TrailerUnits.Select((unit, i) => new[] {
                 $"{i + 1}.",
                 Waybill.Tracking.TrailerNames.Describe(unit),
@@ -271,11 +316,12 @@ public static class WaybillSheet {
             }).ToList();
             pieces.AddRange(Table(Strings.T("sheet.equipment"),
                 new[] { Strings.T("sheet.pos"), Strings.T("sheet.kind"), Strings.T("sheet.plate"), Strings.T("sheet.condition") },
-                new[] { 14f, 78f, 46f, ContentW - 138f }, rows, new[] { false, true, true, true }));
+                new[] { 14f, 78f, 46f, ContentW - 138f }, rows, new[] { false, true, true, true },
+                PrintedEquipmentLines));
             pieces.Add(Gap(3.5f));
         }
 
-        if (events.Count > 0) {
+        {
             // Four columns rather than three. The stored detail is sometimes a unit
             // for the figure beside it ("% damage") and sometimes a fact of its own
             // ("Crash"), so folding it into the entry produced lines that read as
@@ -283,14 +329,18 @@ public static class WaybillSheet {
             var rows = events.Select(e => new[] { e.Cas, e.Udalost, e.Hodnota, e.Detail }).ToList();
             pieces.AddRange(Table(Strings.T("sheet.remarks"),
                 new[] { Strings.T("sheet.time"), Strings.T("sheet.entry"), Strings.T("sheet.figure"), Strings.T("sheet.note") },
-                new[] { 20f, 62f, 26f, ContentW - 108f }, rows, new[] { false, true, true, false }));
+                new[] { 20f, 62f, 26f, ContentW - 108f }, rows, new[] { false, true, true, false },
+                PrintedRemarkLines));
             pieces.Add(Gap(3.5f));
         }
 
         return pieces;
     }
 
-    private static Piece Gap(float mm) => new() { Height = mm };
+    private static Piece Gap(float mm) => new() { Height = mm, Filler = true };
+
+    private static string Where(string company, string city) =>
+        string.Join(", ", new[] { company, city }.Where(s => s.Length > 0));
 
     private static string Label(string key) {
         var t = Strings.T("value." + key);
@@ -363,9 +413,21 @@ public static class WaybillSheet {
 
     // ---------- tables ----------
 
-    private static List<Piece> Table(string caption, string[] heads, float[] widths, List<string[]> rows, bool[] hand) {
+    /// <summary>
+    /// A ruled table with a fixed number of lines, whether there is anything to put
+    /// on them or not.
+    ///
+    /// <paramref name="lines"/> is how many the form is printed with. A delivery that
+    /// used three of five leaves two ruled and empty, which is what a form does and
+    /// what makes it read as one; a delivery that needs more runs onto a second sheet
+    /// with the heading reprinted, which is also what a form does.
+    /// </summary>
+    private static List<Piece> Table(string caption, string[] heads, float[] widths,
+                                     List<string[]> rows, bool[] hand, int lines) {
         const float CapH = 4.6f, HeadH = 5.4f, RowH = 5.6f;
         var pieces = new List<Piece>();
+
+        while (rows.Count < lines) rows.Add(Array.Empty<string>());
 
         void Head(Graphics g, float y) {
             using var legend = F(FormFace, 2.3f, FontStyle.Bold);
@@ -396,8 +458,12 @@ public static class WaybillSheet {
                     var x = Margin;
                     for (var i = 0; i < cells.Length && i < widths.Length; i++) {
                         if (cells[i].Length > 0) {
-                            if (hand[i]) Written(g, cells[i], x + 1.6f, y + 0.4f, widths[i] - 3.2f, 4.1f, index * 5 + i);
-                            else g.DrawString(cells[i].ToUpperInvariant(), typed, light, x + 1.4f, y + 1.1f);
+                            // Written above the rule rather than on it. A pen rests
+                            // on the line and its descenders hang below; text placed
+                            // to fill the row put them through it, which reads as
+                            // struck out rather than written.
+                            if (hand[i]) Written(g, cells[i], x + 1.6f, y - 0.2f, widths[i] - 3.2f, 4.1f, index * 5 + i);
+                            else g.DrawString(cells[i].ToUpperInvariant(), typed, light, x + 1.4f, y + 0.9f);
                         }
                         x += widths[i];
                     }
@@ -419,20 +485,19 @@ public static class WaybillSheet {
     /// third of a page of nothing. A box that hugs it reads as a panel someone drew
     /// in; a box that does not reads as a mistake.
     /// </summary>
-    private static Piece RouteBox(List<RoutePoint> route, float maxHeight) {
+    private static Piece RouteBox(List<RoutePoint> route, float boxH) {
         var runs = RouteGeometry.Split(route);
         var world = RouteGeometry.Bounds(runs);
 
+        // The panel is the same size on every sheet, printed before anybody knew
+        // what would be drawn in it. A run that is all north to south leaves the
+        // sides of it empty, which is what happens on a form.
         const float Inset = 6f, Legend = 7f;
-        var roomW = ContentW - Inset * 2;
-        var roomH = maxHeight - Legend - Inset;
-        var scale = Math.Min(roomW / Math.Max(world.Width, 1f), roomH / Math.Max(world.Height, 1f));
-
-        var drawW = Math.Max(world.Width * scale, 30f);
-        var drawH = Math.Max(world.Height * scale, 26f);
-        var boxW = Math.Min(ContentW, drawW + Inset * 2);
-        var boxH = drawH + Legend + Inset;
-        var left = Margin + (ContentW - boxW) / 2;
+        const float boxW = ContentW;
+        const float left = Margin;
+        var drawW = boxW - Inset * 2;
+        var drawH = boxH - Legend - Inset;
+        var scale = Math.Min(drawW / Math.Max(world.Width, 1f), drawH / Math.Max(world.Height, 1f));
 
         return new Piece {
             Height = boxH,
