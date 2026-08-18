@@ -781,10 +781,16 @@ public partial class MainForm : Form {
         var progressRow = new Panel { Dock = DockStyle.Top, Height = 22, Padding = new Padding(0, 6, 0, 0), Visible = false };
         _progressRow = progressRow;
         _progressText.Dock = DockStyle.Right;
-        _progressText.Width = 130;
+        // Wide enough for the longest thing it says, which is not the figure but the
+        // run out to the trailer written after it. At 130 the line read "99.3 / 1033
+        // km  ·  10 %" and the "(+12.2 to the load)" fell off the end of the window,
+        // so the one delivery where the split matters was the one that hid it.
+        _progressText.Width = 300;
         _progressText.TextAlign = ContentAlignment.MiddleRight;
         _progressText.ForeColor = Muted;
         _progressText.Font = new Font("Segoe UI", 8.5F);
+        // And if it ever still does not fit, it says so rather than going quiet.
+        _progressText.AutoEllipsis = true;
 
         _progressTrack.Dock = DockStyle.Fill;
         _progressTrack.Height = 8;
