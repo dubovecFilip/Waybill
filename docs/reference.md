@@ -106,22 +106,28 @@ each thing happened.
 | `rest` | Game minutes slept | |
 | `save_loaded` | Game minutes rewound | |
 | `trailer_coupled` | | |
+| `cargo_loaded` | | |
 
-`trailer_coupled` is the moment the load was hitched up, which is not the moment
-the job began. A World of Trucks contract spawns its trailer when the offer is
-accepted and starts counting kilometres from wherever the driver was standing, so
-the job's own starting position can be another city. This is the one instant that
-is the pickup whatever kind of job it is.
+`trailer_coupled` and `cargo_loaded` are the two halves of the load being on, and
+which of them comes last depends on the kind of job:
 
-Two things read it. It is where the map anchors a city, and it is where a drawn
-route begins: the map and the exported sheet show the load's journey, so the run
-out to the trailer is not part of the line. Those kilometres are still in the
-delivery's distance, since the game counts them, so a drawn route can cover less
-ground than the figure beside it.
+| Job | Coupled | Loaded | The load is on when |
+|---|---|---|---|
+| Quick job | at the start | at the start | the job starts |
+| Contract, the trailer waiting at the depot | when you hitch up | at the start | you hitch up |
+| Your own trailer | before you set off | at the dock | it is loaded |
 
-A job that was already coupled when tracking began, which is how a quick job
-starts, records nothing here; its route is left whole and its leading teleport is
-dealt with when the line is drawn.
+Only transitions are recorded, so whichever was already true when the job began
+writes nothing. **The later of whatever was recorded is when the load was on**,
+which covers all three without asking what kind of job it was, and a job that
+recorded neither was loaded and hitched from the start.
+
+Two things read that moment. It is where the map anchors a city, and it is where a
+drawn route begins: the map and the exported sheet show the load's journey, so
+getting to the trailer and driving to the dock are not part of the line. Those
+kilometres are still in the delivery's distance, since the game counts them, so a
+drawn route can cover less ground than the figure beside it. See below for how
+they are counted separately.
 
 The offence is stored under the SDK's own name: `Crash`, `Speeding`,
 `Speeding_camera`, `Red_signal`, `Wrong_way`, `No_lights`, `Avoid_sleeping`,
@@ -136,8 +142,8 @@ Tables `freeroam` and `freeroam_points`. A stretch driven with nothing on the
 hook: between jobs, out to a trailer, or simply going somewhere.
 
 The rule is what is on the hook, not whether a job exists. A load is being pulled
-from the moment the trailer is coupled until the delivery ends; everything else
-is freeroam, including your own trailer with nothing in it.
+from the moment it is both hitched and loaded until the delivery ends; everything
+else is freeroam, including your own trailer with nothing in it.
 
 These are drawn on the map as a quieter line and are never clickable, because
 there is nothing behind them to open. They carry no verdict and no flags: there is
@@ -152,7 +158,8 @@ rather than one road drawn between them that was never taken.
 ## Distance, in two parts
 
 `actual_distance_km` is everything the odometer counted for the job.
-`distance_to_load_km` is the part of it driven before the trailer was hitched.
+`distance_to_load_km` is the part of it driven before the load was on, whether
+that was getting to the trailer or driving your own to the dock.
 
 They are kept apart because the game plans its route from the load, not from the
 driver. On a World of Trucks contract the odometer starts where the offer was

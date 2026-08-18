@@ -827,17 +827,26 @@ public class DeliveryStore : IDisposable {
             }
             if (ends.Count == 0) return result;
 
-            // When the load was hitched up, for the jobs that recorded it.
-            var coupled = new Dictionary<long, long>();
+            // When the load was actually on, for the jobs that recorded it.
+            //
+            // Two things have to be true and which of them comes last depends on the
+            // job. Pulling your own trailer you are hitched up long before the dock,
+            // so the coupling says nothing and the loading is the moment; on a
+            // contract the trailer waits already loaded and the coupling is the whole
+            // of it; on a quick job the truck is set down at the depot with both
+            // already true, so neither is recorded and the fallback below applies.
+            // Taking the later of whichever were recorded covers all three without
+            // asking what kind of job it was.
+            var loaded = new Dictionary<long, long>();
             using (var cmd = _conn.CreateCommand()) {
                 cmd.CommandText = """
-                    SELECT e.delivery_id, MIN(e.at_ms) FROM events e JOIN deliveries d ON d.id = e.delivery_id
-                    WHERE d.game = $game AND e.event_type = 'trailer_coupled'
+                    SELECT e.delivery_id, MAX(e.at_ms) FROM events e JOIN deliveries d ON d.id = e.delivery_id
+                    WHERE d.game = $game AND e.event_type IN ('trailer_coupled', 'cargo_loaded')
                     GROUP BY e.delivery_id;
                     """;
                 cmd.Parameters.AddWithValue("$game", game);
                 using var r = cmd.ExecuteReader();
-                while (r.Read()) coupled[r.GetInt64(0)] = r.GetInt64(1);
+                while (r.Read()) loaded[r.GetInt64(0)] = r.GetInt64(1);
             }
 
             using (var cmd = _conn.CreateCommand()) {
@@ -890,7 +899,7 @@ public class DeliveryStore : IDisposable {
             // where a delivery began. A job that recorded no coupling is left whole;
             // its leading teleport is dealt with when the line is drawn.
             foreach (var (id, points) in result.Routes) {
-                if (!coupled.TryGetValue(id, out var at)) continue;
+                if (!loaded.TryGetValue(id, out var at)) continue;
                 var from = points.FindIndex(p => p.AtMs >= at);
                 if (from > 0) points.RemoveRange(0, from);
             }
@@ -909,7 +918,7 @@ public class DeliveryStore : IDisposable {
             foreach (var (id, points) in result.Routes) {
                 if (points.Count < 3 || !ends.TryGetValue(id, out var e)) continue;
 
-                if (coupled.ContainsKey(id)) Saw(e.From, points[0]);
+                if (loaded.ContainsKey(id)) Saw(e.From, points[0]);
                 else if (Jumped(points[0], points[1])) Saw(e.From, points[1]);
 
                 if (e.Delivered) Saw(e.To, points[^1]);

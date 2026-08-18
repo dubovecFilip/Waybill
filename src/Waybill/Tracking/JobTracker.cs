@@ -159,6 +159,9 @@ public class JobState {
     /// <summary>Whether the load has been hitched up yet. Only the first coupling of
     /// a job is worth marking; dropping and re-hitching later is the same load.</summary>
     public bool TrailerCoupled;
+    /// <summary>Whether the cargo is on the trailer yet. Separate from the coupling
+    /// because which of the two comes last depends on the kind of job.</summary>
+    public bool CargoOn;
     /// <summary>The part of <see cref="DistanceKm"/> driven before the load was on.
     ///
     /// A World of Trucks contract starts the odometer where the offer was accepted,
@@ -311,7 +314,7 @@ public class JobTracker {
                 var sameTruck = snap.Truck.Make == _current.TruckMake && snap.Truck.Model == _current.TruckModel;
                 if (sameTruck && bridgeKm > 0 && bridgeKm < _config.MaxResumeBridgeKm) {
                     _current.DistanceKm += bridgeKm;
-                    if (!_current.TrailerCoupled) _current.DistanceToLoadKm += bridgeKm;
+                    if (!_current.TrailerCoupled || !_current.CargoOn) _current.DistanceToLoadKm += bridgeKm;
                     _current.Anomalies.Add(new Anomaly { AtMs = nowMs, Code = "resume_gap", Delta = bridgeKm });
                 }
                 _current.LastOdometerKm = snap.Truck.OdometerKm;
@@ -641,6 +644,7 @@ public class JobTracker {
             // the truck is placed at the depot with the load on. There was no
             // coupling to mark, and a later re-hitch is not one either.
             TrailerCoupled = snap.Trailer.Attached,
+            CargoOn = snap.Job?.CargoLoaded ?? false,
         };
         _current.TripPoints.Add(new TripPoint { AtMs = nowMs, X = snap.PosX, Y = snap.PosY, Z = snap.PosZ, SpeedKmh = snap.Truck.SpeedKmh });
     }
@@ -661,6 +665,17 @@ public class JobTracker {
         if (snap.Trailer.Attached && !prev.Trailer.Attached && !j.TrailerCoupled) {
             j.TrailerCoupled = true;
             j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "trailer_coupled" });
+        }
+
+        // And the moment the cargo went on, which is a different moment. Pulling your
+        // own trailer you are hitched up long before the dock, so the coupling says
+        // nothing about when the consignment started moving; on a contract the
+        // trailer is waiting already loaded and the coupling is the whole of it.
+        // Recording both lets the later of the two stand for the load being on,
+        // whichever kind of job it was.
+        if ((snap.Job?.CargoLoaded ?? false) && !j.CargoOn) {
+            j.CargoOn = true;
+            j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "cargo_loaded" });
         }
 
         // Same instant as the previous snapshot, kept only because it carries an
@@ -698,7 +713,7 @@ public class JobTracker {
             j.SimSpeedDistanceKm = Math.Max(0, j.SimSpeedDistanceKm - rewindKm);
             // Only while still empty: a reload after the hitch winds back loaded
             // kilometres, which were never in this figure to begin with.
-            if (!j.TrailerCoupled) j.DistanceToLoadKm = Math.Max(0, j.DistanceToLoadKm - rewindKm);
+            if (!j.TrailerCoupled || !j.CargoOn) j.DistanceToLoadKm = Math.Max(0, j.DistanceToLoadKm - rewindKm);
             j.DrivingGameMinutes = Math.Max(0, j.DrivingGameMinutes - rewindMin);
 
             // The save gives the fuel back along with the distance. Leaving it spent
@@ -817,7 +832,7 @@ public class JobTracker {
             // moving. Counted in both, because it is real driving, but kept apart so
             // progress can be measured against the plan, which describes only the
             // loaded leg.
-            if (!j.TrailerCoupled) j.DistanceToLoadKm += odoDelta;
+            if (!j.TrailerCoupled || !j.CargoOn) j.DistanceToLoadKm += odoDelta;
         }
 
         // Kept current on every tick so a resume can measure against it (see the
