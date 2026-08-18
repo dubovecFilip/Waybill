@@ -140,6 +140,12 @@ tracker's log stays on *Current job* where it belongs.
 
 ![The page the window opens on](assets/overview.png)
 
+The miniature is the drive so far and nothing else: the hollow ring is where the
+load went on, the line is coloured by speed like every other route here, and the
+filled marker is where the truck is now. The bar underneath counts the loaded leg
+against the game's own planned distance, with the run out to the trailer in its
+own quieter shade at the head of it and named beside the figure.
+
 *Deliveries* is the history. Every row carries its verdict as a dot in the
 gutter on the left, and an oversize load carries hazard stripes beside it;
 hovering the gutter says both in words. Clicking a column heading sorts by it,
@@ -154,9 +160,13 @@ There is no filter by verdict: it is a dot on every row already, and on a
 history where almost everything is accepted, asking for "only the accepted ones"
 is asking for the list you are looking at.
 
-*Current job* is the same drive in the tracker's own terms: the route, the cargo, how far
-along the drive is, and a log of what has happened, each entry with its figure,
-so a fine reads `Fine: 700 $ (crash)` rather than just `Fined`.
+*Current job* is the same drive in the tracker's own terms: the route, the cargo,
+how far along the drive is, and a log of what has happened, each entry with its
+figure, so a fine reads `Fine: 700 $ (crash)` rather than just `Fined`. The log is
+the tracker narrating itself, which is what you want when the question is whether
+it is seeing the game at all, and is exactly what the overview leaves out.
+
+![The tracker's own view of the same drive](assets/current-job.png)
 
 Double clicking a delivery, or pressing Enter on it, opens its own card. It starts
 with why it got the verdict it did, then every figure the tracker kept.
