@@ -29,6 +29,11 @@ Column `validation_status`. One per delivery, derived from the flags.
 | `rejected` | At least one flag that is direct evidence the driving did not happen |
 | `imported` | Came from a TrucksBook export, so there is no telemetry to check |
 
+The list shows it as a coloured dot in the gutter rather than as a column of
+words: green accepted, amber review, red rejected, blue imported. Four values
+that are read at a glance do not need the width of a column, and hovering the
+gutter names the one it is showing along with whatever was found.
+
 ## Driving style
 
 Column `driving_style`. Derived from how the delivery was actually driven, never
@@ -237,8 +242,10 @@ reports on the job itself.
 It changes nothing about the verdict, the distance or the pay. It is shown because
 it changes what the drive was: an escorted convoy at half the usual speed is not
 the same delivery as the same route with a curtainsider. The interface marks it
-with hazard stripes, on the card and in the list, and the exported sheet carries a
-band across its head.
+with hazard stripes: down the card, down the row's gutter beside the verdict dot,
+and as a band across the head of the exported sheet. The list can be narrowed to
+one kind or the other, since an oversize haul is worth comparing against another
+oversize haul rather than against a curtainsider.
 
 ## Job market
 

@@ -127,10 +127,19 @@ live in `%LOCALAPPDATA%\Waybill\`, independent of where the exe sits.
 Start order does not matter, the app connects to the game as soon as it finds it.
 Jobs are detected and saved without any input.
 
-Four pages down the left. *Deliveries* is the history, with search, a filter and
-the verdict on each drive. Clicking a column heading sorts by it, and the order
-chosen is kept: opening a delivery and coming back leaves the list the way it was
-left rather than back on date order.
+Four pages down the left. *Deliveries* is the history. Every row carries its
+verdict as a dot in the gutter on the left, and an oversize load carries hazard
+stripes beside it; hovering the gutter says both in words. Clicking a column
+heading sorts by it, and the order chosen is kept: opening a delivery and coming
+back leaves the list the way it was left rather than back on date order.
+
+Above the list, a search box and two switches. Each switch has a middle position
+meaning both, one end for **ETS2** and the other for **ATS**, and one end for an
+ordinary load and the other for an oversize one. They are the two questions a
+history is actually read with, and each is one click away from either answer.
+There is no filter by verdict: it is a dot on every row already, and on a
+history where almost everything is accepted, asking for "only the accepted ones"
+is asking for the list you are looking at.
 
 *Current job* is what the engine sees right now: the route, the cargo, how far
 along the drive is, and a log of what has happened, each entry with its figure,
@@ -157,10 +166,9 @@ together underneath it.
 
 ## What the window says without words
 
-A good deal of it is drawn rather than written. The dot beside a delivery is its
-verdict, the colour of a route is speed, stripes down the side of a card mean an
-oversize load, and each thing that happened on a drive gets a sign of its own on
-the timeline: a burst for an impact, a dial for a speeding fine, a note for any
+A good deal of it is drawn rather than written. The dot in a row's gutter is its
+verdict, the colour of a route is speed, hazard stripes mean an oversize load,
+and each thing that happened on a drive gets a sign of its own on the timeline: a burst for an impact, a dial for a speeding fine, a note for any
 other one, a drop, a moon, a hull, a barrier, two chevrons back for a save
 loaded.
 
