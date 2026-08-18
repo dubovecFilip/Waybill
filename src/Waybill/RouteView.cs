@@ -31,6 +31,11 @@ public class RouteView : Control {
     /// <summary>Slow to fast. Eight steps rather than a continuous gradient so the
     /// line can be drawn as a handful of polylines instead of a thousand separate
     /// segments, which is the difference between one millisecond and thirty.</summary>
+    /// <summary>Readable from outside so the legend can show the same eight
+    /// colours the route is drawn with rather than a copy that will one day be
+    /// wrong.</summary>
+    public static IReadOnlyList<Color> SpeedRamp => Ramp;
+
     private static readonly Color[] Ramp = {
         Color.FromArgb( 74,  84,  99),
         Color.FromArgb( 68, 104, 124),

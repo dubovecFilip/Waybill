@@ -339,6 +339,7 @@ public class MainForm : Form {
         menu.Items.Add(BuildPlayMenu());
         menu.Items.Add(BuildDataMenu());
         menu.Items.Add(BuildSettingsMenu());
+        menu.Items.Add(BuildHelpMenu());
         StyleMenuItems(menu.Items);
         return menu;
     }
@@ -382,6 +383,15 @@ public class MainForm : Form {
         data.DropDownItems.Add(OpenFolderItem(Strings.T("menu.folder.backups"), Path.Combine(DeliveryStore.DefaultDir(), "backups")));
         data.DropDownItems.Add(OpenFolderItem(Strings.T("menu.folder.sessions"), Path.Combine(DeliveryStore.DefaultDir(), "sessions")));
         return data;
+    }
+
+    /// <summary>Where the window explains itself. One item for now, but the menu
+    /// is the place a reader looks first, and a legend buried in a settings dialog
+    /// is a legend nobody finds.</summary>
+    private ToolStripMenuItem BuildHelpMenu() {
+        var help = new ToolStripMenuItem(Strings.T("menu.help"));
+        help.DropDownItems.Add(MenuAction(Strings.T("menu.legend"), ShowLegend));
+        return help;
     }
 
     /// <summary>Preferences about how the same data is presented, so they belong
@@ -1899,6 +1909,153 @@ public class MainForm : Form {
 
     private static Image? _eyeOpen, _eyeShut;
 
+    /// <summary>
+    /// What every mark in the window means, in one place.
+    ///
+    /// Almost nothing here is text on the screen: the timeline marks, the hazard
+    /// stripes, the colour of a route and the two shades in the progress bar all say
+    /// something, and none of them says it in words. A drawing that has to be
+    /// guessed at is a drawing that failed, so this is where the guessing stops.
+    ///
+    /// The samples are drawn by the same code the window itself uses. A legend that
+    /// keeps its own copy of the artwork is a legend that will one day be wrong.
+    /// </summary>
+    private void ShowLegend() {
+        using var window = new Form {
+            Text = Strings.T("legend.title"),
+            StartPosition = FormStartPosition.CenterParent,
+            Size = new Size(560, 720),
+            MinimumSize = new Size(420, 400),
+            BackColor = Canvas, ForeColor = Ink, KeyPreview = true,
+            Icon = Icon, ShowInTaskbar = false,
+            MinimizeBox = false, MaximizeBox = false,
+        };
+        window.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) window.Close(); };
+        window.Load += (_, _) => UseDarkTitleBar(window);
+
+        var page = new Panel { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(20, 8, 20, 20), BackColor = Canvas };
+        var rows = new List<Control>();
+
+        void Heading(string text) => rows.Add(new Label {
+            Dock = DockStyle.Top, Height = 34, Text = text, BackColor = Canvas,
+            ForeColor = Ink, Font = new Font("Segoe UI", 10.5F, FontStyle.Bold),
+            Padding = new Padding(0, 10, 0, 0),
+        });
+
+        void Note(string text) => rows.Add(new Label {
+            Dock = DockStyle.Top, Height = 34, Text = text, BackColor = Canvas,
+            ForeColor = Muted, Font = new Font("Segoe UI", 8.5F),
+            Padding = new Padding(0, 0, 0, 6),
+        });
+
+        // One entry: a drawn sample on the left, what it means beside it.
+        void Entry(Action<Graphics, Rectangle> paint, string what, string why) {
+            // Tall enough for a description that runs to two lines, since one that
+            // gets its second line clipped is worse than no description.
+            var row = new Panel { Dock = DockStyle.Top, Height = 42, BackColor = Canvas };
+            var swatch = new Panel { Dock = DockStyle.Left, Width = 46, BackColor = Canvas };
+            swatch.Paint += (_, e) => paint(e.Graphics, new Rectangle(0, 0, swatch.Width, swatch.Height));
+            row.Controls.Add(new Label {
+                Dock = DockStyle.Fill, Text = why, ForeColor = Muted,
+                TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true,
+                Font = new Font("Segoe UI", 8.5F),
+            });
+            row.Controls.Add(new Label {
+                Dock = DockStyle.Left, Width = 148, Text = what, ForeColor = Ink,
+                TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 9F),
+            });
+            row.Controls.Add(swatch);
+            rows.Add(row);
+        }
+
+        void Mark(string type, string detail, string what, string why) =>
+            Entry((g, r) => {
+                if (EventIcon(type, detail) is { } image) {
+                    g.DrawImageUnscaled(image, (r.Width - image.Width) / 2, (r.Height - image.Height) / 2);
+                }
+            }, what, why);
+
+        Heading(Strings.T("legend.verdicts"));
+        Note(Strings.T("legend.verdictsNote"));
+        Entry((g, r) => Dot(g, r, Color.FromArgb(96, 176, 128)), Strings.T("value.accepted"), Strings.T("legend.accepted"));
+        Entry((g, r) => Dot(g, r, Color.FromArgb(226, 168, 74)), Strings.T("value.review"), Strings.T("legend.review"));
+        Entry((g, r) => Dot(g, r, Color.FromArgb(226, 116, 104)), Strings.T("value.rejected"), Strings.T("legend.rejected"));
+
+        Heading(Strings.T("legend.marks"));
+        Mark("collision", "", Strings.T("event.collision"), Strings.T("legend.collision"));
+        Mark("fine", Strings.T("value.Speeding"), Strings.T("event.fine") + " · " + Strings.T("value.Speeding"), Strings.T("legend.speeding"));
+        Mark("fine", "", Strings.T("event.fine"), Strings.T("legend.fine"));
+        Mark("refuel", "", Strings.T("event.refuel"), Strings.T("legend.refuel"));
+        Mark("rest", "", Strings.T("event.rest"), Strings.T("legend.rest"));
+        Mark("ferry", "", Strings.T("event.ferry"), Strings.T("legend.ferry"));
+        Mark("tollgate", "", Strings.T("event.tollgate"), Strings.T("legend.toll"));
+        Mark("save_loaded", "", Strings.T("event.save_loaded"), Strings.T("legend.saveLoaded"));
+
+        Heading(Strings.T("legend.map"));
+        Note(Strings.T("legend.mapNote"));
+        Entry(Ramp, Strings.T("legend.speedRamp"), Strings.T("legend.speedRampWhy"));
+        Entry((g, r) => {
+            using var pen = new Pen(Color.FromArgb(150, 150, 160, 175), 2f) { DashStyle = DashStyle.Dash };
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.DrawLine(pen, 10, r.Height / 2, 36, r.Height / 2);
+        }, Strings.T("legend.break"), Strings.T("legend.breakWhy"));
+        Entry((g, r) => {
+            using var pen = new Pen(Color.FromArgb(165, 128, 146, 166), 1.4f);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.DrawLine(pen, 10, r.Height / 2, 36, r.Height / 2);
+        }, Strings.T("legend.offJob"), Strings.T("legend.offJobWhy"));
+        Entry((g, r) => {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using var ring = new Pen(Ink, 2f);
+            using var back = new SolidBrush(Canvas);
+            g.FillEllipse(back, 9, r.Height / 2 - 5, 10, 10);
+            g.DrawEllipse(ring, 9, r.Height / 2 - 5, 10, 10);
+            using var solid = new SolidBrush(Accent);
+            g.FillEllipse(solid, 27, r.Height / 2 - 5, 11, 11);
+        }, Strings.T("legend.ends"), Strings.T("legend.endsWhy"));
+        Entry((g, r) => {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using var dot = new SolidBrush(Color.FromArgb(190, 150, 160, 175));
+            g.FillEllipse(dot, 21, r.Height / 2 - 3, 6, 6);
+        }, Strings.T("legend.city"), Strings.T("legend.cityWhy"));
+        Entry((g, r) => {
+            if (Eye(true) is { } open) g.DrawImageUnscaled(open, 6, (r.Height - open.Height) / 2);
+            if (Eye(false) is { } shut) g.DrawImageUnscaled(shut, 26, (r.Height - shut.Height) / 2);
+        }, Strings.T("legend.layers"), Strings.T("legend.layersWhy"));
+
+        Heading(Strings.T("legend.elsewhere"));
+        Entry((g, r) => HazardStripes(g, new RectangleF(16, 4, 14, r.Height - 8), 210),
+            Strings.T("detail.special"), Strings.T("legend.specialWhy"));
+        Entry((g, r) => {
+            using var lead = new SolidBrush(Muted);
+            using var done = new SolidBrush(Accent);
+            g.FillRectangle(lead, 8, r.Height / 2 - 4, 9, 8);
+            g.FillRectangle(done, 17, r.Height / 2 - 4, 21, 8);
+        }, Strings.T("legend.progress"), Strings.T("legend.progressWhy"));
+
+        // Docked children stack in reverse of adding, so the list goes in backwards.
+        for (var i = rows.Count - 1; i >= 0; i--) page.Controls.Add(rows[i]);
+        window.Controls.Add(page);
+        window.Shown += (_, _) => UseDarkScrollbars(page);
+        window.ShowDialog(this);
+    }
+
+    private static void Dot(Graphics g, Rectangle r, Color colour) {
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        using var brush = new SolidBrush(colour);
+        g.FillEllipse(brush, 17, r.Height / 2 - 5, 10, 10);
+    }
+
+    /// <summary>The speed ramp as a strip, drawn from the same eight colours the map
+    /// draws a route with.</summary>
+    private static void Ramp(Graphics g, Rectangle r) {
+        var colours = RouteView.SpeedRamp;
+        var w = 30f / colours.Count;
+        for (var i = 0; i < colours.Count; i++) {
+            using var brush = new SolidBrush(colours[i]);
+            g.FillRectangle(brush, 8 + i * w, r.Height / 2 - 3, w + 0.6f, 6);
+        }
+    }
     private static readonly Dictionary<string, Image> EventIcons = new();
 
     /// <summary>How large an icon is drawn before it is shrunk to size. Drawn
