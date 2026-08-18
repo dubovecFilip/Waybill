@@ -1973,12 +1973,18 @@ public class MainForm : Form {
                     }
                     break;
                 case "rest":
-                    // A crescent: a disc with a second one taken out of it, which is
-                    // a moon rather than the letter C an arc was coming out as.
-                    using (var moon = new GraphicsPath { FillMode = FillMode.Alternate }) {
-                        moon.AddEllipse(10, 10, 60, 60);
-                        moon.AddEllipse(30, 2, 60, 60);
-                        g.FillPath(fill, moon);
+                    // A crescent, cut rather than overlapped. Two ellipses in one path
+                    // do not subtract: the alternate fill leaves the part of the
+                    // second one that falls outside the first, which is why the moon
+                    // came out as a blob with a bite and a spur. A region takes one
+                    // away from the other properly.
+                    using (var disc = new GraphicsPath())
+                    using (var bite = new GraphicsPath()) {
+                        disc.AddEllipse(11, 11, 58, 58);
+                        bite.AddEllipse(27, 3, 56, 56);
+                        using var crescent = new Region(disc);
+                        crescent.Exclude(bite);
+                        g.FillRegion(fill, crescent);
                     }
                     break;
                 case "ferry":
@@ -2009,11 +2015,20 @@ public class MainForm : Form {
                     }
                     break;
                 case "save_loaded":
-                    // Round to somewhere already passed.
-                    g.DrawArc(pen, 16, 16, 48, 48, 35, 285);
+                    // Back round to somewhere already passed. The head is placed on
+                    // the arc and turned to its tangent rather than dropped at a
+                    // guessed corner, which is why it used to float beside the curve
+                    // instead of finishing it.
+                    const float Ring = 25f, Opens = 55f, Sweeps = 265f;
+                    g.DrawArc(pen, 40 - Ring, 40 - Ring, Ring * 2, Ring * 2, Opens, Sweeps);
+                    var tip = Opens * Math.PI / 180;
+                    var state2 = g.Save();
+                    g.TranslateTransform(40 + Ring * (float)Math.Cos(tip), 40 + Ring * (float)Math.Sin(tip));
+                    g.RotateTransform(Opens - 90);
                     g.FillPolygon(fill, new[] {
-                        new PointF(10, 24), new PointF(38, 14), new PointF(26, 42),
+                        new PointF(-13, -3), new PointF(13, -3), new PointF(0, 19),
                     });
+                    g.Restore(state2);
                     break;
                 case "cargo_loaded":
                 case "trailer_coupled":
