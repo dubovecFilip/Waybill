@@ -367,6 +367,11 @@ rather than only tested.
 - Which market a job came from, and whether the trailer was the driver's own
 - Driving between jobs kept as well, counted apart from the deliveries and drawn
   in a quieter line, so the map fills in without the totals being flattered
+- An overview the window opens on, which is the only page that answers what is
+  going on rather than a question the reader has to arrive with
+- A delivery's route drawn the way it was driven rather than all at once, which
+  is route replay from Phase 3 in the only form the data supports: from above,
+  along the line, at the pace the drive actually went
 - A legend, because most of what the window says it says by drawing: the verdict
   dots, the signs on the timeline, the colour of a route, the stripes on an
   oversize load. None of that was in the plan, and all of it needed explaining
@@ -380,8 +385,10 @@ period comparisons are not.
 
 **Phase 3, mostly.** The map is drawn: a delivery's own route with its events
 marked on it, and a page showing every drive of one game at once, where clicking a
-route opens it. Route replay along the line is not built, and neither is the
-elevation profile, though altitude has been recorded all along.
+route opens it. Replay is there in the form the data supports, which is the line
+drawing itself from the pickup to the drop at the pace the drive went; replay from
+inside the cab is not, and neither is the elevation profile, though altitude has
+been recorded all along.
 
 The map turned out to need a decision this document did not anticipate. The game's
 world is not a scaled country: measured over nineteen deliveries some pairs of

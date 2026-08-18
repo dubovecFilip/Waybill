@@ -69,6 +69,7 @@ Every state, flag and anomaly is listed with its meaning in
 
 ## Features
 
+* Opens on an overview: the drive in progress, the last few deliveries, settings
 * Detects the start and the end of a job with no manual input
 * Measures distance, fuel, speed, damage, fines, tolls and ferries
 * Records an event timeline, so the exact moment of a fine or a collision is kept
@@ -76,6 +77,7 @@ Every state, flag and anomaly is listed with its meaning in
 * Says which market a job came from, and whether the trailer was your own
 * Explains every verdict in words rather than leaving a label on the row
 * Draws where each delivery went, with every fine and collision marked on it
+* Draws it the way it was driven, so the order things happened in is visible
 * Marks each thing that happened with a sign of its own, and explains every sign
 * Names a trailer for what it is instead of for the file it came out of
 * Marks an oversize load as one, on its card and in the list
@@ -127,7 +129,12 @@ live in `%LOCALAPPDATA%\Waybill\`, independent of where the exe sits.
 Start order does not matter, the app connects to the game as soon as it finds it.
 Jobs are detected and saved without any input.
 
-Four pages down the left. *Deliveries* is the history. Every row carries its
+Five pages down the left. *Overview* is where the window opens, and it is the
+only page that answers "what is going on" rather than a question you have to
+already have. It holds the drive in progress with its route drawn beside it as
+it goes, the last five deliveries, and the three settings worth reaching for.
+Nothing on it is new: everything has a page of its own, one click away, and the
+tracker's log stays on *Current job* where it belongs. *Deliveries* is the history. Every row carries its
 verdict as a dot in the gutter on the left, and an oversize load carries hazard
 stripes beside it; hovering the gutter says both in words. Clicking a column
 heading sorts by it, and the order chosen is kept: opening a delivery and coming
@@ -141,7 +148,7 @@ There is no filter by verdict: it is a dot on every row already, and on a
 history where almost everything is accepted, asking for "only the accepted ones"
 is asking for the list you are looking at.
 
-*Current job* is what the engine sees right now: the route, the cargo, how far
+*Current job* is the same drive in the tracker's own terms: the route, the cargo, how far
 along the drive is, and a log of what has happened, each entry with its figure,
 so a fine reads `Fine: 700 $ (crash)` rather than just `Fined`.
 
@@ -238,6 +245,21 @@ turned off, since they are what makes the rest readable.
 
 The same map, smaller, sits in the panel a delivery's card slides out, where a
 third button opens it full screen.
+
+### A route draws itself
+
+Opening the panel draws the line from the pickup to the drop rather than showing
+it finished, and the play button does it again. It is time being replayed rather
+than distance: the points are a second of driving apart, so the line runs on an
+open road and dawdles through a city, exactly as the drive did. Pins arrive as
+the line reaches them, and a marker rides the head of it until it gets to the
+far end.
+
+That is worth more than it sounds. A finished line says where the drive went and
+nothing about the order it happened in, and the same picture with a collision
+near the end reads quite differently from one with a collision on the way out.
+Touching the map at all ends the replay and shows the whole route, because a
+drawing still being drawn is in the way the moment you want to look at it.
 
 ### There is no real map underneath, on purpose
 

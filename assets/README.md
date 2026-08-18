@@ -26,9 +26,14 @@ moving one around the README does not leave the name lying.
 They are captured from a real database rather than staged, which is why the
 figures in them are ordinary rather than tidy.
 
-There is no shot of the *Current job* page. It only has anything to show while a
-delivery is actually running, and one taken with the game closed says nothing but
-"waiting for the game", so it is better left out than faked.
+There is no shot of the *Current job* page, and none of *Overview* either. Both
+only have anything to show while a delivery is actually running, and one taken
+with the game closed says nothing but "waiting for the game" across the part that
+matters, so they are better left out than faked.
+
+There is none of the route drawing itself. It is two and a half seconds of
+movement, and a still frame of it is a picture of half a route, which looks like
+a bug rather than like a feature.
 
 There is none of the map at full screen either. It fills whatever monitor it is
 opened on, so the shot would be the size of that monitor rather than the size
