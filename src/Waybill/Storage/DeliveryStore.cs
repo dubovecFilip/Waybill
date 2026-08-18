@@ -901,7 +901,14 @@ public class DeliveryStore : IDisposable {
             foreach (var (id, points) in result.Routes) {
                 if (!loaded.TryGetValue(id, out var at)) continue;
                 var from = points.FindIndex(p => p.AtMs >= at);
-                if (from > 0) points.RemoveRange(0, from);
+                if (from <= 0) continue;
+                // Kept rather than thrown away. It is the same kind of driving as any
+                // other stretch with nothing on the hook, and the driver went that
+                // way, so the map has no business pretending otherwise. The point of
+                // the cut is which line the delivery owns, not which roads existed.
+                var head = points.GetRange(0, from + 1);
+                points.RemoveRange(0, from);
+                if (head.Count > 1) result.RunUps.Add(head);
             }
 
             // Where two positions along the route can be trusted to be the city named

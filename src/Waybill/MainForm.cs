@@ -320,7 +320,7 @@ public class MainForm : Form {
 
         var game = _mapGames[_mapGame.SelectedIndex];
         var routes = RoutesFor(game);
-        map.Show(Layers(routes), 0, routes.Cities, null, _store.FreeroamRoutes(game));
+        map.Show(Layers(routes), 0, routes.Cities, null, routes.RunUps.Concat(_store.FreeroamRoutes(game)));
     }
 
     // ---------- menu ----------
@@ -1766,7 +1766,7 @@ public class MainForm : Form {
 
         var map = NewMap(u);
         map.Show(Layers(RoutesFor(d.Game)), d.Id, RoutesFor(d.Game).Cities,
-                 _store.TimelineRows(d.Id), _store.FreeroamRoutes(d.Game));
+                 _store.TimelineRows(d.Id), RoutesFor(d.Game).RunUps.Concat(_store.FreeroamRoutes(d.Game)));
 
         box.Controls.Add(map);
         MapButtons(box, map, () => BigMap(d, u));
@@ -1931,7 +1931,7 @@ public class MainForm : Form {
         // actually have rather than fitting the route to a window that is about to
         // be maximised.
         window.Shown += (_, _) => map.Show(Layers(RoutesFor(d.Game)), d.Id, RoutesFor(d.Game).Cities,
-                                           _store.TimelineRows(d.Id), _store.FreeroamRoutes(d.Game));
+                                           _store.TimelineRows(d.Id), RoutesFor(d.Game).RunUps.Concat(_store.FreeroamRoutes(d.Game)));
         window.Load += (_, _) => UseDarkTitleBar(window);
         window.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) window.Close(); };
         window.ShowDialog(this);

@@ -113,6 +113,12 @@ public class CityAnchor {
 public class GameRoutes {
     public Dictionary<long, List<RoutePoint>> Routes = new();
     public List<CityAnchor> Cities = new();
+    /// <summary>The heads cut off the routes above: the drive out to a trailer, or
+    /// to the dock with your own. Not part of the load's journey, but driven all the
+    /// same, so the map shows them the way it shows any other driving off the job.
+    /// The kilometres stay counted against the delivery, since the game counts them
+    /// there, and are not repeated in the freeroam total.</summary>
+    public List<List<RoutePoint>> RunUps = new();
 }
 
 /// <summary>One route to draw. Carries its delivery so the map can say which one

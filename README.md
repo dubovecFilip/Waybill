@@ -219,9 +219,12 @@ line on it is not kilometres; the odometer answers that.
 It begins where the load went on, not where the job was accepted. On a contract
 that is where you hitched up to a waiting trailer; pulling your own it is the dock,
 since you were coupled long before that; on a quick job the truck is set down at
-the depot already loaded, so it is the start. Whichever it was, the recording
-usually opens with a drive that is getting to work rather than the consignment
-moving, and that stretch is left off.
+the depot already loaded, so it is the start.
+
+Whichever it was, the recording usually opens with a drive that is getting to work
+rather than the consignment moving. That stretch is still drawn, in the same quiet
+style as any other driving off the job, but it belongs to no delivery: it cannot be
+pointed at or opened, and it is not part of the line the delivery owns.
 
 The kilometres are still counted, and now counted separately. A delivery's card
 shows the two legs on their own line, and the progress bar on *Current job* draws

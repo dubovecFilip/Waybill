@@ -123,11 +123,17 @@ which covers all three without asking what kind of job it was, and a job that
 recorded neither was loaded and hitched from the start.
 
 Two things read that moment. It is where the map anchors a city, and it is where a
-drawn route begins: the map and the exported sheet show the load's journey, so
-getting to the trailer and driving to the dock are not part of the line. Those
-kilometres are still in the delivery's distance, since the game counts them, so a
-drawn route can cover less ground than the figure beside it. See below for how
-they are counted separately.
+delivery's own line begins: the map and the exported sheet show the load's journey,
+so getting to the trailer and driving to the dock are not part of it.
+
+The map still draws that stretch, in the quieter style it uses for any other
+driving off the job, because the driver went that way and the roads are real. It
+simply belongs to no delivery, so it cannot be pointed at or opened. The exported
+sheet leaves it off entirely: a waybill is about the consignment.
+
+Those kilometres stay in the delivery's distance, since the game counts them
+there, and are not repeated in the freeroam total. So a delivery's drawn line can
+cover less ground than the figure beside it.
 
 The offence is stored under the SDK's own name: `Crash`, `Speeding`,
 `Speeding_camera`, `Red_signal`, `Wrong_way`, `No_lights`, `Avoid_sleeping`,
