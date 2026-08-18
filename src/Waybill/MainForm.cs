@@ -1165,7 +1165,18 @@ public class MainForm : Form {
         // them into unreadable slivers.
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
         _grid.ScrollBars = ScrollBars.Both;
-        _grid.RowHeadersVisible = false;
+        // A narrow gutter down the left of the list, where an oversize load carries
+        // its markings. The row header is already there and already sits left of the
+        // date, so it needs a width and something to paint rather than a column of
+        // its own squeezed in among the figures.
+        _grid.RowHeadersVisible = true;
+        _grid.RowHeadersWidth = 14;
+        _grid.RowHeadersWidthSizeMode = DataGridViewRowHeadersWidthSizeMode.DisableResizing;
+        _grid.RowHeadersDefaultCellStyle.BackColor = Canvas;
+        _grid.RowHeadersDefaultCellStyle.SelectionBackColor = Canvas;
+        _grid.EnableHeadersVisualStyles = false;
+        _grid.CellPainting -= OnRowMarker;
+        _grid.CellPainting += OnRowMarker;
         _grid.EditMode = DataGridViewEditMode.EditOnEnter;
         StyleGrid(_grid);
 
@@ -1218,6 +1229,26 @@ public class MainForm : Form {
     }
 
     private void OnFilterChanged(object? sender, EventArgs e) => ApplyFilter();
+
+    /// <summary>
+    /// Paints the oversize marker in the row's left gutter.
+    ///
+    /// Taken over from the grid entirely rather than drawn before it: a row header
+    /// paints itself after the row does, so anything put there first was covered up
+    /// by the header's own background a moment later.
+    /// </summary>
+    private void OnRowMarker(object? sender, DataGridViewCellPaintingEventArgs e) {
+        if (e.ColumnIndex != -1 || e.RowIndex < 0 || e.RowIndex >= _grid.Rows.Count) return;
+
+        using (var clear = new SolidBrush(Canvas)) e.Graphics.FillRectangle(clear, e.CellBounds);
+        if (_grid.Rows[e.RowIndex].DataBoundItem is DeliveryRow { Special: true }) {
+            var gutter = new RectangleF(
+                e.CellBounds.Left + 4, e.CellBounds.Top + 2,
+                5, Math.Max(e.CellBounds.Height - 4, 1));
+            HazardStripes(e.Graphics, gutter, 210);
+        }
+        e.Handled = true;
+    }
 
     /// <summary>Hovering the verdict names what was found, so a row saying "review"
     /// does not have to be opened just to learn whether it matters. The full
@@ -1358,7 +1389,8 @@ public class MainForm : Form {
         // Row height carries no information, so dragging it about is only a way to
         // make the list worse by accident.
         g.AllowUserToResizeRows = false;
-        g.RowHeadersVisible = false;
+        // The row header is left alone here: on the history list it is the gutter an
+        // oversize load is marked in, and this runs after that is set up.
     }
 
     private static Button MakeButton(string text, Action onClick) {
@@ -1603,6 +1635,8 @@ public class MainForm : Form {
     private Control DetailHeader(DeliveryDetail d, Units u) {
         var head = new Panel { Dock = DockStyle.Top, Height = 108, BackColor = Surface, Padding = new Padding(24, 16, 24, 12) };
 
+
+
         // Quiet and small. These are ways out of the card, not the point of it, and
         // docking them filled the header's whole height with two slabs.
         Button Action(string text, int width) {
@@ -1669,6 +1703,18 @@ public class MainForm : Form {
         head.Controls.Add(sub);
         head.Controls.Add(route);
         head.Controls.Add(actions);
+
+        // An oversize load says so before anything else does, in the markings it
+        // actually carries rather than in another word among the figures. Added last
+        // so it docks outermost and owns the whole left edge; added earlier it would
+        // have been squeezed inside whatever the rest left over.
+        if (d.SpecialTransport) {
+            var stripe = new Panel { Dock = DockStyle.Left, Width = 10, BackColor = Surface };
+            stripe.Paint += (_, e) => HazardStripes(e.Graphics, new RectangleF(0, 0, stripe.Width, stripe.Height), 210);
+            _tips.SetToolTip(stripe, Strings.T("detail.special"));
+            head.Controls.Add(stripe);
+            head.Padding = new Padding(14, 16, 24, 12);
+        }
         return head;
     }
 
@@ -1848,6 +1894,34 @@ public class MainForm : Form {
     }
 
     private static Image? _eyeOpen, _eyeShut;
+
+    /// <summary>
+    /// The hazard stripes an oversize load carries on its own bumper.
+    ///
+    /// Quiet on purpose: a special transport is a different kind of driving rather
+    /// than a warning, and a row of bright markers down a list would shout about
+    /// every one of them. Drawn at an angle because that is how the real ones go and
+    /// because it reads as a marking rather than as a border.
+    /// </summary>
+    private static void HazardStripes(Graphics g, RectangleF where, int alpha = 150) {
+        var was = g.Clip;
+        g.SetClip(where);
+        using var dark = new SolidBrush(Color.FromArgb(alpha, 26, 28, 32));
+        using var pale = new SolidBrush(Color.FromArgb(alpha, 214, 218, 226));
+        g.FillRectangle(dark, where);
+
+        const float band = 5f;
+        var lean = where.Height;
+        for (var x = where.Left - lean; x < where.Right + band; x += band * 2) {
+            g.FillPolygon(pale, new[] {
+                new PointF(x, where.Bottom),
+                new PointF(x + band, where.Bottom),
+                new PointF(x + band + lean, where.Top),
+                new PointF(x + lean, where.Top),
+            });
+        }
+        g.Clip = was;
+    }
 
     /// <summary>An eye for whether a layer is being drawn: open and looking at you,
     /// or closed. Drawn rather than typed, because the glyphs for this are scattered
@@ -2214,7 +2288,7 @@ public class MainForm : Form {
             nameof(DeliveryRow.Id), nameof(DeliveryRow.DistanceKm), nameof(DeliveryRow.Zarobok),
             nameof(DeliveryRow.Hra), nameof(DeliveryRow.Tahac), nameof(DeliveryRow.Pokuty),
             nameof(DeliveryRow.Kolizie), nameof(DeliveryRow.Styl), nameof(DeliveryRow.Poznamky),
-            nameof(DeliveryRow.Flags),
+            nameof(DeliveryRow.Flags), nameof(DeliveryRow.Special),
         }) {
             if (_grid.Columns[hidden] is { } col) col.Visible = false;
         }

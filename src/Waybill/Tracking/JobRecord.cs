@@ -167,6 +167,10 @@ public class JobRecord {
     /// of Trucks contract (`external_contracts`) is a different thing from a quick
     /// job, and without this the history cannot tell them apart.</summary>
     public string JobType = "";
+    /// <summary>An oversize load: wide, tall or heavy enough that the game gives it
+    /// an escort and its own rules. Worth marking because it is a different kind of
+    /// driving, not a different kind of cargo.</summary>
+    public bool SpecialTransport;
     public string Game = "";
     public string GameVersion = "";
     public long StartedAtMs;

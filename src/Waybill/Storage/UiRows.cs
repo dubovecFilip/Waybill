@@ -31,6 +31,9 @@ public class DeliveryRow {
     /// the state cell, so a row saying "review" can say why without being opened.</summary>
     public string Flags { get; set; } = "";
     public string Poznamky { get; set; } = "";
+    /// <summary>An oversize load. Not a column of its own: it paints the narrow
+    /// marker at the head of the row, left of the date.</summary>
+    public bool Special { get; set; }
 }
 
 /// <summary>Everything about one delivery, for the detail card. All distances,
@@ -44,6 +47,8 @@ public class DeliveryDetail {
     /// <summary>The part of <see cref="DistanceKm"/> driven before the trailer was
     /// hitched, which the plan does not describe. Zero on most jobs.</summary>
     public double DistanceToLoadKm;
+    /// <summary>An oversize load, with the escort and the rules that come with it.</summary>
+    public bool SpecialTransport;
     /// <summary>The second, independent distance measurement. Only shown when the
     /// two disagree, which is the whole reason a delivery gets flagged for it.</summary>
     public double SimSpeedDistanceKm;
