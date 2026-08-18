@@ -80,12 +80,25 @@ public class TrackerConfig {
     public double SaveLoadWindowMs = 10000;
 }
 
-public enum TrackerEventType { JobStarted, JobResumed, JobFinished, Noted }
+public enum TrackerEventType { JobStarted, JobResumed, JobFinished, Noted, FreeroamFinished }
+
+/// <summary>What is being gathered about a stretch driven with nothing on the
+/// hook. Not serialised to disk mid-drive the way a job is: losing a freeroam
+/// stretch to a crash costs a line on a map, while losing a delivery costs work.</summary>
+public class FreeroamState {
+    public string Game = "";
+    public long StartedAtMs;
+    public long LastAtMs;
+    public double LastOdometerKm;
+    public double DistanceKm;
+    public List<TripPoint> Points = new();
+}
 
 public class TrackerEvent {
     public TrackerEventType Type;
     public JobInfo? Job; // JobStarted / JobResumed
     public JobRecord? Record; // JobFinished
+    public FreeroamRecord? Freeroam; // FreeroamFinished
     /// <summary>Something that just happened during the drive: a fine, a collision,
     /// a refuel. The same entry that ends up on the delivery's timeline.</summary>
     public JobEvent? Note; // Noted
@@ -180,6 +193,9 @@ public class JobTracker {
     private readonly TrackerConfig _config;
     private State _state = State.Idle;
     private JobState? _current;
+    /// <summary>Driving with nothing on the hook, gathered the same way a job is.
+    /// Null whenever a load is being pulled.</summary>
+    private FreeroamState? _roam;
     private JobState? _pendingResume;
     private Snapshot? _prev;
     private long? _prevAtMs;
@@ -204,6 +220,11 @@ public class JobTracker {
         if (snap == null || !snap.Connected) {
             _prev = null;
             _prevAtMs = null;
+            // The game went away. Whatever was being roamed ends where it was last
+            // seen rather than joining itself to the next session days later.
+            if (CloseRoam() is { } lost) {
+                outEvents.Add(new TrackerEvent { Type = TrackerEventType.FreeroamFinished, Freeroam = lost });
+            }
             return outEvents;
         }
 
@@ -259,8 +280,12 @@ public class JobTracker {
             return outEvents;
         }
 
-        // New job accepted.
+        // New job accepted. Whatever was being driven up to now was not a delivery,
+        // so it is closed off here rather than being swallowed by the job.
         if (fp != null && fp != _current?.Fingerprint) {
+            if (CloseRoam() is { } roamed) {
+                outEvents.Add(new TrackerEvent { Type = TrackerEventType.FreeroamFinished, Freeroam = roamed });
+            }
             if (_current != null) {
                 // The old job vanished without an event. Close it as unresolved and flag it.
                 var record = Close(prev, LostOutcome(nowMs), null, nowMs);
@@ -321,7 +346,14 @@ public class JobTracker {
             return outEvents;
         }
 
-        if (_current == null) return outEvents;
+        if (_current == null) {
+            Roam(snap, prev, gap, nowMs);
+            foreach (var done in _pendingRoam) {
+                outEvents.Add(new TrackerEvent { Type = TrackerEventType.FreeroamFinished, Freeroam = done });
+            }
+            _pendingRoam.Clear();
+            return outEvents;
+        }
 
         _current.MissingJobSinceMs = null;
 
@@ -339,6 +371,75 @@ public class JobTracker {
         }
 
         return outEvents;
+    }
+
+    /// <summary>
+    /// Gathers a stretch driven with nothing on the hook.
+    ///
+    /// The same odometer the deliveries are measured with, and the same refusals: a
+    /// step too large for driving is a teleport or a different truck's reading and
+    /// is not travel. There is no verdict at the end of this and nothing to cheat,
+    /// so nothing is flagged; a step that cannot be believed is simply not counted.
+    ///
+    /// A hole in the recording ends the stretch and starts another. Driving from a
+    /// garage in one city to a garage in another over two evenings is two lines on
+    /// the map, and joining them would draw a road between them that was never
+    /// taken.
+    /// </summary>
+    private void Roam(Snapshot snap, Snapshot prev, bool gap, long nowMs) {
+        // Nothing to measure against until the world has finished loading.
+        if (snap.Paused || snap.Truck.OdometerKm <= 0 || prev.Truck.OdometerKm <= 0) return;
+
+        if (_roam != null && (gap || _roam.Game != snap.Game)) {
+            var broken = CloseRoam();
+            if (broken != null) _pendingRoam.Add(broken);
+        }
+
+        if (_roam == null) {
+            _roam = new FreeroamState {
+                Game = snap.Game,
+                StartedAtMs = nowMs,
+                LastOdometerKm = snap.Truck.OdometerKm,
+            };
+        }
+
+        var step = snap.Truck.OdometerKm - _roam.LastOdometerKm;
+        if (step > 0 && step <= _config.MaxOdometerJumpKm) _roam.DistanceKm += step;
+        _roam.LastOdometerKm = snap.Truck.OdometerKm;
+        _roam.LastAtMs = nowMs;
+        _roam.Points.Add(new TripPoint { AtMs = nowMs, X = snap.PosX, Y = snap.PosY, Z = snap.PosZ, SpeedKmh = snap.Truck.SpeedKmh });
+    }
+
+    /// <summary>Ends the current stretch, if it went anywhere. Standing in a garage
+    /// for ten minutes is not a journey, and a history full of hundred metre stubs
+    /// would bury the ones worth looking at.</summary>
+    private FreeroamRecord? CloseRoam() {
+        var r = _roam;
+        _roam = null;
+        if (r == null || r.DistanceKm < MinFreeroamKm || r.Points.Count < 3) return null;
+        return new FreeroamRecord {
+            Game = r.Game,
+            StartedAtMs = r.StartedAtMs,
+            EndedAtMs = r.LastAtMs,
+            DistanceKm = Math.Round(r.DistanceKm, 3),
+            TripPoints = r.Points,
+        };
+    }
+
+    /// <summary>Below this a stretch is manoeuvring, not travelling.</summary>
+    public const double MinFreeroamKm = 0.5;
+
+    /// <summary>Stretches finished by a break in the recording, waiting to be handed
+    /// out with the next batch of events.</summary>
+    private readonly List<FreeroamRecord> _pendingRoam = new();
+
+    /// <summary>Ends whatever is still open, for shutdown and for the end of a
+    /// replay. Without it the last stretch of every session is thrown away.</summary>
+    public List<FreeroamRecord> FinishRoaming() {
+        var all = new List<FreeroamRecord>(_pendingRoam);
+        _pendingRoam.Clear();
+        if (CloseRoam() is { } last) all.Add(last);
+        return all;
     }
 
     /// <summary>Distance covered so far, how much of it was driven before the load

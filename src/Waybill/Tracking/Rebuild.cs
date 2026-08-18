@@ -29,6 +29,9 @@ public static class Rebuild {
         public int Kept;
         public int Recordings;
         public int Deliveries;
+        /// <summary>Stretches driven with nothing on the hook, and how far.</summary>
+        public int Freeroam;
+        public double FreeroamKm;
         /// <summary>Recordings that could not be read, with the reason.</summary>
         public List<string> Skipped = new();
     }
@@ -46,11 +49,13 @@ public static class Rebuild {
         // has been through the tracker, so an unreadable one costs its own deliveries
         // and nothing else.
         var records = new List<JobRecord>();
+        var roaming = new List<FreeroamRecord>();
         var spans = new List<(long From, long To)>();
         foreach (var recording in recordings) {
             try {
-                var (found, span) = Replay(recording);
+                var (found, roamed, span) = Replay(recording);
                 records.AddRange(found);
+                roaming.AddRange(roamed);
                 if (span is { } s) spans.Add(s);
             } catch (Exception ex) {
                 result.Skipped.Add($"{Path.GetFileName(recording)}: {ex.Message}");
@@ -62,15 +67,20 @@ public static class Rebuild {
         var before = store.CountTrackedDeliveries();
         result.Removed = store.DeleteTrackedDeliveriesWithin(spans);
         result.Kept = before - result.Removed;
+        store.DeleteFreeroamWithin(spans);
         foreach (var record in records) store.SaveDelivery(record);
+        foreach (var stretch in roaming) store.SaveFreeroam(stretch);
+        result.Freeroam = roaming.Count;
+        result.FreeroamKm = roaming.Sum(r => r.DistanceKm);
         return result;
     }
 
     /// <summary>Replays one recording, returning what finished in it and the stretch
     /// of time it covers.</summary>
-    private static (List<JobRecord> Records, (long From, long To)? Span) Replay(string path) {
+    private static (List<JobRecord> Records, List<FreeroamRecord> Roaming, (long From, long To)? Span) Replay(string path) {
         var tracker = new JobTracker();
         var records = new List<JobRecord>();
+        var roaming = new List<FreeroamRecord>();
         long first = 0, last = 0;
 
         foreach (var raw in SessionFiles.ReadLines(path)) {
@@ -88,10 +98,15 @@ public static class Rebuild {
 
             foreach (var ev in tracker.Update(Adapter.FromRecordedJson(d, kind), ts)) {
                 if (ev.Type == TrackerEventType.JobFinished && ev.Record != null) records.Add(ev.Record);
+                if (ev.Type == TrackerEventType.FreeroamFinished && ev.Freeroam != null) roaming.Add(ev.Freeroam);
             }
         }
 
-        return (records, first > 0 ? (first, last) : null);
+        // The recording simply stops; nothing tells the tracker that the last stretch
+        // has ended, so it is asked for whatever it is still holding.
+        roaming.AddRange(tracker.FinishRoaming());
+
+        return (records, roaming, first > 0 ? (first, last) : null);
     }
 
 }

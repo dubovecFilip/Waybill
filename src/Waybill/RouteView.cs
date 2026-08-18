@@ -52,6 +52,8 @@ public class RouteView : Control {
     }
 
     private List<Drawn> _drawn = new();
+    /// <summary>Stretches belonging to no delivery, already split into runs.</summary>
+    private List<List<RoutePoint>> _secondary = new();
     private Drawn? _focus;
     private List<CityAnchor> _cities = new();
     private List<(TimelineRow Row, RoutePoint At)> _marks = new();
@@ -62,7 +64,7 @@ public class RouteView : Control {
     private bool _fitted;
 
     private Bitmap? _under;
-    private (int W, int H, float Scale, float CX, float CY, long Lit) _underKey;
+    private (int W, int H, float Scale, float CX, float CY, long Lit, bool History, bool Freeroam) _underKey;
 
     private Point _dragFrom;
     private bool _dragging;
@@ -101,6 +103,9 @@ public class RouteView : Control {
     public bool ShowHistory { get; set; } = true;
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool ShowFreeroam { get; set; } = true;
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool ShowMarks { get; set; } = true;
 
     /// <summary>Raised when a route is clicked with none singled out, which is the
@@ -117,10 +122,18 @@ public class RouteView : Control {
 
     /// <summary><paramref name="focus"/> is the delivery to draw in full, or 0 to
     /// draw every route alike. <paramref name="marks"/> only mean anything against
-    /// a focused route, since they are placed by matching their time to it.</summary>
-    public void Show(IEnumerable<RouteLayer> routes, long focus, List<CityAnchor> cities, List<TimelineRow>? marks = null) {
+    /// a focused route, since they are placed by matching their time to it.
+    ///
+    /// <paramref name="secondary"/> is driving that belongs to no delivery:
+    /// between jobs, or out to a trailer. Drawn because those roads are as much a
+    /// part of where this driver has been, and drawn quietly because there is nothing
+    /// behind them to open. They are never hit-tested for the same reason.</summary>
+    public void Show(IEnumerable<RouteLayer> routes, long focus, List<CityAnchor> cities,
+                     List<TimelineRow>? marks = null, IEnumerable<List<RoutePoint>>? secondary = null) {
         _drawn = routes.Select(r => new Drawn { Id = r.Id, All = r.Points, Runs = Split(r.Points) })
                        .Where(d => d.Runs.Count > 0).ToList();
+        _secondary = (secondary ?? Enumerable.Empty<List<RoutePoint>>())
+                     .SelectMany(Split).Where(r => r.Count > 1).ToList();
         _focus = _drawn.FirstOrDefault(d => d.Id == focus);
         _cities = cities;
         _marks = PlaceMarks(marks);
@@ -167,15 +180,18 @@ public class RouteView : Control {
         // The focused route sets the frame when there is one. On the history map
         // there is not, so everything does.
         var scope = _focus is { } f ? new List<Drawn> { f } : _drawn;
-        if (scope.Count == 0) { _fitScale = 1f; _centre = PointF.Empty; return; }
+        // Freeroam counts towards the frame only when nothing is singled out: on the
+        // whole-history map it is part of where this driver has been, while on a
+        // delivery's card it must not pull the view away from the delivery.
+        var alsoSecondary = _focus is null && ShowFreeroam ? _secondary : new List<List<RoutePoint>>();
+        if (scope.Count == 0 && alsoSecondary.Count == 0) { _fitScale = 1f; _centre = PointF.Empty; return; }
 
         float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
-        foreach (var d in scope)
-            foreach (var run in d.Runs)
-                foreach (var p in run) {
-                    minX = Math.Min(minX, p.X); maxX = Math.Max(maxX, p.X);
-                    minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z);
-                }
+        foreach (var run in scope.SelectMany(d => d.Runs).Concat(alsoSecondary))
+            foreach (var p in run) {
+                minX = Math.Min(minX, p.X); maxX = Math.Max(maxX, p.X);
+                minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z);
+            }
         _centre = new PointF((minX + maxX) / 2, (minZ + maxZ) / 2);
 
         var w = Math.Max(maxX - minX, 1f);
@@ -337,7 +353,7 @@ public class RouteView : Control {
         var g = e.Graphics;
         g.Clear(Backdrop);
 
-        if (_drawn.Count == 0) {
+        if (_drawn.Count == 0 && _secondary.Count == 0) {
             if (EmptyText.Length > 0) {
                 using var brush = new SolidBrush(Muted);
                 using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
@@ -379,7 +395,10 @@ public class RouteView : Control {
     /// route repaints constantly.
     /// </summary>
     private void DrawUnderlay(Graphics g) {
-        var key = (Width, Height, PerMetre, _centre.X, _centre.Y, _lit);
+        // The switches belong in the key: turning a layer off changes what the cached
+        // bitmap should hold, and without them the old one was kept and the toggle
+        // did nothing until the view happened to move.
+        var key = (Width, Height, PerMetre, _centre.X, _centre.Y, _lit, ShowHistory, ShowFreeroam);
         if (_under is null || _underKey != key) {
             Discard();
             _underKey = key;
@@ -394,6 +413,16 @@ public class RouteView : Control {
                 ? new Pen(Color.FromArgb(165, 128, 146, 166), 1.4f) { LineJoin = LineJoin.Round }
                 : new Pen(Color.FromArgb(64, 104, 116, 132), 1.1f);
             using var loud = new Pen(Color.FromArgb(235, 232, 168, 74), 2f) { LineJoin = LineJoin.Round };
+
+            // Driving that carried nothing, under everything else and without any
+            // hue of its own: the deliveries are the network, this is wandering.
+            if (ShowFreeroam) {
+                using var spare = new Pen(Color.FromArgb(_focus is null ? 105 : 46, 132, 136, 142), 0.9f);
+                foreach (var run in _secondary) {
+                    var pts = Reduce(Project(run), 0.7f);
+                    if (pts.Length > 1) ug.DrawLines(spare, pts);
+                }
+            }
 
             foreach (var d in _drawn) {
                 if (d == _focus) continue;

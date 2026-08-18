@@ -119,6 +119,7 @@ if (args.Length >= 1 && args[0] == "--rebuild") {
     Console.WriteLine($"Prepocitanych: {result.Removed}");
     Console.WriteLine($"Ponechanych (nahravka uz neexistuje): {result.Kept}");
     Console.WriteLine($"Prestavanych z {result.Recordings} nahravok: {result.Deliveries} zasielok");
+    Console.WriteLine($"Jazdy mimo zakazky: {result.Freeroam} usekov, {result.FreeroamKm:0.0} km");
     foreach (var skipped in result.Skipped) Console.WriteLine($"Necitatelna nahravka: {skipped}");
     return;
 }
@@ -233,6 +234,7 @@ void ListDeliveries(int limit) {
 void PrintStats(long? sinceMs) {
     using var statsStore = new DeliveryStore();
     var s = statsStore.GetStats(sinceMs);
+    var roam = statsStore.FreeroamTotals();
 
     // Aggregates span every game played, so they follow the most recent one.
     var u = Units.For(ConsoleFormat.UnitSetting, statsStore.MostRecentGame());
@@ -241,6 +243,10 @@ void PrintStats(long? sinceMs) {
     Console.WriteLine("====================");
     Console.WriteLine($"zasielok spolu: {s.TotalDeliveries}  (accepted {s.Accepted}, review {s.Review}, rejected {s.Rejected})");
     Console.WriteLine($"vzdialenost: {u.FormatDistance(s.TotalDistanceKm)}");
+    if (roam.DistanceKm > 0) {
+        Console.WriteLine($"mimo zakazky: {u.FormatDistance(roam.DistanceKm)} ({roam.Stretches} usekov)");
+        Console.WriteLine($"spolu najazdene: {u.FormatDistance(s.TotalDistanceKm + roam.DistanceKm)}");
+    }
     Console.WriteLine($"zarobok: {u.FormatMoney(s.TotalRevenue)}");
     Console.WriteLine($"palivo: {u.FormatVolume(s.TotalFuelL)}");
 

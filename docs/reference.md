@@ -130,6 +130,25 @@ The offence is stored under the SDK's own name: `Crash`, `Speeding`,
 `Generic`. A recording keeps it as the raw number the game publishes, so a replay
 names it on the way back in.
 
+## Driving off the job
+
+Tables `freeroam` and `freeroam_points`. A stretch driven with nothing on the
+hook: between jobs, out to a trailer, or simply going somewhere.
+
+The rule is what is on the hook, not whether a job exists. A load is being pulled
+from the moment the trailer is coupled until the delivery ends; everything else
+is freeroam, including your own trailer with nothing in it.
+
+These are drawn on the map as a quieter line and are never clickable, because
+there is nothing behind them to open. They carry no verdict and no flags: there is
+no claim here to verify, so nothing is ever refused. Statistics show the distance
+beside the deliveries rather than folded into them, and both together as everything
+driven.
+
+A stretch shorter than 0.5 km is dropped as manoeuvring, and a hole in the
+recording ends one and starts another, so two evenings of driving are two lines
+rather than one road drawn between them that was never taken.
+
 ## Distance, in two parts
 
 `actual_distance_km` is everything the odometer counted for the job.

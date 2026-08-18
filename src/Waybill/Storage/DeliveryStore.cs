@@ -168,6 +168,23 @@ public class DeliveryStore : IDisposable {
                 extra_json   TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS freeroam (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                game            TEXT,
+                started_at_ms   INTEGER,
+                ended_at_ms     INTEGER,
+                distance_km     REAL
+            );
+
+            CREATE TABLE IF NOT EXISTS freeroam_points (
+                freeroam_id  INTEGER NOT NULL REFERENCES freeroam(id),
+                at_ms        INTEGER,
+                x            REAL,
+                y            REAL,
+                z            REAL,
+                speed_kmh    REAL
+            );
+
             CREATE TABLE IF NOT EXISTS trip_points (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 delivery_id  INTEGER NOT NULL REFERENCES deliveries(id),
@@ -180,6 +197,8 @@ public class DeliveryStore : IDisposable {
 
             CREATE INDEX IF NOT EXISTS idx_events_delivery ON events(delivery_id);
             CREATE INDEX IF NOT EXISTS idx_trip_points_delivery ON trip_points(delivery_id);
+            CREATE INDEX IF NOT EXISTS idx_freeroam_points_seg ON freeroam_points(freeroam_id);
+            CREATE INDEX IF NOT EXISTS idx_freeroam_game ON freeroam(game, started_at_ms);
             CREATE INDEX IF NOT EXISTS idx_deliveries_started ON deliveries(started_at_ms);
             """;
         cmd.ExecuteNonQuery();
@@ -907,6 +926,118 @@ public class DeliveryStore : IDisposable {
             }
             result.Cities.Sort((a, b) => b.Seen.CompareTo(a.Seen));
             return result;
+        }
+    }
+
+    /// <summary>
+    /// Stores one stretch driven with nothing on the hook.
+    ///
+    /// Keyed on when it started rather than on any identity of its own: a stretch is
+    /// not a claim about anything, so it has nothing to be recognised by. A rebuild
+    /// clears the periods its recordings cover and writes them again, which is why
+    /// the same stretch replayed twice does not pile up.
+    /// </summary>
+    public void SaveFreeroam(FreeroamRecord r) {
+        lock (_gate) {
+            using var tx = _conn.BeginTransaction();
+            long id;
+            using (var cmd = _conn.CreateCommand()) {
+                cmd.Transaction = tx;
+                cmd.CommandText = """
+                    INSERT INTO freeroam (game, started_at_ms, ended_at_ms, distance_km)
+                    VALUES ($game, $started, $ended, $distance);
+                    SELECT last_insert_rowid();
+                    """;
+                cmd.Parameters.AddWithValue("$game", r.Game);
+                cmd.Parameters.AddWithValue("$started", r.StartedAtMs);
+                cmd.Parameters.AddWithValue("$ended", r.EndedAtMs);
+                cmd.Parameters.AddWithValue("$distance", r.DistanceKm);
+                id = Convert.ToInt64(cmd.ExecuteScalar());
+            }
+            using (var cmd = _conn.CreateCommand()) {
+                cmd.Transaction = tx;
+                cmd.CommandText = """
+                    INSERT INTO freeroam_points (freeroam_id, at_ms, x, y, z, speed_kmh)
+                    VALUES ($id, $at, $x, $y, $z, $speed);
+                    """;
+                var pId = cmd.Parameters.Add("$id", SqliteType.Integer);
+                var pAt = cmd.Parameters.Add("$at", SqliteType.Integer);
+                var pX = cmd.Parameters.Add("$x", SqliteType.Real);
+                var pY = cmd.Parameters.Add("$y", SqliteType.Real);
+                var pZ = cmd.Parameters.Add("$z", SqliteType.Real);
+                var pS = cmd.Parameters.Add("$speed", SqliteType.Real);
+                foreach (var p in r.TripPoints) {
+                    pId.Value = id; pAt.Value = p.AtMs;
+                    pX.Value = p.X; pY.Value = p.Y; pZ.Value = p.Z; pS.Value = p.SpeedKmh;
+                    cmd.ExecuteNonQuery();
+                }
+            }
+            tx.Commit();
+        }
+    }
+
+    /// <summary>Every freeroam stretch of one game, for drawing. Same shape as a
+    /// delivery's route so the map can treat them alike, minus the identity: these
+    /// are not clickable because there is nothing behind them to open.</summary>
+    public List<List<RoutePoint>> FreeroamRoutes(string game) {
+        lock (_gate) {
+            var byId = new Dictionary<long, List<RoutePoint>>();
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT p.freeroam_id, p.at_ms, p.x, p.z, p.speed_kmh
+                FROM freeroam_points p JOIN freeroam f ON f.id = p.freeroam_id
+                WHERE f.game = $game
+                ORDER BY p.freeroam_id, p.at_ms;
+                """;
+            cmd.Parameters.AddWithValue("$game", game);
+            using var r = cmd.ExecuteReader();
+            while (r.Read()) {
+                var id = r.GetInt64(0);
+                if (!byId.TryGetValue(id, out var list)) byId[id] = list = new List<RoutePoint>();
+                list.Add(new RoutePoint(r.GetInt64(1), (float)r.GetDouble(2), (float)r.GetDouble(3), (float)r.GetDouble(4)));
+            }
+            return byId.Values.ToList();
+        }
+    }
+
+    /// <summary>How far has been driven with nothing on the hook, and over how many
+    /// stretches.</summary>
+    public (double DistanceKm, int Stretches) FreeroamTotals() {
+        lock (_gate) {
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = "SELECT COALESCE(SUM(distance_km), 0), COUNT(*) FROM freeroam;";
+            using var r = cmd.ExecuteReader();
+            return r.Read() ? (r.GetDouble(0), r.GetInt32(1)) : (0, 0);
+        }
+    }
+
+    /// <summary>Removes freeroam driven inside any of the given stretches of time,
+    /// so a rebuild can write those periods again without doubling them.</summary>
+    public int DeleteFreeroamWithin(IReadOnlyCollection<(long From, long To)> spans) {
+        if (spans.Count == 0) return 0;
+        lock (_gate) {
+            var removed = 0;
+            using var tx = _conn.BeginTransaction();
+            foreach (var (from, to) in spans) {
+                using (var kids = _conn.CreateCommand()) {
+                    kids.Transaction = tx;
+                    kids.CommandText = """
+                        DELETE FROM freeroam_points WHERE freeroam_id IN
+                            (SELECT id FROM freeroam WHERE started_at_ms BETWEEN $from AND $to);
+                        """;
+                    kids.Parameters.AddWithValue("$from", from);
+                    kids.Parameters.AddWithValue("$to", to);
+                    kids.ExecuteNonQuery();
+                }
+                using var cmd = _conn.CreateCommand();
+                cmd.Transaction = tx;
+                cmd.CommandText = "DELETE FROM freeroam WHERE started_at_ms BETWEEN $from AND $to;";
+                cmd.Parameters.AddWithValue("$from", from);
+                cmd.Parameters.AddWithValue("$to", to);
+                removed += cmd.ExecuteNonQuery();
+            }
+            tx.Commit();
+            return removed;
         }
     }
 

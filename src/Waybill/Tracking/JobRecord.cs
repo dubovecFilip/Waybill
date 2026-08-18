@@ -15,6 +15,25 @@ public class TrailerUnitRecord {
     public double Damage;
 }
 
+/// <summary>
+/// A stretch driven with nothing on the hook: between jobs, out to a trailer, or
+/// simply going somewhere. Kept because those kilometres happened and belong in a
+/// total, and because the roads they cover are as much a part of where this driver
+/// has been as the deliveries are.
+///
+/// Deliberately thin. A delivery is a claim about work done and carries everything
+/// needed to judge it; this is a line on a map and a number, and nothing here is
+/// ever refused or verified.
+/// </summary>
+public class FreeroamRecord {
+    public string Game = "";
+    public long StartedAtMs;
+    public long EndedAtMs;
+    /// <summary>From the odometer, like every other distance in this project.</summary>
+    public double DistanceKm;
+    public List<TripPoint> TripPoints = new();
+}
+
 public class FineRecord {
     public double Amount;
     public string Offence = "";

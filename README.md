@@ -78,6 +78,7 @@ Every state, flag and anomaly is listed with its meaning in
 * Draws where each delivery went, with every fine and collision marked on it
 * Draws the whole history as one map, built entirely from your own drives
 * Writes a delivery out as a printable A4 waybill, route and stamp included
+* Keeps the driving between jobs too, as distance and as lines on the map
 * Resumes an interrupted job after a crash or after quitting mid drive
 * Launches the game from the window, including a telemetry plugin check
 * Shows the current delivery on Discord, over the local pipe, with no account
@@ -231,6 +232,17 @@ percent over it.
 
 On a quick job, where the truck is put down at the depot already loaded, there is
 no run-up at all.
+
+### Driving that belongs to no delivery
+
+Everything driven with nothing on the hook is kept too: between jobs, out to a
+trailer, or simply going somewhere. It is drawn as a quieter line and is not
+clickable, because there is nothing behind it to open, and it counts towards its
+own total rather than being folded into the deliveries.
+
+On the history here that is 292.7 km over five stretches, about five percent of
+everything driven. Most of it retraces roads the deliveries already cover, which
+is the point: it is the same network, filled in.
 
 ### What is not drawn as driving
 

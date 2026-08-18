@@ -246,6 +246,9 @@ public class TrackerEngine : IDisposable {
                 ActiveJob = ev.Job;
                 JobResumed?.Invoke(ev.Job);
             }
+            if (ev.Type == TrackerEventType.FreeroamFinished && ev.Freeroam != null) {
+                _store.SaveFreeroam(ev.Freeroam);
+            }
             if (ev.Type == TrackerEventType.JobFinished && ev.Record != null) {
                 ActiveJob = null;
                 _store.SaveDelivery(ev.Record);
@@ -354,6 +357,14 @@ public class TrackerEngine : IDisposable {
         // Flush the in-progress job unthrottled, so quitting mid-delivery keeps the
         // last few seconds too and the next start resumes from the real position.
         lock (_gate) SaveInProgress(force: true);
+
+        // A stretch driven with nothing on the hook has no event to end it, so the
+        // one still open when the app closes would otherwise be lost.
+        lock (_gate) {
+            foreach (var stretch in _tracker.FinishRoaming()) {
+                try { _store.SaveFreeroam(stretch); } catch { /* shutting down anyway */ }
+            }
+        }
 
         // Let the scribe drain what is still queued before the file is closed under
         // it, otherwise quitting loses the last seconds of the recording. Bounded, so

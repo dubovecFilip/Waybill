@@ -318,8 +318,9 @@ public class MainForm : Form {
             return;
         }
 
-        var routes = RoutesFor(_mapGames[_mapGame.SelectedIndex]);
-        map.Show(Layers(routes), 0, routes.Cities);
+        var game = _mapGames[_mapGame.SelectedIndex];
+        var routes = RoutesFor(game);
+        map.Show(Layers(routes), 0, routes.Cities, null, _store.FreeroamRoutes(game));
     }
 
     // ---------- menu ----------
@@ -1669,7 +1670,8 @@ public class MainForm : Form {
         };
 
         var map = NewMap(u);
-        map.Show(Layers(RoutesFor(d.Game)), d.Id, RoutesFor(d.Game).Cities, _store.TimelineRows(d.Id));
+        map.Show(Layers(RoutesFor(d.Game)), d.Id, RoutesFor(d.Game).Cities,
+                 _store.TimelineRows(d.Id), _store.FreeroamRoutes(d.Game));
 
         box.Controls.Add(map);
         MapButtons(box, map, () => BigMap(d, u));
@@ -1739,6 +1741,7 @@ public class MainForm : Form {
             menu.Items.Add(item);
         }
         Item(Strings.T("map.layerHistory"), map.ShowHistory, v => map.ShowHistory = v);
+        Item(Strings.T("map.layerFreeroam"), map.ShowFreeroam, v => map.ShowFreeroam = v);
         Item(Strings.T("map.layerCities"), map.ShowCities, v => map.ShowCities = v);
         Item(Strings.T("map.layerMarks"), map.ShowMarks, v => map.ShowMarks = v);
         return menu;
@@ -1763,7 +1766,8 @@ public class MainForm : Form {
         // Shown before the data, so the map measures itself against the size it will
         // actually have rather than fitting the route to a window that is about to
         // be maximised.
-        window.Shown += (_, _) => map.Show(Layers(RoutesFor(d.Game)), d.Id, RoutesFor(d.Game).Cities, _store.TimelineRows(d.Id));
+        window.Shown += (_, _) => map.Show(Layers(RoutesFor(d.Game)), d.Id, RoutesFor(d.Game).Cities,
+                                           _store.TimelineRows(d.Id), _store.FreeroamRoutes(d.Game));
         window.Load += (_, _) => UseDarkTitleBar(window);
         window.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) window.Close(); };
         window.ShowDialog(this);
@@ -2040,6 +2044,7 @@ public class MainForm : Form {
 
     private void ReloadStats() {
         var s = _store.GetStats();
+        var roam = _store.FreeroamTotals();
         var u = CurrentUnits();
         var gameHours = s.TotalGameMinutes / 60.0;
         var realHours = s.TotalDrivingMs / 3600000.0;
@@ -2059,10 +2064,18 @@ public class MainForm : Form {
         Section(0, Strings.T("stats.headingOverall"),
             StatTile(Strings.T("stats.deliveries"), s.TotalDeliveries.ToString(),
                 $"{s.Accepted} accepted · {s.Review} review · {s.Rejected} rejected"),
-            StatTile(Strings.T("stats.distance"), u.FormatDistance(s.TotalDistanceKm)),
+            StatTile(Strings.T("stats.distance"), u.FormatDistance(s.TotalDistanceKm),
+                roam.DistanceKm > 0
+                    ? $"{u.FormatDistance(s.TotalDistanceKm + roam.DistanceKm)} {Strings.T("stats.withFreeroam")}"
+                    : null),
             StatTile(Strings.T("stats.revenue"), u.FormatMoney(s.TotalRevenue),
                 s.TotalPenalties > 0 ? $"{Strings.T("stats.penalties")} {u.FormatMoney(s.TotalPenalties)}" : null),
-            StatTile(Strings.T("stats.fuel"), u.FormatVolume(s.TotalFuelL)));
+            StatTile(Strings.T("stats.fuel"), u.FormatVolume(s.TotalFuelL)),
+            // Driving that carried nothing. Shown beside the deliveries rather than
+            // folded into them: it is real distance, but it earned nothing and was
+            // never judged, so adding it to the delivery figure would flatter both.
+            StatTile(Strings.T("stats.freeroam"), u.FormatDistance(roam.DistanceKm),
+                roam.Stretches > 0 ? $"{roam.Stretches}x" : null));
 
         Section(2, Strings.T("stats.headingDriving"),
             StatTile(Strings.T("stats.time"), $"{gameHours:0.0} {Strings.T("stats.gameTime")}",
