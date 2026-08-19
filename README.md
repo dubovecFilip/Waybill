@@ -474,14 +474,27 @@ is what lets a rebuild update the history rather than having to delete it first.
 ## Units
 
 By default they follow the game. ATS uses imperial (mi, gal, mph, $) and ETS2
-metric (km, l, km/h, €). The *Units* menu forces one system for both, and the
-currency symbol goes with it: a page shown in kilometres and litres is not also
-shown in dollars.
+metric (km, l, km/h, €), and money stays in whatever the game paid: two games,
+two currencies, never added together. A total spanning both is shown as both,
+side by side.
 
-That last part is a relabelling and not a conversion. Nothing here knows an
-exchange rate and nothing invents one; the figure is the number the game paid.
-Forcing a system is a decision about how to read the logbook, not a claim about
-what the money was.
+The *Units* menu forces one system for both, and the currency goes with it. A
+page in kilometres is in euros and a page in miles is in dollars, and the other
+game's money is converted rather than relabelled, so a figure that says € is in
+euros and a total across both games is one number.
+
+The rate is fixed, at 0.92 € to the dollar, and lives in one place in
+`Units.cs`. Fixed on purpose: a rate that moved with the real one would rewrite
+the past, and the same delivery would be worth a different amount next month
+without anything about the drive having changed.
+
+It is worth knowing what that rate is and is not. The two games do not share an
+economy. SCS pay roughly the same figures for the same work in each, so a haul
+earning 30 000 in one earns about 30 000 in the other, and putting a real world
+rate between them says a game dollar is worth what a real dollar is, which is
+not a thing anybody measured. It is there because one column of money is easier
+to read than two, and *Follow the game* is the setting for anyone who would
+rather not have the convention at all.
 
 The database always stores metric and converts only for display. The history
 therefore does not depend on which setting was active during the drive, and

@@ -247,7 +247,9 @@ void PrintStats(long? sinceMs) {
         Console.WriteLine($"mimo zakazky: {u.FormatDistance(roam.DistanceKm)} ({roam.Stretches} usekov)");
         Console.WriteLine($"spolu najazdene: {u.FormatDistance(s.TotalDistanceKm + roam.DistanceKm)}");
     }
-    Console.WriteLine($"zarobok: {u.FormatMoney(s.TotalRevenue)}");
+    // Per game, for the same reason the window does it: a total across two
+    // currencies is only a number once there is one currency to say it in.
+    Console.WriteLine($"zarobok: {Units.FormatTotal(ConsoleFormat.UnitSetting, s.RevenueByGame)}");
     Console.WriteLine($"palivo: {u.FormatVolume(s.TotalFuelL)}");
 
     var realHours = s.TotalDrivingMs / 3600000.0;
@@ -259,7 +261,7 @@ void PrintStats(long? sinceMs) {
         Console.WriteLine($"priemerna rychlost: {u.FormatSpeed(s.TimedDistanceKm / gameHours)}");
     }
 
-    Console.WriteLine($"kolizie: {s.TotalCollisions}   meskania: {s.LateDeliveries}   pokuty spolu: {u.FormatMoney(s.TotalFines)}");
+    Console.WriteLine($"kolizie: {s.TotalCollisions}   meskania: {s.LateDeliveries}   pokuty spolu: {Units.FormatTotal(ConsoleFormat.UnitSetting, s.FinesByGame)}");
 
     if (s.FavoriteTruck != null) Console.WriteLine($"oblubeny tahac: {s.FavoriteTruck}");
     if (s.FavoriteRoute != null) Console.WriteLine($"oblubena trasa: {s.FavoriteRoute}");

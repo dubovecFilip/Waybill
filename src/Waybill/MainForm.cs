@@ -2920,9 +2920,14 @@ public partial class MainForm : Form {
                 Change(s.TotalDistanceKm, x => x.TotalDistanceKm) ?? (roam.DistanceKm > 0
                     ? $"{u.FormatDistance(s.TotalDistanceKm + roam.DistanceKm)} {Strings.T("stats.withFreeroam")}"
                     : null)),
-            StatTile(Strings.T("stats.revenue"), u.FormatMoney(s.TotalRevenue),
+            // Money is the one figure that cannot simply be summed: two games, two
+            // currencies. Told apart by game and put back together only once there
+            // is a currency to put it together in.
+            StatTile(Strings.T("stats.revenue"), Units.FormatTotal(_settings.Units, s.RevenueByGame),
                 Change(s.TotalRevenue, x => x.TotalRevenue)
-                    ?? (s.TotalPenalties > 0 ? $"{Strings.T("stats.penalties")} {u.FormatMoney(s.TotalPenalties)}" : null)),
+                    ?? (s.TotalPenalties > 0
+                        ? $"{Strings.T("stats.penalties")} {Units.FormatTotal(_settings.Units, s.PenaltiesByGame)}"
+                        : null)),
             StatTile(Strings.T("stats.fuel"), u.FormatVolume(s.TotalFuelL),
                 Change(s.TotalFuelL, x => x.TotalFuelL)),
             // Driving that carried nothing. Shown beside the deliveries rather than
@@ -2942,7 +2947,7 @@ public partial class MainForm : Form {
         Section(4, Strings.T("stats.headingIncidents"),
             StatTile(Strings.T("stats.collisions"), s.TotalCollisions.ToString(),
                 Change(s.TotalCollisions, x => x.TotalCollisions)),
-            StatTile(Strings.T("stats.finesTotal"), u.FormatMoney(s.TotalFines),
+            StatTile(Strings.T("stats.finesTotal"), Units.FormatTotal(_settings.Units, s.FinesByGame),
                 Change(s.TotalFines, x => x.TotalFines)),
             StatTile(Strings.T("stats.late"), s.LateDeliveries.ToString()));
 

@@ -171,14 +171,13 @@ public partial class MainForm {
             return;
         }
 
-        var u = CurrentUnits();
         var lines = new List<Control>();
-        foreach (var row in recent) lines.Add(RecentRow(row, u));
+        foreach (var row in recent) lines.Add(RecentRow(row));
         for (var i = lines.Count - 1; i >= 0; i--) _homeRecent.Controls.Add(lines[i]);
         _homeRecent.ResumeLayout();
     }
 
-    private Control RecentRow(DeliveryRow row, Units u) {
+    private Control RecentRow(DeliveryRow row) {
         var line = new Panel {
             Dock = DockStyle.Top, Height = 32, BackColor = Surface,
             Margin = new Padding(0), Cursor = Cursors.Hand,
@@ -201,7 +200,11 @@ public partial class MainForm {
             TextAlign = align, Padding = new Padding(10, 0, 10, 0),
         };
 
-        var pay = Cell(u.FormatMoney(row.Zarobok), 110, Ink, DockStyle.Right, ContentAlignment.MiddleRight);
+        // The row already carries its money formatted, in its own game's currency
+        // and converted if the units call for it. Formatting it again here would
+        // convert what has already been converted, and would do it with the
+        // currently running game's currency rather than the delivery's own.
+        var pay = Cell(row.Odmena, 110, Ink, DockStyle.Right, ContentAlignment.MiddleRight);
         var distance = Cell(row.Vzdialenost, 100, Muted, DockStyle.Right, ContentAlignment.MiddleRight);
         var when = Cell(row.Datum.ToString("dd.MM."), 60, Muted, DockStyle.Left, ContentAlignment.MiddleLeft);
         var route = Cell($"{row.Odkial}  →  {row.Kam}", 0, Ink, DockStyle.Fill, ContentAlignment.MiddleLeft);

@@ -540,7 +540,9 @@ public class DeliveryStore : IDisposable {
                     Tahac = reader.GetString(5),
                     DistanceKm = km,
                     Vzdialenost = units.FormatDistance(km),
-                    Zarobok = money,
+                    // Converted, because this is what sorting by pay compares and a
+                    // column showing euros must not sort on dollars underneath.
+                    Zarobok = units.Money(money),
                     Odmena = units.FormatMoney(money),
                     Pokuty = reader.GetInt32(8),
                     Kolizie = reader.IsDBNull(9) ? 0 : reader.GetInt32(9),
@@ -1234,6 +1236,29 @@ public class DeliveryStore : IDisposable {
             }
         }
 
+        using (var cmd = _conn.CreateCommand()) {
+            cmd.CommandText = """
+                SELECT COALESCE(game, ''),
+                       COALESCE(SUM(revenue), 0),
+                       COALESCE(SUM(penalty), 0),
+                       COALESCE(SUM(fines_total), 0)
+                FROM deliveries
+                WHERE ($since IS NULL OR started_at_ms >= $since)
+                  AND ($until IS NULL OR started_at_ms < $until)
+                  AND ($game IS NULL OR game = $game)
+                GROUP BY game;
+                """;
+            Bind(cmd, slice);
+            using var r = cmd.ExecuteReader();
+            while (r.Read()) {
+                var game = r.GetString(0);
+                if (game.Length == 0) continue;
+                summary.RevenueByGame[game] = r.GetDouble(1);
+                summary.PenaltiesByGame[game] = r.GetDouble(2);
+                summary.FinesByGame[game] = r.GetDouble(3);
+            }
+        }
+
         summary.FavoriteTruck = TopValue("truck_make || ' ' || truck_model", slice);
         summary.FavoriteRoute = TopValue("source_city || ' → ' || destination_city", slice);
         summary.FavoriteCargo = TopValue("cargo", slice);
@@ -1395,7 +1420,17 @@ public class StatsSummary {
     public int Review;
     public int Rejected;
     public double TotalDistanceKm;
+    /// <summary>Summed straight across every delivery, which is only a currency at
+    /// all while one game is in play. Prefer the per game figures for anything the
+    /// driver reads; this one stays for callers that already know their scope.</summary>
     public double TotalRevenue;
+
+    /// <summary>The same money kept apart by game, because ETS2 pays euros and ATS
+    /// pays dollars and SQL cannot add those. Whoever displays it decides whether to
+    /// convert and add or to show them side by side.</summary>
+    public Dictionary<string, double> RevenueByGame = new();
+    public Dictionary<string, double> PenaltiesByGame = new();
+    public Dictionary<string, double> FinesByGame = new();
     /// <summary>What the cancelled deliveries cost. Kept apart from revenue rather
     /// than subtracted from it: netting them hides both figures.</summary>
     public double TotalPenalties;
