@@ -1098,10 +1098,18 @@ public class DeliveryStore : IDisposable {
 
     /// <summary>How far has been driven with nothing on the hook, and over how many
     /// stretches.</summary>
-    public (double DistanceKm, int Stretches) FreeroamTotals() {
+    public (double DistanceKm, int Stretches) FreeroamTotals() => FreeroamTotals(HistorySlice.Everything);
+
+    public (double DistanceKm, int Stretches) FreeroamTotals(HistorySlice slice) {
         lock (_gate) {
             using var cmd = _conn.CreateCommand();
-            cmd.CommandText = "SELECT COALESCE(SUM(distance_km), 0), COUNT(*) FROM freeroam;";
+            cmd.CommandText = """
+                SELECT COALESCE(SUM(distance_km), 0), COUNT(*) FROM freeroam
+                WHERE ($since IS NULL OR started_at_ms >= $since)
+                  AND ($until IS NULL OR started_at_ms < $until)
+                  AND ($game IS NULL OR game = $game);
+                """;
+            Bind(cmd, slice);
             using var r = cmd.ExecuteReader();
             return r.Read() ? (r.GetDouble(0), r.GetInt32(1)) : (0, 0);
         }
@@ -1167,7 +1175,9 @@ public class DeliveryStore : IDisposable {
 
     /// <summary>Aggregate stats for `--stats`. Pass sinceMs to scope to a window
     /// (e.g. this week); null means all-time.</summary>
-    public StatsSummary GetStats(long? sinceMs = null) {
+    public StatsSummary GetStats(long? sinceMs = null) => GetStats(new HistorySlice(sinceMs, null, null));
+
+    public StatsSummary GetStats(HistorySlice slice) {
         lock (_gate) {
         var summary = new StatsSummary();
 
@@ -1198,9 +1208,11 @@ public class DeliveryStore : IDisposable {
                     -- inflated the average to hundreds of km/h.
                     COALESCE(SUM(CASE WHEN driving_game_min > 0 THEN actual_distance_km ELSE 0 END), 0)
                 FROM deliveries
-                WHERE $since IS NULL OR started_at_ms >= $since;
+                WHERE ($since IS NULL OR started_at_ms >= $since)
+                  AND ($until IS NULL OR started_at_ms < $until)
+                  AND ($game IS NULL OR game = $game);
                 """;
-            cmd.Parameters.AddWithValue("$since", (object?)sinceMs ?? DBNull.Value);
+            Bind(cmd, slice);
             using var reader = cmd.ExecuteReader();
             if (reader.Read() && !reader.IsDBNull(0)) {
                 summary.TotalDeliveries = reader.GetInt32(0);
@@ -1222,26 +1234,50 @@ public class DeliveryStore : IDisposable {
             }
         }
 
-        summary.FavoriteTruck = TopValue("truck_make || ' ' || truck_model", sinceMs);
-        summary.FavoriteRoute = TopValue("source_city || ' → ' || destination_city", sinceMs);
-        summary.FavoriteCargo = TopValue("cargo", sinceMs);
+        summary.FavoriteTruck = TopValue("truck_make || ' ' || truck_model", slice);
+        summary.FavoriteRoute = TopValue("source_city || ' → ' || destination_city", slice);
+        summary.FavoriteCargo = TopValue("cargo", slice);
 
         return summary;
         }
     }
 
-    private string? TopValue(string groupExpr, long? sinceMs) {
+    private string? TopValue(string groupExpr, HistorySlice slice) {
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT {groupExpr} AS v, COUNT(*) AS c
             FROM deliveries
-            WHERE ($since IS NULL OR started_at_ms >= $since) AND {groupExpr} IS NOT NULL AND {groupExpr} != ''
+            WHERE ($since IS NULL OR started_at_ms >= $since)
+              AND ($until IS NULL OR started_at_ms < $until)
+              AND ($game IS NULL OR game = $game)
+              AND {groupExpr} IS NOT NULL AND {groupExpr} != ''
             GROUP BY v
             ORDER BY c DESC
             LIMIT 1;
             """;
-        cmd.Parameters.AddWithValue("$since", (object?)sinceMs ?? DBNull.Value);
+        Bind(cmd, slice);
         return cmd.ExecuteScalar() as string;
+    }
+
+    /// <summary>The three parameters every sliced query takes, in one place so a
+    /// query cannot quietly be given two of them.</summary>
+    private static void Bind(SqliteCommand cmd, HistorySlice slice) {
+        cmd.Parameters.AddWithValue("$since", (object?)slice.FromMs ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$until", (object?)slice.ToMs ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$game", (object?)slice.Game ?? DBNull.Value);
+    }
+
+    /// <summary>Which games this history holds anything for, so the window can offer
+    /// the ones that exist rather than the two it knows the names of.</summary>
+    public List<string> GamesPlayed() {
+        lock (_gate) {
+            var games = new List<string>();
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = "SELECT DISTINCT game FROM deliveries WHERE game IS NOT NULL AND game != '' ORDER BY game;";
+            using var r = cmd.ExecuteReader();
+            while (r.Read()) games.Add(r.GetString(0));
+            return games;
+        }
     }
 
     /// <summary>Dumps the deliveries table to CSV or JSON, per the roadmap's
@@ -1331,6 +1367,27 @@ public class DeliveryStore : IDisposable {
         GC.SuppressFinalize(this);
     }
 }
+
+    /// <summary>
+    /// Which deliveries a figure is about: a stretch of time, a game, or neither.
+    ///
+    /// Passed around as one value rather than as three loose arguments, because
+    /// every query that answers a question about "the numbers" has to answer it for
+    /// the same slice, and three arguments is three chances to pass the wrong one.
+    /// </summary>
+    public readonly record struct HistorySlice(long? FromMs, long? ToMs, string? Game) {
+        public static readonly HistorySlice Everything = new(null, null, null);
+
+        /// <summary>The same length of time immediately before this one, for saying
+        /// what a figure did rather than only what it is. Meaningless without both
+        /// ends, so a slice open at either end has no previous.</summary>
+        public HistorySlice? Previous {
+            get {
+                if (FromMs is not { } from || ToMs is not { } to || to <= from) return null;
+                return new HistorySlice(from - (to - from), from, Game);
+            }
+        }
+    }
 
 public class StatsSummary {
     public int TotalDeliveries;

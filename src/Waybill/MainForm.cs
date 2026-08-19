@@ -1543,8 +1543,50 @@ public partial class MainForm : Form {
     /// <summary>Everything on one screen, no scrolling. A table rather than a flow:
     /// the rows share out whatever height there is, so the whole set of figures stays
     /// visible at any window size instead of the last ones falling off the bottom.</summary>
+    /// <summary>Which stretch of time the statistics are about. Kept as a name
+    /// rather than as two timestamps, because "this week" has to mean this week
+    /// whenever the page is redrawn, not the week it was when it was chosen.</summary>
+    private string _statsPeriod = "all";
+    private readonly TriSwitch _statsGame =
+        new(GameName("Ets2"), Strings.T("filter.both"), GameName("Ats"));
+    private readonly FlowLayoutPanel _statsPeriods = new();
+
     private Panel BuildStatsPage() {
         var page = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16), BackColor = Canvas };
+
+        // Two questions asked above the figures rather than answered by extra
+        // sections below them: which stretch of time, and which game. Sections would
+        // have taken the page past the one screen it fits on, and comparing this week
+        // with last week by reading two blocks of tiles is not comparing at all.
+        var bar = new FlowLayoutPanel {
+            Dock = DockStyle.Top, Height = 40, WrapContents = false, BackColor = Canvas,
+            Padding = new Padding(0, 0, 0, 8),
+        };
+
+        _statsPeriods.AutoSize = true;
+        _statsPeriods.WrapContents = false;
+        _statsPeriods.Margin = new Padding(0, 0, 16, 0);
+        _statsPeriods.Controls.Clear();
+        foreach (var period in new[] { "all", "month", "week" }) {
+            var pick = MakeButton(Strings.T("stats.period." + period), () => {
+                if (_statsPeriod == period) return;
+                _statsPeriod = period;
+                StylePeriods();
+                ReloadStats();
+            });
+            pick.Tag = period;
+            _statsPeriods.Controls.Add(pick);
+        }
+
+        _statsGame.Retext(GameName("Ets2"), Strings.T("filter.both"), GameName("Ats"));
+        _statsGame.Margin = new Padding(0, 3, 0, 3);
+        _statsGame.BackColor = Canvas;
+        _statsGame.Changed -= OnStatsGameChanged;
+        _statsGame.Changed += OnStatsGameChanged;
+
+        bar.Controls.Add(_statsPeriods);
+        bar.Controls.Add(_statsGame);
+
         _statsGrid.Dock = DockStyle.Fill;
         _statsGrid.BackColor = Canvas;
         // One column of sections, each section holding its own row of tiles. The
@@ -1568,7 +1610,45 @@ public partial class MainForm : Form {
         }
 
         page.Controls.Add(_statsGrid);
+        page.Controls.Add(bar);
+        StylePeriods();
         return page;
+    }
+
+    private void OnStatsGameChanged(object? sender, EventArgs e) => ReloadStats();
+
+    /// <summary>The chosen period, lit the way a chosen page in the sidebar is.</summary>
+    private void StylePeriods() {
+        foreach (var control in _statsPeriods.Controls) {
+            if (control is not Button b || b.Tag is not string period) continue;
+            var chosen = period == _statsPeriod;
+            b.BackColor = chosen ? AccentSoft : Raised;
+            b.ForeColor = chosen ? Accent : Ink;
+        }
+    }
+
+    /// <summary>
+    /// The stretch of time the page is about, worked out fresh each time it is
+    /// drawn. A week runs from Monday and a month from the first, so "this week"
+    /// means the week you are in rather than the last seven days: comparing a
+    /// rolling window against the one before it compares two overlapping halves of
+    /// the same evening's driving.
+    /// </summary>
+    private HistorySlice StatsSlice() {
+        var game = _statsGame.Position switch { < 0 => "Ets2", > 0 => "Ats", _ => null };
+        var now = DateTime.Now;
+        DateTime? from = _statsPeriod switch {
+            "week" => now.Date.AddDays(-(((int)now.DayOfWeek + 6) % 7)),
+            "month" => new DateTime(now.Year, now.Month, 1),
+            _ => null,
+        };
+        if (from is not { } start) return new HistorySlice(null, null, game);
+
+        var fromMs = new DateTimeOffset(start).ToUnixTimeMilliseconds();
+        var toMs = _statsPeriod == "week"
+            ? new DateTimeOffset(start.AddDays(7)).ToUnixTimeMilliseconds()
+            : new DateTimeOffset(start.AddMonths(1)).ToUnixTimeMilliseconds();
+        return new HistorySlice(fromMs, toMs, game);
     }
 
     /// <summary>One figure: the number large enough to read at a glance, the caption
@@ -2785,8 +2865,12 @@ public partial class MainForm : Form {
     }
 
     private void ReloadStats() {
-        var s = _store.GetStats();
-        var roam = _store.FreeroamTotals();
+        var slice = StatsSlice();
+        var s = _store.GetStats(slice);
+        var roam = _store.FreeroamTotals(slice);
+        // The same length of time immediately before this one, so a figure can say
+        // what it did as well as what it is. There is no before for all of history.
+        var before = slice.Previous is { } earlier ? _store.GetStats(earlier) : null;
         var u = CurrentUnits();
         var gameHours = s.TotalGameMinutes / 60.0;
         var realHours = s.TotalDrivingMs / 3600000.0;
@@ -2802,22 +2886,39 @@ public partial class MainForm : Form {
             _statsGrid.Controls.Add(TileRow(tiles), 0, row + 1);
         }
 
+        // How a figure moved against the same stretch of time before it. Shown as a
+        // percentage and never as a verdict: driving less this week than last is not
+        // worse, it is a week. A period that had nothing to compare against says so
+        // rather than claiming an infinite rise.
+        string? Change(double now, Func<StatsSummary, double> of) {
+            if (before is null) return null;
+            var then = of(before);
+            // Whole phrases per language rather than a figure with words glued to it:
+            // Slovak wants the period in a different case in the two sentences, and
+            // gluing gets one of them wrong whichever way round it is done.
+            if (then <= 0) return now > 0 ? Strings.T("stats.noneBefore." + _statsPeriod) : null;
+            var move = (now - then) / then * 100;
+            return $"{(move >= 0 ? "+" : "")}{move:0} % {Strings.T("stats.vs." + _statsPeriod)}";
+        }
+
         Section(0, Strings.T("stats.headingOverall"),
             // Only the states there are any of. Spelling out "0 review · 0 rejected"
             // took the width of the tile to say nothing.
             StatTile(Strings.T("stats.deliveries"), s.TotalDeliveries.ToString(),
-                string.Join(" · ", new[] {
+                Change(s.TotalDeliveries, x => x.TotalDeliveries) ?? string.Join(" · ", new[] {
                     s.Accepted > 0 ? $"{s.Accepted} {Label("accepted")}" : null,
                     s.Review > 0 ? $"{s.Review} {Label("review")}" : null,
                     s.Rejected > 0 ? $"{s.Rejected} {Label("rejected")}" : null,
                 }.OfType<string>())),
             StatTile(Strings.T("stats.distance"), u.FormatDistance(s.TotalDistanceKm),
-                roam.DistanceKm > 0
+                Change(s.TotalDistanceKm, x => x.TotalDistanceKm) ?? (roam.DistanceKm > 0
                     ? $"{u.FormatDistance(s.TotalDistanceKm + roam.DistanceKm)} {Strings.T("stats.withFreeroam")}"
-                    : null),
+                    : null)),
             StatTile(Strings.T("stats.revenue"), u.FormatMoney(s.TotalRevenue),
-                s.TotalPenalties > 0 ? $"{Strings.T("stats.penalties")} {u.FormatMoney(s.TotalPenalties)}" : null),
-            StatTile(Strings.T("stats.fuel"), u.FormatVolume(s.TotalFuelL)),
+                Change(s.TotalRevenue, x => x.TotalRevenue)
+                    ?? (s.TotalPenalties > 0 ? $"{Strings.T("stats.penalties")} {u.FormatMoney(s.TotalPenalties)}" : null)),
+            StatTile(Strings.T("stats.fuel"), u.FormatVolume(s.TotalFuelL),
+                Change(s.TotalFuelL, x => x.TotalFuelL)),
             // Driving that carried nothing. Shown beside the deliveries rather than
             // folded into them: it is real distance, but it earned nothing and was
             // never judged, so adding it to the delivery figure would flatter both.
@@ -2826,14 +2927,17 @@ public partial class MainForm : Form {
 
         Section(2, Strings.T("stats.headingDriving"),
             StatTile(Strings.T("stats.time"), $"{gameHours:0.0} {Strings.T("stats.gameTime")}",
-                $"{realHours:0.0} {Strings.T("stats.realTime")}"),
+                Change(s.TotalGameMinutes, x => x.TotalGameMinutes)
+                    ?? $"{realHours:0.0} {Strings.T("stats.realTime")}"),
             StatTile(Strings.T("stats.avgSpeed"), u.FormatSpeed(avg)),
             StatTile(Strings.T("stats.style"), $"{s.Clean} / {s.Spirited}",
                 $"{Strings.T("stats.styleClean")} / {Strings.T("stats.styleSpirited")}"));
 
         Section(4, Strings.T("stats.headingIncidents"),
-            StatTile(Strings.T("stats.collisions"), s.TotalCollisions.ToString()),
-            StatTile(Strings.T("stats.finesTotal"), u.FormatMoney(s.TotalFines)),
+            StatTile(Strings.T("stats.collisions"), s.TotalCollisions.ToString(),
+                Change(s.TotalCollisions, x => x.TotalCollisions)),
+            StatTile(Strings.T("stats.finesTotal"), u.FormatMoney(s.TotalFines),
+                Change(s.TotalFines, x => x.TotalFines)),
             StatTile(Strings.T("stats.late"), s.LateDeliveries.ToString()));
 
         Section(6, Strings.T("stats.headingFavourites"),
