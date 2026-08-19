@@ -380,15 +380,20 @@ rather than only tested.
 - Rebuild from the raw recordings, which is what makes every judgement above
   revisable rather than frozen at whatever the tracker believed that day
 
-**Phase 2, partly.** Export tools are there. Achievements, session statistics and
-period comparisons are not.
+**Phase 2, partly.** Export tools are there, and so are period comparisons: the
+statistics page answers for a week or a month and says how each figure moved
+against the same length of time before it, and it can be narrowed to one game.
+Achievements and session statistics are not built, and neither is comparing one
+truck against another, which wants a different shape of page than a row of tiles.
 
 **Phase 3, mostly.** The map is drawn: a delivery's own route with its events
 marked on it, and a page showing every drive of one game at once, where clicking a
 route opens it. Replay is there in the form the data supports, which is the line
-drawing itself from the pickup to the drop at the pace the drive went; replay from
-inside the cab is not, and neither is the elevation profile, though altitude has
-been recorded all along.
+drawing itself from the pickup to the drop at the pace the drive went. The
+elevation profile is there too, drawn beside the route and in step with it, and
+it turned out to need the same decision the map did: the game's vertical is no
+more a scaled elevation than its horizontal is a scaled country, so the profile
+shows the shape and reports no metres. Replay from inside the cab is not built.
 
 The map turned out to need a decision this document did not anticipate. The game's
 world is not a scaled country: measured over nineteen deliveries some pairs of

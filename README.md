@@ -78,6 +78,8 @@ Every state, flag and anomaly is listed with its meaning in
 * Explains every verdict in words rather than leaving a label on the row
 * Draws where each delivery went, with every fine and collision marked on it
 * Draws it the way it was driven, so the order things happened in is visible
+* Draws the same drive from the side, so a slow hour explains itself
+* Answers for a week or a month, and says how that compares with the one before
 * Marks each thing that happened with a sign of its own, and explains every sign
 * Names a trailer for what it is instead of for the file it came out of
 * Marks an oversize load as one, on its card and in the list
@@ -179,9 +181,20 @@ and worth nothing when nothing did, so they stay out of the way until asked for.
 
 ![The route and the timeline](assets/delivery-route.png)
 
-*Statistics* is the whole logbook at a glance, on one screen with no scrolling.
+*Statistics* is the logbook at a glance, on one screen with no scrolling. Two
+controls above the figures say which deliveries they are about: a period, and
+which game. Pick a period and every figure that is a sum also says how it moved
+against the same length of time immediately before it, so this week against last
+week is one number on the tile rather than two pages to read back and forth
+between.
 
 ![The statistics page](assets/statistics.png)
+
+A week runs from Monday and a month from the first, so *this week* is the week
+you are in rather than the last seven days: a rolling window compared against the
+window before it compares two overlapping halves of the same evening's driving.
+The change is a percentage and never a verdict. Driving less this week than last
+is not worse, it is a week.
 
 Distance driven with nothing on the hook has its own tile there, beside the
 deliveries rather than folded into them, and the delivery figure carries both
@@ -261,6 +274,22 @@ turned off, since they are what makes the rest readable.
 
 The same map, smaller, sits in the panel a delivery's card slides out, where a
 third button opens it full screen.
+
+### The same drive from the side
+
+Under the map is the height the drive was at, coloured by the same eight speeds
+the route is, and drawn out alongside it at the same rate. A route from above
+says where the drive went; it does not say why forty minutes of it were spent at
+fifty. The mountain says that.
+
+It reports no height in metres and no gradient, for the reason the map reports no
+distances: the game's vertical is not a scaled version of the real one either.
+The drop at Winslow sits at the same height in the game as the drop at Tucson
+while the real places are eight hundred metres apart, and across the cities
+driven to the ratio between game and reality runs from under one to over thirty
+six. What is left is true and is the useful part: the order of the climbs, their
+size against each other within the drive, and the speed on each. The measurements
+are in [`docs/measurement.md`](docs/measurement.md).
 
 ### A route draws itself
 

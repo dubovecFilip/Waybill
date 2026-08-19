@@ -8,10 +8,10 @@
 | `current-job.png` | The tracker's own view of the same drive, log and all. |
 | `deliveries.png` | The delivery history, used at the top of the README. |
 | `delivery-card.png` | One delivery on its own card. |
-| `delivery-route.png` | The same card with the route and timeline slid out. |
+| `delivery-route.png` | The same card with the route, the height profile and the timeline slid out. |
 | `trailer-chain.png` | A triple with its units and dollies opened out. |
 | `map.png` | The map page, with one route lit under the pointer. |
-| `statistics.png` | The statistics page. |
+| `statistics.png` | The statistics page, with the period and game it is answering for. |
 | `waybill-sheet.png` | A delivery exported as an A4 sheet. |
 | `legend.png` | Every mark the window uses, with what it means. |
 

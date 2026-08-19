@@ -27,6 +27,37 @@ teleport or from a position being loaded.
 World position is stored separately. It serves teleport detection and, later on,
 drawing the route. It is never used to count distance travelled.
 
+## Height is not elevation either
+
+The game publishes a vertical position along with the horizontal one, and it is
+tempting to read it as metres above sea level. It is not, and the reason is the
+same one that stops the map being a real map.
+
+Taken across the deliveries here, the height the game gives the drop in each city
+against that city's real elevation:
+
+| City | Game height | Real elevation | Real / game |
+|---|---|---|---|
+| Winslow | 41 | 1500 m | 36.6 |
+| Page | 50 | 1304 m | 26.3 |
+| Barstow | 29 | 664 m | 22.6 |
+| Ogden | 68 | 1320 m | 19.5 |
+| Tucson | 40 | 728 m | 18.0 |
+| Ely | 104 | 1963 m | 18.8 |
+| Cedar City | 104 | 1780 m | 17.2 |
+| Salt Lake City | 84 | 1288 m | 15.3 |
+| San Diego | 22 | 19 m | 0.9 |
+| Stockton | 9 | 4 m | 0.5 |
+
+No single factor fits, and no offset rescues it: Winslow and Tucson sit at the
+same height in the game while the real places are eight hundred metres apart.
+
+So the elevation profile draws the shape and reports no metres, exactly as the
+map draws the route and reports no kilometres. What it does say is true: the
+order of the climbs, how they compare with each other inside that one drive, and
+the speed on each. Gradient is not offered at all, since it would need a real
+horizontal scale as well as a vertical one and would be wrong twice over.
+
 ## Average speed
 
 It has to divide simulated km by the game time spent driving.
