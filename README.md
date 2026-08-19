@@ -69,7 +69,7 @@ Every state, flag and anomaly is listed with its meaning in
 
 ## Features
 
-* Opens on an overview: the drive in progress, the last few deliveries, settings
+* Opens on the drive in progress: the figures, the log, and the route as it grows
 * Detects the start and the end of a job with no manual input
 * Measures distance, fuel, speed, damage, fines, tolls and ferries
 * Records an event timeline, so the exact moment of a fine or a collision is kept
@@ -131,22 +131,30 @@ live in `%LOCALAPPDATA%\Waybill\`, independent of where the exe sits.
 Start order does not matter, the app connects to the game as soon as it finds it.
 Jobs are detected and saved without any input.
 
-Five pages down the left.
+Four pages down the left.
 
-*Overview* is where the window opens, and it is the only page that answers "what
-is going on" rather than a question you have to arrive with. It holds the drive
-in progress with its route drawn beside it as it goes, the last five deliveries,
-each opening its own card, and the three settings anybody actually reaches for.
-Nothing on it is new: everything has a page of its own, one click away, and the
-tracker's log stays on *Current job* where it belongs.
+*Current job* is where the window opens, and it is the only page that answers
+"what is going on" rather than a question you have to arrive with. The figures
+are on the left, the tracker's own log beside them, and the drive draws itself
+underneath as it goes. With no game running it offers the two things worth
+offering: starting one of the games, and the log that says whether the tracker
+can see it.
 
-![The page the window opens on](assets/overview.png)
+![The page the window opens on](assets/current-job.png)
 
-The miniature is the drive so far and nothing else: the hollow ring is where the
-load went on, the line is coloured by speed like every other route here, and the
-filled marker is where the truck is now. The bar underneath counts the loaded leg
-against the game's own planned distance, with the run out to the trailer in its
-own quieter shade at the head of it and named beside the figure.
+The map is the drive so far and nothing else: the hollow ring is where the load
+went on, the line is coloured by speed like every other route here, and the
+filled marker is where the truck is now. It turns the drive to lie along the
+panel, which is far wider than it is tall, so a run from north to south fills the
+width instead of drawing a thread down the middle. There is no north to lose:
+this is the game's own space and it was never oriented to anything, and the shape
+and the angles within the route are untouched.
+
+The bar underneath counts the loaded leg against the game's own planned distance,
+with the run out to the trailer in its own quieter shade at the head of it. It is
+not clamped at the plan. Going past it is ordinary, a detour or a closed road, so
+the bar rescales rather than filling up and stopping: at 112 % the plan sits nine
+tenths of the way along and the overshoot is what is left, in a dimmer amber.
 
 *Deliveries* is the history. Every row carries its verdict as a dot in the
 gutter on the left, and an oversize load carries hazard stripes beside it;
@@ -161,14 +169,6 @@ history is actually read with, and each is one click away from either answer.
 There is no filter by verdict: it is a dot on every row already, and on a
 history where almost everything is accepted, asking for "only the accepted ones"
 is asking for the list you are looking at.
-
-*Current job* is the same drive in the tracker's own terms: the route, the cargo,
-how far along the drive is, and a log of what has happened, each entry with its
-figure, so a fine reads `Fine: 700 $ (crash)` rather than just `Fined`. The log is
-the tracker narrating itself, which is what you want when the question is whether
-it is seeing the game at all, and is exactly what the overview leaves out.
-
-![The tracker's own view of the same drive](assets/current-job.png)
 
 Double clicking a delivery, or pressing Enter on it, opens its own card. It starts
 with why it got the verdict it did, then every figure the tracker kept.

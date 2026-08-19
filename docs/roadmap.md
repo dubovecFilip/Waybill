@@ -367,8 +367,9 @@ rather than only tested.
 - Which market a job came from, and whether the trailer was the driver's own
 - Driving between jobs kept as well, counted apart from the deliveries and drawn
   in a quieter line, so the map fills in without the totals being flattered
-- An overview the window opens on, which is the only page that answers what is
-  going on rather than a question the reader has to arrive with
+- One page for the drive in progress, which is the only one that answers what is
+  going on rather than a question the reader has to arrive with, and which turns
+  the map to lie along the panel so a route running north to south still fills it
 - A delivery's route drawn the way it was driven rather than all at once, which
   is route replay from Phase 3 in the only form the data supports: from above,
   along the line, at the pace the drive actually went

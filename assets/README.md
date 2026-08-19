@@ -4,8 +4,7 @@
 |---|---|
 | `logo.png` | Full resolution logo (700x700). Source for the application icon. |
 | `logo.psd` | Layered source file for editing the logo. |
-| `overview.png` | The page the window opens on, during a delivery. |
-| `current-job.png` | The tracker's own view of the same drive, log and all. |
+| `current-job.png` | The page the window opens on, waiting for a game. |
 | `deliveries.png` | The delivery history, used at the top of the README. |
 | `delivery-card.png` | One delivery on its own card. |
 | `delivery-route.png` | The same card with the route, the height profile and the timeline slid out. |
@@ -34,12 +33,11 @@ moving one around the README does not leave the name lying.
 They are captured from a real database rather than staged, which is why the
 figures in them are ordinary rather than tidy.
 
-`overview.png` and `current-job.png` are the two exceptions to being taken by the
-script, because they are the two pages that have nothing to show unless a delivery
-is actually running. Both were captured by hand during one, on the way from
-Stockton to Cedar City, at whatever size the window happened to be and scaled down
-to match the others. Faking them with the game closed would have got two pages
-saying "waiting for the game" across the part that matters.
+`current-job.png` shows the page with no game running, which is half of what it
+does: the two launch buttons, the log, and an empty map. The other half, a
+delivery actually under way, wants a delivery actually under way, so it gets
+photographed the next time there is one. Faking it with the game closed is not
+worth the picture.
 
 There is no shot of the route drawing itself. It is a couple of seconds of
 movement, and a still frame of it is a picture of half a route, which reads as a
