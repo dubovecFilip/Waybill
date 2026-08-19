@@ -128,6 +128,26 @@ public class GameRoutes {
 
 /// <summary>One route to draw. Carries its delivery so the map can say which one
 /// was clicked without the caller having to match coordinates back to a row.</summary>
+/// <summary>
+/// One recorded moment of a drive, for the elevation profile: when, how high the
+/// game had the truck, and how fast it was going.
+///
+/// Height is the game's own vertical and is never reported as metres. Measured
+/// across this history it is not a scaled version of the real thing: the drop at
+/// Winslow and the drop at Tucson sit at the same height in the game while the
+/// real places are 1500 m and 728 m apart in elevation, and the ratio between the
+/// two runs from under one to over thirty-six across the cities driven to. It is
+/// the same answer the map gives horizontally, for the same reason.
+/// </summary>
+public readonly struct HeightPoint {
+    public readonly long AtMs;
+    public readonly float Y, SpeedKmh;
+
+    public HeightPoint(long atMs, float y, float speedKmh) {
+        AtMs = atMs; Y = y; SpeedKmh = speedKmh;
+    }
+}
+
 public class RouteLayer {
     public long Id;
     public List<RoutePoint> Points = new();

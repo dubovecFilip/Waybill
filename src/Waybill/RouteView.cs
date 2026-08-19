@@ -440,6 +440,11 @@ public class RouteView : Control {
         return best;
     }
 
+    /// <summary>Which of the eight colours a speed is drawn in. Public so the
+    /// height profile bands the same speeds the same way and the two drawings of
+    /// one drive agree with each other.</summary>
+    public static int SpeedBand(float kmh) => Band(kmh);
+
     private static int Band(float kmh) => Math.Clamp((int)(kmh / 15f), 0, Ramp.Length - 1);
 
     protected override void OnPaint(PaintEventArgs e) {

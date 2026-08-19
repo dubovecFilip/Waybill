@@ -566,6 +566,46 @@ public class DeliveryStore : IDisposable {
         }
     }
 
+    /// <summary>
+    /// The height of one delivery over time, from the load going on to the drop.
+    ///
+    /// Read separately from the route rather than carried on every route point,
+    /// because the map holds every drive of a game at once and one more float on
+    /// each of a hundred thousand points is a lot of memory for a strip that is
+    /// only ever drawn for the one delivery being looked at.
+    ///
+    /// It begins where the delivery's line begins, so the profile and the route are
+    /// the same journey: the run out to the trailer is not part of either.
+    /// </summary>
+    public List<HeightPoint> HeightsFor(long deliveryId) {
+        lock (_gate) {
+            var from = 0L;
+            using (var cmd = _conn.CreateCommand()) {
+                cmd.CommandText = """
+                    SELECT MAX(at_ms) FROM events
+                    WHERE delivery_id = $id AND event_type IN ('trailer_coupled', 'cargo_loaded');
+                    """;
+                cmd.Parameters.AddWithValue("$id", deliveryId);
+                if (cmd.ExecuteScalar() is long ms) from = ms;
+            }
+
+            var points = new List<HeightPoint>();
+            using (var cmd = _conn.CreateCommand()) {
+                cmd.CommandText = """
+                    SELECT at_ms, y, speed_kmh FROM trip_points
+                    WHERE delivery_id = $id AND at_ms >= $from ORDER BY at_ms;
+                    """;
+                cmd.Parameters.AddWithValue("$id", deliveryId);
+                cmd.Parameters.AddWithValue("$from", from);
+                using var r = cmd.ExecuteReader();
+                while (r.Read()) {
+                    points.Add(new HeightPoint(r.GetInt64(0), (float)r.GetDouble(1), (float)r.GetDouble(2)));
+                }
+            }
+            return points;
+        }
+    }
+
     /// <summary>The event timeline of one delivery, oldest first.</summary>
     public List<TimelineRow> TimelineRows(long deliveryId) {
         lock (_gate) {

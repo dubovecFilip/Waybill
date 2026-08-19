@@ -86,6 +86,7 @@ public partial class MainForm : Form {
     /// <summary>The timeline column, which lives at width zero until asked for.</summary>
     private Panel? _detailSide;
     private RouteView? _cardMap;
+    private HeightView? _cardProfile;
     private System.Windows.Forms.Timer? _detailSlide;
 
     private List<DeliveryRow> _rows = new();
@@ -1832,8 +1833,9 @@ public partial class MainForm : Form {
                 if (target > 0) {
                     UseDarkScrollbars(side);
                     // The card is rebuilt whenever another delivery is opened, so
-                    // the map held here can be one that no longer exists.
+                    // the drawings held here can be ones that no longer exist.
                     if (_cardMap is { IsDisposed: false } shown) shown.Replay();
+                    if (_cardProfile is { IsDisposed: false } beside) beside.Replay();
                 }
             }
         };
@@ -1906,7 +1908,7 @@ public partial class MainForm : Form {
     /// </summary>
     private Control RoutePanel(DeliveryDetail d, Units u) {
         var box = new Panel {
-            Dock = DockStyle.Top, Height = 300, BackColor = Line,
+            Dock = DockStyle.Top, Height = 396, BackColor = Line,
             Padding = new Padding(0, 0, 0, 1),
         };
 
@@ -1922,9 +1924,24 @@ public partial class MainForm : Form {
         // Held here rather than started here, because the panel is built while it is
         // still slid shut. A replay nobody can see is a replay wasted.
         _cardMap = map;
-        if (_detailSide is { Width: > 0 }) map.HandleCreated += (_, _) => map.BeginInvoke(() => map.Replay());
+
+        // The same drive from the side, under the map. Both are drawn out together
+        // and at the same rate, so at any moment of the replay the head of the line
+        // and the head of the profile are the same second of the drive.
+        var profile = new HeightView {
+            Dock = DockStyle.Bottom, Height = 96,
+            FormatSpeed = kmh => u.FormatSpeed(kmh),
+            EmptyText = Strings.T("height.none"),
+            Hint = Strings.T("height.hint"),
+        };
+        profile.Show(_store.HeightsFor(d.Id));
+        _cardProfile = profile;
+
+        var divider = new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = Line };
 
         box.Controls.Add(map);
+        box.Controls.Add(divider);
+        box.Controls.Add(profile);
         MapButtons(box, map, () => BigMap(d, u), replay: true);
         return box;
     }
@@ -1969,7 +1986,12 @@ public partial class MainForm : Form {
         layers.Click += (_, _) => LayerMenu(map).Show(layers, new Point(0, layers.Height));
         // Only where one delivery is singled out: there is nothing to replay on the
         // map of everything, where no drive is more the subject than any other.
-        if (replay) Glyph("▶", Strings.T("map.replay"), () => map.Replay());
+        if (replay) {
+            Glyph("▶", Strings.T("map.replay"), () => {
+                map.Replay();
+                if (_cardProfile is { IsDisposed: false } beside) beside.Replay();
+            });
+        }
         Glyph("⟲", Strings.T("map.fit"), map.Fit);
         if (expand is not null) Glyph("⤢", Strings.T("map.expand"), expand);
 
