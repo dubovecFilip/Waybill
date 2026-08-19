@@ -63,10 +63,10 @@ public partial class MainForm : Form {
     private readonly Label _status = new();
     private readonly Label _jobLine = new();
     private readonly Label _jobDetail = new();
-    private Panel? _progressRow;
     private readonly Panel _progressTrack = new();
     private readonly Panel _progressFill = new();
     private readonly Panel _progressLead = new();
+    private readonly Panel _progressOver = new();
     private readonly Label _progressText = new();
     private readonly ListBox _log = new();
 
@@ -80,7 +80,7 @@ public partial class MainForm : Form {
 
     /// <summary>Which sidebar page is showing. Kept across a language change, which
     /// rebuilds every control from scratch.</summary>
-    private string _page = "home";
+    private string _page = "live";
     private readonly Panel _content = new();
     private readonly Panel _detailPage = new();
     /// <summary>The timeline column, which lives at width zero until asked for.</summary>
@@ -145,7 +145,7 @@ public partial class MainForm : Form {
         };
 
         var timer = new System.Windows.Forms.Timer { Interval = 500 };
-        timer.Tick += (_, _) => RefreshLive();
+        timer.Tick += (_, _) => RefreshJob();
         timer.Start();
     }
 
@@ -190,7 +190,6 @@ public partial class MainForm : Form {
         bar.Controls.Add(NavButton("map", Strings.T("tab.map")));
         bar.Controls.Add(NavButton("deliveries", Strings.T("tab.deliveries")));
         bar.Controls.Add(NavButton("live", Strings.T("tab.live")));
-        bar.Controls.Add(NavButton("home", Strings.T("tab.home")));
         bar.Controls.Add(edge);
         return bar;
     }
@@ -240,9 +239,7 @@ public partial class MainForm : Form {
         _content.BackColor = Canvas;
         _content.Controls.Clear();
 
-        var home = BuildHomePage();
-        home.Tag = "home";
-        var live = BuildLivePage();
+        var live = BuildJobPage();
         live.Tag = "live";
         _detailPage.Dock = DockStyle.Fill;
         _detailPage.BackColor = Canvas;
@@ -257,7 +254,6 @@ public partial class MainForm : Form {
         var stats = BuildStatsPage();
         stats.Tag = "stats";
 
-        _content.Controls.Add(home);
         _content.Controls.Add(live);
         _content.Controls.Add(deliveries);
         _content.Controls.Add(map);
@@ -747,96 +743,7 @@ public partial class MainForm : Form {
     private Units CurrentUnits() =>
         Units.For(_settings.Units, _engine?.ActiveState?.Game ?? _store.MostRecentGame());
 
-    // ---------- live panel ----------
-
-    /// <summary>What the engine is doing right now, as a page of its own rather than a
-    /// strip above everything else. It only matters while driving, and as a permanent
-    /// header it took height from the delivery list for the sake of two empty lines
-    /// whenever no game was running.</summary>
-    private Control BuildLivePage() {
-        var page = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16), BackColor = Canvas };
-        var panel = new Panel { Dock = DockStyle.Fill };
-        panel.BackColor = Surface;
-        panel.Padding = new Padding(24, 20, 24, 16);
-
-        _status.Text = Strings.T("live.starting");
-        _status.Dock = DockStyle.Top;
-        _status.Height = 20;
-        _status.ForeColor = Muted;
-        _status.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
-
-        // The route is the one thing worth reading from across the room.
-        _jobLine.Dock = DockStyle.Top;
-        _jobLine.Height = 32;
-        _jobLine.ForeColor = Ink;
-        _jobLine.Font = new Font("Segoe UI", 15F, FontStyle.Bold);
-
-        _jobDetail.Dock = DockStyle.Top;
-        _jobDetail.Height = 22;
-        _jobDetail.ForeColor = Muted;
-
-        // A drawn bar rather than a ProgressBar: the stock one is a thick block with
-        // a fixed colour and no room for the figure that belongs beside it.
-        // Hidden until there is a job: an empty track sitting there permanently reads
-        // as a broken widget rather than as nothing to report.
-        var progressRow = new Panel { Dock = DockStyle.Top, Height = 22, Padding = new Padding(0, 6, 0, 0), Visible = false };
-        _progressRow = progressRow;
-        _progressText.Dock = DockStyle.Right;
-        // Wide enough for the longest thing it says, which is not the figure but the
-        // run out to the trailer written after it. At 130 the line read "99.3 / 1033
-        // km  ·  10 %" and the "(+12.2 to the load)" fell off the end of the window,
-        // so the one delivery where the split matters was the one that hid it.
-        _progressText.Width = 300;
-        _progressText.TextAlign = ContentAlignment.MiddleRight;
-        _progressText.ForeColor = Muted;
-        _progressText.Font = new Font("Segoe UI", 8.5F);
-        // And if it ever still does not fit, it says so rather than going quiet.
-        _progressText.AutoEllipsis = true;
-
-        _progressTrack.Dock = DockStyle.Fill;
-        _progressTrack.Height = 8;
-        _progressTrack.BackColor = Line;
-        _progressTrack.Padding = new Padding(0);
-        _progressTrack.Margin = new Padding(0);
-
-        _progressFill.Dock = DockStyle.Left;
-        _progressFill.Width = 0;
-        _progressFill.BackColor = Accent;
-        // The run out to the trailer, in the quieter colour, ahead of the loaded
-        // stretch. Docked left and added last so it sits leftmost, which is where it
-        // happened: the bar then reads as the whole job from the moment it was taken,
-        // with the commute told apart from the consignment moving.
-        _progressLead.Dock = DockStyle.Left;
-        _progressLead.Width = 0;
-        _progressLead.BackColor = Muted;
-        _progressTrack.Controls.Add(_progressFill);
-        _progressTrack.Controls.Add(_progressLead);
-
-        progressRow.Controls.Add(_progressTrack);
-        progressRow.Controls.Add(_progressText);
-
-        var logBox = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 10, 0, 8) };
-        _log.Dock = DockStyle.Fill;
-        _log.BorderStyle = BorderStyle.None;
-        _log.BackColor = Surface;
-        _log.ForeColor = Muted;
-        _log.Font = new Font("Consolas", 8.5F);
-        _log.IntegralHeight = false;
-        // Nothing follows from picking a log line, and the system highlight it draws
-        // is a bright blue bar that belongs to no part of this window.
-        _log.SelectionMode = SelectionMode.None;
-        logBox.Controls.Add(_log);
-
-        // Docked children stack in reverse order of adding, so add bottom-up.
-        panel.Controls.Add(logBox);
-        panel.Controls.Add(progressRow);
-        panel.Controls.Add(_jobDetail);
-        panel.Controls.Add(_jobLine);
-        panel.Controls.Add(_status);
-
-        page.Controls.Add(panel);
-        return page;
-    }
+    // ---------- the engine ----------
 
     private void StartEngine() {
         _engine = new TrackerEngine(_store);
@@ -905,79 +812,6 @@ public partial class MainForm : Form {
     private void AddLog(string text) {
         _log.Items.Insert(0, $"{DateTime.Now:HH:mm:ss}  {text}");
         while (_log.Items.Count > 200) _log.Items.RemoveAt(_log.Items.Count - 1);
-    }
-
-    private void RefreshLive() {
-        if (_engine == null) return;
-        RefreshHome();
-
-        var job = _engine.ActiveJob;
-        if (job == null) {
-            _status.Text = (_engine.Connected
-                ? $"{Strings.T("live.waitingJob")}   ({Strings.T("live.ticks")}: {_engine.TickCount})"
-                : Strings.T("live.waitingGame")).ToUpperInvariant();
-            _jobLine.Text = Strings.T("live.noJob");
-            _jobLine.ForeColor = Muted;
-            _jobDetail.Text = "";
-            _progressText.Text = "";
-            _progressFill.Width = 0;
-            _progressLead.Width = 0;
-            if (_progressRow != null) _progressRow.Visible = false;
-            // Between jobs the profile says so; with the game closed it says nothing
-            // at all, rather than leaving Waybill sitting there all evening.
-            _discord?.Update(_engine.Connected
-                ? new DiscordPresence.Activity { Details = Strings.T("discord.idle"), LargeImage = "waybill", LargeText = "Waybill" }
-                : null);
-            return;
-        }
-
-        var state = _engine.ActiveState;
-        var driven = state?.DistanceKm ?? 0;
-        var planned = job.PlannedDistanceKm;
-        var u = CurrentUnits();
-
-        _status.Text = $"{Strings.T("live.jobRunning")}   ({Strings.T("live.ticks")}: {_engine.TickCount}, {Strings.T("live.deliveriesThisRun")}: {_engine.DeliveriesThisRun})".ToUpperInvariant();
-        _jobLine.Text = $"{job.SourceCity}  →  {job.DestinationCity}";
-        _jobLine.ForeColor = Ink;
-        _jobDetail.Text = $"{job.Cargo} · {u.MassTonnes(job.CargoMassKg):0.0} {u.MassUnit}"
-                        + $"   ·   {Strings.T("live.reward")} {u.FormatMoney(job.Income)}";
-
-        // Planned distance is the game's own route length, in the same simulated km
-        // the odometer counts, so this genuinely tracks progress toward the drop-off.
-        // Progress is the loaded leg against the plan, because that is what the plan
-        // describes: measured across this history the planned figure agrees with the
-        // loaded distance to about a percent, while the total ran as much as twelve
-        // percent over it on a contract that started far from its trailer.
-        var toLoad = state?.DistanceToLoadKm ?? 0;
-        var loaded = Math.Max(0, driven - toLoad);
-        var ratio = planned > 0 ? Math.Clamp(loaded / planned, 0, 1) : 0;
-        // The track spans everything this job will cover, so the run-up takes its own
-        // share of the width instead of pushing the loaded stretch off the scale.
-        var whole = planned + toLoad;
-        var leadShare = whole > 0 ? Math.Clamp(toLoad / whole, 0, 1) : 0;
-        if (_progressRow != null) _progressRow.Visible = true;
-        var track = _progressTrack.ClientSize.Width;
-        _progressLead.Width = (int)(track * leadShare);
-        _progressFill.Width = (int)(track * (1 - leadShare) * ratio);
-        _progressText.Text = $"{u.Distance(loaded):0.0} / {u.Distance(planned):0} {u.DistanceUnit}   ·   {ratio * 100:0} %"
-            + (toLoad > 0.05 ? $"   (+{u.Distance(toLoad):0.0} {Strings.T("live.toLoad")})" : "");
-
-        // The same three numbers the page shows, in one line each for Discord. The
-        // start time is sent raw so Discord runs the elapsed counter itself, which
-        // keeps ticking between the updates it only accepts every 15 seconds.
-        var game = state?.Game ?? "";
-        _discord?.Update(new DiscordPresence.Activity {
-            Details = $"{job.SourceCity} → {job.DestinationCity}",
-            State = planned > 0
-                ? $"{job.Cargo} · {u.Distance(loaded):0} / {u.Distance(planned):0} {u.DistanceUnit} ({ratio * 100:0} %)"
-                : job.Cargo,
-            StartUnix = state != null ? state.StartedAtMs / 1000 : null,
-            LargeImage = game.ToLowerInvariant() is "ats" or "ets2" ? game.ToLowerInvariant() : "waybill",
-            LargeText = game == "Ats" ? GameLauncher.DisplayName(SimGame.Ats)
-                      : game == "Ets2" ? GameLauncher.DisplayName(SimGame.Ets2) : "Waybill",
-            SmallImage = "waybill",
-            SmallText = "Waybill",
-        });
     }
 
     /// <summary>
@@ -2241,8 +2075,10 @@ public partial class MainForm : Form {
         Entry((g, r) => {
             using var lead = new SolidBrush(Muted);
             using var done = new SolidBrush(Accent);
-            g.FillRectangle(lead, 8, r.Height / 2 - 4, 9, 8);
-            g.FillRectangle(done, 17, r.Height / 2 - 4, 21, 8);
+            using var over = new SolidBrush(Color.FromArgb(150, 112, 52));
+            g.FillRectangle(lead, 8, r.Height / 2 - 4, 7, 8);
+            g.FillRectangle(done, 15, r.Height / 2 - 4, 16, 8);
+            g.FillRectangle(over, 31, r.Height / 2 - 4, 7, 8);
         }, Strings.T("legend.progress"), Strings.T("legend.progressWhy"));
 
         // Docked children stack in reverse of adding, so the list goes in backwards.
@@ -2800,7 +2636,6 @@ public partial class MainForm : Form {
         _routes.Clear();
         ApplyFilter();
         ReloadMapPage();
-        FillHomeRecent();
     }
 
     /// <summary>

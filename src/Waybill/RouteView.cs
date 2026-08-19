@@ -81,7 +81,7 @@ public class RouteView : Control {
     private bool _fitted;
 
     private Bitmap? _under;
-    private (int W, int H, float Scale, float CX, float CY, long Lit, bool History, bool Freeroam) _underKey;
+    private (int W, int H, float Scale, float CX, float CY, float Spin, long Lit, bool History, bool Freeroam) _underKey;
 
     private Point _dragFrom;
     private bool _dragging;
@@ -145,6 +145,25 @@ public class RouteView : Control {
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool ShowMarks { get; set; } = true;
+
+    /// <summary>
+    /// Turns the drive to lie along the longer side of whatever it is drawn in.
+    ///
+    /// For a panel that is much wider than it is tall, which a route running north
+    /// to south leaves nine tenths empty while drawing itself as a thin thread.
+    /// There is no north here to lose: this is the game's own space and it was never
+    /// oriented to anything, so turning it costs nothing a compass would notice.
+    /// The shape, the lengths and the angles within the route are all untouched.
+    ///
+    /// Off everywhere else. On the history map there is no one drive to turn, and on
+    /// a delivery's card the route sits beside a profile of the same drive; turning
+    /// one and not the other would be worse than leaving both alone.
+    /// </summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool Straighten { get; set; }
+
+    /// <summary>How far the drawing is turned, in radians.</summary>
+    private float _spin;
 
     /// <summary>Raised when a route is clicked with none singled out, which is the
     /// history map's way of opening a delivery.</summary>
@@ -299,6 +318,55 @@ public class RouteView : Control {
 
     private static List<List<RoutePoint>> Split(List<RoutePoint> pts) => RouteGeometry.Split(pts);
 
+    /// <summary>
+    /// The angle that lays a drive along the longer side of the control.
+    ///
+    /// The drive's own long axis is the first principal component of its points,
+    /// which for a route is the direction it broadly went; turning by the negative
+    /// of that puts it flat, and a further quarter turn stands it up when the
+    /// control is taller than it is wide.
+    ///
+    /// Two guards, both against the same thing. A drive only a minute old is a
+    /// squiggle in a car park with no long axis at all, so nothing is turned until
+    /// there is enough of it; and once turned, the angle is left alone unless the
+    /// new one differs by a good margin, or a live route would swing about under the
+    /// driver every time it grew.
+    /// </summary>
+    private float Spin(List<RoutePoint> points) {
+        if (points.Count < 60) return _spin;
+
+        double mx = 0, mz = 0;
+        foreach (var p in points) { mx += p.X; mz += p.Z; }
+        mx /= points.Count;
+        mz /= points.Count;
+
+        double xx = 0, zz = 0, xz = 0;
+        foreach (var p in points) {
+            var dx = p.X - mx;
+            var dz = p.Z - mz;
+            xx += dx * dx; zz += dz * dz; xz += dx * dz;
+        }
+        // A drive that went nowhere in particular has no axis worth respecting.
+        if (Math.Abs(xx - zz) < 1e-6 && Math.Abs(xz) < 1e-6) return _spin;
+
+        var axis = 0.5 * Math.Atan2(2 * xz, xx - zz);
+        var wanted = (float)-axis;
+        if (Height > Width) wanted += MathF.PI / 2;
+
+        // Angles half a turn apart draw the same picture upside down, so the
+        // comparison has to be made modulo half a turn or a flip reads as a swing.
+        var diff = MathF.Abs(Wrap(wanted - _spin));
+        return diff > 0.26f ? wanted : _spin;
+    }
+
+    /// <summary>An angle folded into plus or minus a quarter turn, which is as far
+    /// apart as two orientations of the same line can be.</summary>
+    private static float Wrap(float radians) {
+        while (radians > MathF.PI / 2) radians -= MathF.PI;
+        while (radians < -MathF.PI / 2) radians += MathF.PI;
+        return radians;
+    }
+
     public void Fit() {
         _zoom = 1f;
         _fitted = true;
@@ -312,13 +380,19 @@ public class RouteView : Control {
         var alsoSecondary = _focus is null && ShowFreeroam ? _secondary : new List<List<RoutePoint>>();
         if (scope.Count == 0 && alsoSecondary.Count == 0) { _fitScale = 1f; _centre = PointF.Empty; return; }
 
+        var points = scope.SelectMany(d => d.Runs).Concat(alsoSecondary).SelectMany(r => r).ToList();
+        _spin = Straighten ? Spin(points) : 0;
+
         float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
-        foreach (var run in scope.SelectMany(d => d.Runs).Concat(alsoSecondary))
-            foreach (var p in run) {
-                minX = Math.Min(minX, p.X); maxX = Math.Max(maxX, p.X);
-                minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z);
-            }
-        _centre = new PointF((minX + maxX) / 2, (minZ + maxZ) / 2);
+        foreach (var p in points) {
+            var (x, z) = Turn(p.X, p.Z, _spin);
+            minX = Math.Min(minX, x); maxX = Math.Max(maxX, x);
+            minZ = Math.Min(minZ, z); maxZ = Math.Max(maxZ, z);
+        }
+        // The centre is held unturned, since everything is turned about it on the way
+        // to the screen; turning it as well would turn the drawing twice.
+        var mid = Turn((minX + maxX) / 2, (minZ + maxZ) / 2, -_spin);
+        _centre = new PointF(mid.X, mid.Z);
 
         var w = Math.Max(maxX - minX, 1f);
         var h = Math.Max(maxZ - minZ, 1f);
@@ -335,13 +409,22 @@ public class RouteView : Control {
     /// which on a Control already means resizing one.</summary>
     private float PerMetre => _fitScale * _zoom;
 
-    private PointF ToScreen(float x, float z) => new(
-        (x - _centre.X) * PerMetre + Width / 2f,
-        (z - _centre.Y) * PerMetre + Height / 2f);
+    private PointF ToScreen(float x, float z) {
+        var (dx, dz) = Turn(x - _centre.X, z - _centre.Y, _spin);
+        return new PointF(dx * PerMetre + Width / 2f, dz * PerMetre + Height / 2f);
+    }
 
-    private PointF ToWorld(float sx, float sy) => new(
-        (sx - Width / 2f) / PerMetre + _centre.X,
-        (sy - Height / 2f) / PerMetre + _centre.Y);
+    private PointF ToWorld(float sx, float sy) {
+        var (dx, dz) = Turn((sx - Width / 2f) / PerMetre, (sy - Height / 2f) / PerMetre, -_spin);
+        return new PointF(dx + _centre.X, dz + _centre.Y);
+    }
+
+    private static (float X, float Z) Turn(float x, float z, float by) {
+        if (by == 0) return (x, z);
+        var cos = MathF.Cos(by);
+        var sin = MathF.Sin(by);
+        return (x * cos - z * sin, x * sin + z * cos);
+    }
 
     private void Discard() { _under?.Dispose(); _under = null; }
 
@@ -543,7 +626,7 @@ public class RouteView : Control {
         // The switches belong in the key: turning a layer off changes what the cached
         // bitmap should hold, and without them the old one was kept and the toggle
         // did nothing until the view happened to move.
-        var key = (Width, Height, PerMetre, _centre.X, _centre.Y, _lit, ShowHistory, ShowFreeroam);
+        var key = (Width, Height, PerMetre, _centre.X, _centre.Y, _spin, _lit, ShowHistory, ShowFreeroam);
         if (_under is null || _underKey != key) {
             Discard();
             _underKey = key;
@@ -729,7 +812,15 @@ public class RouteView : Control {
             // Far enough out to clear the marker drawn at either end of the route,
             // which lands on a city dot whenever a drive starts or finishes there,
             // and swallowed the first letters of the name when it did.
-            var label = new RectangleF(at.X + 10, at.Y - size.Height / 2, size.Width, size.Height);
+            //
+            // On the other side where there is no room on this one. A route turned to
+            // fill the panel puts cities hard against both edges, and a name running
+            // off the right came out as "Salt Lak".
+            var right = at.X + 10 + size.Width <= Width - 2;
+            var label = new RectangleF(
+                right ? at.X + 10 : at.X - 10 - size.Width,
+                at.Y - size.Height / 2, size.Width, size.Height);
+            if (label.Left < 2) continue;
             // Cities seen in most places are drawn first, so where two labels collide
             // the one the driver knows better is the one that survives.
             if (placed.Any(p => p.IntersectsWith(label))) continue;
