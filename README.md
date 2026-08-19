@@ -419,19 +419,29 @@ the cargo, how far along the drive is, and a counter of how long it has been
 running. Between jobs it says so, and with the game closed it shows nothing at
 all.
 
-It talks to the Discord client on the same machine through its local pipe, so
-nothing leaves the computer and no account is involved. Discord not running
-simply means nothing is shown.
+There is nothing to set up. Waybill carries its own Discord application, so the
+presence works as soon as the switch is on, which it is by default. Discord not
+running simply means nothing is shown.
 
-Setting it up takes one value. Create an application at
-[discord.com/developers](https://discord.com/developers/applications), whose name
-is what appears above the presence, and paste its Application ID into *Settings →
-Discord → Application ID*. The ID is public by design and is not a password.
-Until it is filled in, nothing is sent anywhere.
+Waybill itself sends nothing to the internet: it hands the lines to the Discord
+client on the same machine through its local pipe, and Discord publishes them the
+way it publishes any game you are playing. Whether they reach anyone at all is
+Discord's own setting, *User Settings → Activity Privacy → Display current
+activity as a status message*, which governs every application including this
+one. Turning the switch off in *Settings → Discord* stops Waybill sending
+anything in the first place.
 
-Uploading three images to that application under *Rich Presence → Art Assets*,
-named `ets2`, `ats` and `waybill`, gets the icons as well. Without them the text
-still shows.
+*Settings → Discord → Application ID* is there for anyone who wants their own
+name and icons above the presence instead of Waybill's. Create an application at
+[discord.com/developers](https://discord.com/developers/applications), upload
+square images under *Rich Presence → Art Assets* keyed `ets2`, `ats` and
+`waybill`, and paste the Application ID in. Leaving it empty uses Waybill's own.
+The ID is public by design and is not a password; the secrets in that portal are
+the client secret and the bot token, and Waybill asks for neither.
+
+The application needs no verification. Discord's verification, with its team,
+terms of service and privacy policy, is for bots that want to join more than a
+hundred servers. Rich Presence is not a bot and is not affected by it.
 
 ## Command line
 

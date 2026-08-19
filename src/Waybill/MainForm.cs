@@ -424,9 +424,6 @@ public partial class MainForm : Form {
             _settings.DiscordPresence = !_settings.DiscordPresence;
             _settings.Save();
             show.Checked = _settings.DiscordPresence;
-            if (_settings.DiscordPresence && string.IsNullOrWhiteSpace(_settings.DiscordAppId)) {
-                AddLog(Strings.T("discord.needsAppId"));
-            }
             StartDiscord();
         };
         discord.DropDownItems.Add(show);
@@ -450,12 +447,11 @@ public partial class MainForm : Form {
         _discord = null;
 
         if (!_settings.DiscordPresence) return;
-        if (string.IsNullOrWhiteSpace(_settings.DiscordAppId)) {
-            AddLog(Strings.T("discord.needsAppId"));
-            return;
-        }
 
-        _discord = new DiscordPresence(_settings.DiscordAppId!);
+        // The driver's own application when there is one, Waybill's otherwise. There
+        // is always one, so turning the switch on is the whole of the setup.
+        var app = _settings.DiscordAppId is { Length: > 0 } own ? own : DiscordPresence.DefaultAppId;
+        _discord = new DiscordPresence(app);
         _discord.Message += m => BeginInvoke(() => AddLog(m));
         // Said up front, so the log shows the feature is on and trying rather than
         // saying nothing at all until something goes wrong.

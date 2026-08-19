@@ -18,6 +18,20 @@ namespace Waybill.Integrations;
 /// and 4 a pong.
 /// </summary>
 public sealed class DiscordPresence : IDisposable {
+    /// <summary>
+    /// The application Waybill shows itself as, unless the driver names another.
+    ///
+    /// Built in rather than asked for, the way every other program with Rich
+    /// Presence does it: the identifier is what tells Discord whose name and icons
+    /// to draw, and nobody should have to register a developer application to see
+    /// their own delivery on their own profile.
+    ///
+    /// Public by design and not a secret. It is readable in any client that uses
+    /// one; the secrets in the developer portal are the client secret and the bot
+    /// token, and this asks for neither.
+    /// </summary>
+    public const string DefaultAppId = "1538098713187323924";
+
     /// <summary>What to show. Everything is optional except the text lines, which
     /// Discord truncates past 128 characters anyway.</summary>
     public sealed class Activity {
