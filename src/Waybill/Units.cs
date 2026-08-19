@@ -11,7 +11,6 @@ public enum UnitSystem { Metric, Imperial }
 public class Units {
     private const double KmToMiles = 0.621371;
     private const double LitresToGallons = 0.264172; // US gallons, to match ATS
-    private const double KgToPounds = 2.20462;
     private const double TonnesToShortTons = 1.10231;
 
     /// <summary>
@@ -109,7 +108,6 @@ public class Units {
     public double Speed(double kmh) => Imp ? kmh * KmToMiles : kmh;
     public double Volume(double litres) => Imp ? litres * LitresToGallons : litres;
     public double MassTonnes(double kg) => Imp ? kg / 1000.0 * TonnesToShortTons : kg / 1000.0;
-    public double MassKg(double kg) => Imp ? kg * KgToPounds : kg;
 
     /// <summary>Fuel economy flips direction between systems: litres per 100 km gets
     /// worse as it grows, miles per gallon gets better, so it is a reciprocal

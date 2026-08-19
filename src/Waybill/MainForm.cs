@@ -1,7 +1,6 @@
 using System.Data;
 using System.Drawing.Drawing2D;
 using System.Diagnostics;
-using System.Windows.Forms;
 using Waybill.Integrations;
 using Waybill.Storage;
 using Waybill.Tracking;
@@ -2843,9 +2842,8 @@ public partial class MainForm : Form {
         };
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
-        var confirm = MessageBox.Show(this,
-            "Nahradi sa aktualna databaza zalohou.\nSucasna databaza sa najprv odlozi bokom.\n\nPokracovat?",
-            "Obnova zo zalohy", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+        var confirm = MessageBox.Show(this, Strings.T("msg.restoreConfirm"),
+            Strings.T("msg.restoreTitle"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
         if (confirm != DialogResult.Yes) return;
 
         try {
@@ -2856,11 +2854,14 @@ public partial class MainForm : Form {
             _store.Dispose();
 
             var safety = DeliveryStore.RestoreFromBackup(dlg.FileName);
-            MessageBox.Show(this, $"Databaza obnovena.\nPovodna odlozena sem:\n{safety}\n\nAplikacia sa restartuje.", "Obnova");
+            MessageBox.Show(this,
+                $"{Strings.T("msg.restoreDone")}\n{safety}\n\n{Strings.T("msg.restartingApp")}",
+                Strings.T("msg.restoreTitle"));
 
             Application.Restart();
         } catch (Exception ex) {
-            MessageBox.Show(this, "Obnova zlyhala, databaza ostala nezmenena:\n" + ex.Message, "Chyba", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, Strings.T("msg.restoreFailed") + "\n" + ex.Message,
+                Strings.T("msg.error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 }

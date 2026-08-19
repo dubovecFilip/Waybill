@@ -177,11 +177,7 @@ public static class Strings {
         ["flag.distance_inconsistent.why"] = "Tachometer a rýchlosť za herný čas vyšli príliš rozdielne.",
         ["flag.distance_mismatch"] = "Iná vzdialenosť ako hlási hra",
         ["flag.distance_mismatch.why"] = "Nameraná vzdialenosť sedí s tou, ktorú hra ukázala pri doručení, len voľne.",
-        ["button.exportCsv"] = "Export CSV",
-        ["button.exportJson"] = "Export JSON",
         ["button.backup"] = "Zálohovať",
-        ["button.restore"] = "Obnoviť zo zálohy",
-        ["timeline.label"] = "Časová os vybranej zásielky:",
 
         // live panel
         ["live.starting"] = "Spúšťam...",
@@ -544,11 +540,7 @@ public static class Strings {
         ["flag.distance_inconsistent.why"] = "The odometer and speed over game time came out too far apart.",
         ["flag.distance_mismatch"] = "Different from the game's own figure",
         ["flag.distance_mismatch.why"] = "The measured distance only loosely matches what the game reported on arrival.",
-        ["button.exportCsv"] = "Export CSV",
-        ["button.exportJson"] = "Export JSON",
         ["button.backup"] = "Back up",
-        ["button.restore"] = "Restore backup",
-        ["timeline.label"] = "Timeline of the selected delivery:",
 
         ["live.starting"] = "Starting...",
         ["live.waitingGame"] = "Waiting for the game...",

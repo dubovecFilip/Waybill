@@ -1,5 +1,4 @@
 using Newtonsoft.Json;
-using SCSSdkClient;
 using SCSSdkClient.Object;
 using System.Linq;
 using System.Runtime.InteropServices;

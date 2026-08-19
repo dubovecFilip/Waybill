@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.IO.Compression;
-using System.Linq;
 using Microsoft.Win32;
 
 namespace Waybill;

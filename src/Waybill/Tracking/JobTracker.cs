@@ -1,5 +1,4 @@
-﻿using System.Linq;
-
+﻿
 namespace Waybill.Tracking;
 
 public class TrackerConfig {
@@ -26,8 +25,6 @@ public class TrackerConfig {
     // Same reasoning for fines. One is a moment of inattention on a long run, not a
     // way of driving, so it takes a handful of them to say anything.
     public int StyleFinesMax = 3;
-    // A job shorter than this is almost certainly a bug or an abuse attempt.
-    public double MinPlausibleDistanceKm = 0.5;
     // The odometer counts simulated km at the game's compressed time rate, so at
     // highway speed a single ~1s poll legitimately advances it by ~0.4-0.7 km.
     // This cap is set well above that: it only catches gross manipulation, not
@@ -1153,6 +1150,7 @@ public class JobTracker {
         var flags = new List<string>();
 
         if (record.Outcome == "unresolved") flags.Add("no_completion_event");
+        // A job shorter than this is almost certainly a bug or an abuse attempt.
         if (record.DistanceKm < 0.5) flags.Add("distance_too_short");
 
         var teleports = record.Anomalies.Count(a => a.Code == "teleport");
