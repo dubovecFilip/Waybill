@@ -2017,6 +2017,12 @@ public partial class MainForm : Form {
         profile.Show(_store.HeightsFor(d.Id));
         _cardProfile = profile;
 
+        // Pointing at either drawing marks the same moment in the other. They agree
+        // by the clock rather than by counting points, since the profile averages its
+        // readings down to one a pixel and the map keeps every one of them.
+        map.Hovering += profile.MarkAt;
+        profile.Hovering += map.MarkAt;
+
         var divider = new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = Line };
 
         box.Controls.Add(map);

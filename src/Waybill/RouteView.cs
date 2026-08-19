@@ -150,6 +150,42 @@ public class RouteView : Control {
     /// history map's way of opening a delivery.</summary>
     public event Action<long>? RouteChosen;
 
+    /// <summary>
+    /// Which moment of the drive is under the pointer, as the time it happened, or
+    /// zero for none.
+    ///
+    /// The time rather than an index, because whatever is listening keeps its own
+    /// list of points: the height profile averages its readings down to one a pixel,
+    /// so index four hundred is not the same place in both. The clock is the one
+    /// thing both lists agree about.
+    /// </summary>
+    public event Action<long>? Hovering;
+
+    /// <summary>Marks the moment another view of this drive is pointing at. Sets no
+    /// hover of its own and raises nothing, or the two views would chase each
+    /// other.</summary>
+    public void MarkAt(long atMs) {
+        var was = _companion;
+        _companion = atMs <= 0 || _focus is not { } f ? -1 : NearestInTime(f.All, atMs);
+        if (_companion != was) Invalidate();
+    }
+
+    /// <summary>The reading closest to a moment, by binary search: a long haul holds
+    /// twenty thousand of them and this runs on every mouse move in the other
+    /// view.</summary>
+    private static int NearestInTime(List<RoutePoint> points, long atMs) {
+        if (points.Count == 0) return -1;
+        int low = 0, high = points.Count - 1;
+        while (low < high) {
+            var mid = (low + high) / 2;
+            if (points[mid].AtMs < atMs) low = mid + 1; else high = mid;
+        }
+        if (low > 0 && Math.Abs(points[low - 1].AtMs - atMs) < Math.Abs(points[low].AtMs - atMs)) low--;
+        return low;
+    }
+
+    private int _companion = -1;
+
     public RouteView() {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
                | ControlStyles.UserPaint | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
@@ -375,9 +411,19 @@ public class RouteView : Control {
             _lit = NearestRoute(e.Location);
         }
 
-        if (wasPoint != _hoverPoint || wasMark != _hoverMark) Invalidate();
+        if (wasPoint != _hoverPoint || wasMark != _hoverMark) { Invalidate(); SayHovering(); }
         // The lit route lives in the cached layer, so changing it has to throw it.
         if (wasLit != _lit) { Discard(); Invalidate(); }
+    }
+
+    /// <summary>Tells whoever is listening which moment is under the pointer: the
+    /// event's if one is, otherwise the position's, otherwise none.</summary>
+    private void SayHovering() {
+        if (Hovering is null) return;
+        var at = _hoverMark >= 0 && _hoverMark < _marks.Count ? _marks[_hoverMark].At.AtMs
+               : _hoverPoint >= 0 && _focus is { } f && _hoverPoint < f.All.Count ? f.All[_hoverPoint].AtMs
+               : 0;
+        Hovering(at);
     }
 
     protected override void OnMouseUp(MouseEventArgs e) {
@@ -390,7 +436,7 @@ public class RouteView : Control {
 
     protected override void OnMouseLeave(EventArgs e) {
         base.OnMouseLeave(e);
-        if (_hoverPoint >= 0 || _hoverMark >= 0) { _hoverPoint = _hoverMark = -1; Invalidate(); }
+        if (_hoverPoint >= 0 || _hoverMark >= 0) { _hoverPoint = _hoverMark = -1; Invalidate(); SayHovering(); }
         if (_lit != 0) { _lit = 0; Discard(); Invalidate(); }
     }
 
@@ -473,6 +519,7 @@ public class RouteView : Control {
         // of it, which it did wherever a drive passed through a city it named.
         if (ShowCities) DrawCities(g);
         if (ShowMarks) DrawMarks(g);
+        DrawCompanion(g);
         DrawReadout(g);
 
         if (Hint.Length > 0 && _hoverPoint < 0 && _hoverMark < 0 && _lit == 0) {
@@ -691,6 +738,21 @@ public class RouteView : Control {
             g.FillRectangle(halo, RectangleF.Inflate(label, 2, 0));
             g.DrawString(city.Name, font, text, label.Location);
         }
+    }
+
+    /// <summary>Where the profile beside this map is being pointed at. Drawn in the
+    /// accent with a halo, which is the same mark the replay's head wears, because it
+    /// means the same thing: this is the moment being looked at.</summary>
+    private void DrawCompanion(Graphics g) {
+        if (_companion < 0 || _focus is not { } f || _companion >= f.All.Count) return;
+        var p = f.All[_companion];
+        var at = ToScreen(p.X, p.Z);
+        using var glow = new SolidBrush(Color.FromArgb(70, Accent));
+        using var fill = new SolidBrush(Accent);
+        using var rim = new Pen(Backdrop, 1.4f);
+        g.FillEllipse(glow, at.X - 9, at.Y - 9, 18, 18);
+        g.FillEllipse(fill, at.X - 4, at.Y - 4, 8, 8);
+        g.DrawEllipse(rim, at.X - 4, at.Y - 4, 8, 8);
     }
 
     private void DrawReadout(Graphics g) {

@@ -282,6 +282,12 @@ the route is, and drawn out alongside it at the same rate. A route from above
 says where the drive went; it does not say why forty minutes of it were spent at
 fifty. The mountain says that.
 
+Pointing at either drawing marks the same moment in the other, so a climb on the
+profile can be found on the map and a bend on the map can be found on the
+profile. They agree by the clock rather than by counting points, since the
+profile averages its readings down to one a pixel while the map keeps every one
+of them.
+
 It reports no height in metres and no gradient, for the reason the map reports no
 distances: the game's vertical is not a scaled version of the real one either.
 The drop at Winslow sits at the same height in the game as the drop at Tucson

@@ -27,6 +27,7 @@ public class HeightView : Control {
     private static readonly Color Ink = Color.FromArgb(228, 233, 240);
     private static readonly Color Muted = Color.FromArgb(138, 148, 163);
     private static readonly Color Edge = Color.FromArgb(48, 54, 62);
+    private static readonly Color Accent = Color.FromArgb(232, 168, 74);
 
     private const float Pad = 10f;
 
@@ -44,6 +45,7 @@ public class HeightView : Control {
     private float _low, _high;
     private long _from, _span;
     private int _hover = -1;
+    private int _companion = -1;
 
     private double _sweep = 1;
     private System.Windows.Forms.Timer? _replay;
@@ -62,6 +64,29 @@ public class HeightView : Control {
     /// invites someone to read the numbers that are not there.</summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public string Hint { get; set; } = "";
+
+    /// <summary>Which moment of the drive is under the pointer, as the time it
+    /// happened, or zero for none. The time rather than an index, because the map
+    /// keeps every reading and this keeps one a pixel.</summary>
+    public event Action<long>? Hovering;
+
+    /// <summary>Marks the moment the map beside this profile is pointing at. Raises
+    /// nothing, or the two would chase each other.</summary>
+    public void MarkAt(long atMs) {
+        var was = _companion;
+        _companion = atMs <= 0 || _points.Count == 0 ? -1 : NearestInTime(atMs);
+        if (_companion != was) Invalidate();
+    }
+
+    private int NearestInTime(long atMs) {
+        int low = 0, high = _points.Count - 1;
+        while (low < high) {
+            var mid = (low + high) / 2;
+            if (_points[mid].AtMs < atMs) low = mid + 1; else high = mid;
+        }
+        if (low > 0 && Math.Abs(_points[low - 1].AtMs - atMs) < Math.Abs(_points[low].AtMs - atMs)) low--;
+        return low;
+    }
 
     public HeightView() {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
@@ -166,7 +191,9 @@ public class HeightView : Control {
         _hover = along is < 0 or > 1
             ? -1
             : Math.Clamp((int)Math.Round(along * (_points.Count - 1)), 0, _points.Count - 1);
-        if (_hover != was) Invalidate();
+        if (_hover == was) return;
+        Invalidate();
+        Hovering?.Invoke(_hover >= 0 ? _points[_hover].AtMs : 0);
     }
 
     protected override void OnMouseLeave(EventArgs e) {
@@ -174,6 +201,7 @@ public class HeightView : Control {
         if (_hover < 0) return;
         _hover = -1;
         Invalidate();
+        Hovering?.Invoke(0);
     }
 
     protected override void OnPaint(PaintEventArgs e) {
@@ -232,6 +260,19 @@ public class HeightView : Control {
             using var brush = new SolidBrush(Color.FromArgb(120, 138, 148, 163));
             var size = g.MeasureString(Hint, font);
             g.DrawString(Hint, font, brush, 8, Height - size.Height - 2);
+        }
+
+        // The moment the map is pointing at, in the accent it uses for the same
+        // thing. Under the pointer's own readout, since if both are on the same spot
+        // the one the driver is actually moving should be the one on top.
+        if (_companion >= 0 && _companion < reached) {
+            var at = At(_companion);
+            using var line = new Pen(Color.FromArgb(120, Accent));
+            g.DrawLine(line, at.X, plot.Top, at.X, plot.Bottom);
+            using var glow = new SolidBrush(Color.FromArgb(70, Accent));
+            using var fill = new SolidBrush(Accent);
+            g.FillEllipse(glow, at.X - 8, at.Y - 8, 16, 16);
+            g.FillEllipse(fill, at.X - 3.5f, at.Y - 3.5f, 7, 7);
         }
 
         if (_hover >= 0 && _hover < reached) Readout(g);
