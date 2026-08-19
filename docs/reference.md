@@ -4,8 +4,9 @@ The values that end up stored in the database, the recordings and the exports,
 what each one means, and whether it changes a verdict. The names are stable and
 are what to match on when reading the data from outside.
 
-Nothing here is a display string. The interface translates these into Slovak or
-English; the stored value is always the identifier below.
+Nothing here is a display string. The interface translates these into whichever
+of its languages is set; the stored value is always the identifier below, and it
+does not change with the language.
 
 ## Outcome
 

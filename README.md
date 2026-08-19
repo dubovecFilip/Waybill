@@ -91,7 +91,7 @@ Every state, flag and anomaly is listed with its meaning in
 * Shows the current delivery on Discord, over the local pipe, with no account
 * Imports history from TrucksBook
 * Stores in SQLite, exports to CSV and JSON, backs up and restores
-* Interface in English and Slovak
+* Interface in English, Slovak, Czech, German and Spanish
 
 ## Requirements
 
