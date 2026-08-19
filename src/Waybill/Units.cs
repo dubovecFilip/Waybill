@@ -32,9 +32,15 @@ public class Units {
             "imperial" => UnitSystem.Imperial,
             _ => isAts ? UnitSystem.Imperial : UnitSystem.Metric,
         };
-        // Currency follows the game, not the unit setting: an ATS delivery paid in
-        // dollars is still dollars even when the numbers are shown in kilometres.
-        return new Units(system, isAts ? "$" : "EUR");
+        // The symbol follows the system rather than the game, so a page shown in
+        // kilometres and litres is not also showing dollars. On "auto" that comes to
+        // the same thing, since auto gives ATS imperial and ETS2 metric anyway.
+        //
+        // It is a relabelling and not a conversion. Nothing here knows an exchange
+        // rate and nothing should invent one: the figure is the number the game paid,
+        // and forcing a system is a decision about how to read the logbook rather
+        // than a claim about what the money was.
+        return new Units(system, system == UnitSystem.Imperial ? "$" : "€");
     }
 
     private bool Imp => System == UnitSystem.Imperial;

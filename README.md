@@ -468,7 +468,14 @@ is what lets a rebuild update the history rather than having to delete it first.
 ## Units
 
 By default they follow the game. ATS uses imperial (mi, gal, mph, $) and ETS2
-metric (km, l, km/h, €). The *Units* menu forces one system for both.
+metric (km, l, km/h, €). The *Units* menu forces one system for both, and the
+currency symbol goes with it: a page shown in kilometres and litres is not also
+shown in dollars.
+
+That last part is a relabelling and not a conversion. Nothing here knows an
+exchange rate and nothing invents one; the figure is the number the game paid.
+Forcing a system is a decision about how to read the logbook, not a claim about
+what the money was.
 
 The database always stores metric and converts only for display. The history
 therefore does not depend on which setting was active during the drive, and
