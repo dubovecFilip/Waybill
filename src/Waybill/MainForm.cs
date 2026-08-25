@@ -1,4 +1,5 @@
 using System.Data;
+using System.Reflection;
 using System.Drawing.Drawing2D;
 using System.Diagnostics;
 using Waybill.Integrations;
@@ -166,13 +167,45 @@ public partial class MainForm : Form {
         var bar = new Panel { Dock = DockStyle.Left, Width = 176, BackColor = Surface, Padding = new Padding(12, 16, 12, 12) };
         var edge = new Panel { Dock = DockStyle.Right, Width = 1, BackColor = Line };
 
+        // Down in the corner, quiet, out of the way of everything and never more
+        // than a glance away. Which build somebody is running is the first thing
+        // worth knowing about any report of something being wrong, and asking them
+        // to find it is asking them to go looking through file properties.
+        var version = new Label {
+            Dock = DockStyle.Bottom, Height = 20, Text = AppVersion,
+            ForeColor = Color.FromArgb(96, 104, 116), BackColor = Surface,
+            Font = new Font("Segoe UI", 8F), TextAlign = ContentAlignment.MiddleLeft,
+        };
+
         // Added bottom-up so the first entry ends up on top.
+        bar.Controls.Add(version);
         bar.Controls.Add(NavButton("stats", Strings.T("tab.stats")));
         bar.Controls.Add(NavButton("map", Strings.T("tab.map")));
         bar.Controls.Add(NavButton("deliveries", Strings.T("tab.deliveries")));
         bar.Controls.Add(NavButton("live", Strings.T("tab.live")));
         bar.Controls.Add(edge);
         return bar;
+    }
+
+    /// <summary>
+    /// The build, as the project file spells it.
+    ///
+    /// Read from the assembly rather than written out here, so there is one place a
+    /// version is set and no chance of the window claiming a different one from the
+    /// executable it is. The informational version is the one that carries the
+    /// project's own string; anything a build server appends after a plus sign is
+    /// not something a driver needs to read.
+    /// </summary>
+    private static string AppVersion {
+        get {
+            var asm = typeof(MainForm).Assembly;
+            var said = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            if (said is { Length: > 0 }) {
+                var plus = said.IndexOf('+');
+                return "v" + (plus > 0 ? said[..plus] : said);
+            }
+            return asm.GetName().Version is { } v ? $"v{v.Major}.{v.Minor}.{v.Build}" : "";
+        }
     }
 
     private Button NavButton(string page, string label) {
