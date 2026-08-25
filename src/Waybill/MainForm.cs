@@ -60,6 +60,10 @@ public partial class MainForm : Form {
     private string _page = "live";
     private readonly Panel _content = new();
     private readonly Panel _detailPage = new();
+    /// <summary>Which delivery the card is showing, so the window can put it back
+    /// after being rebuilt. Changing the language rebuilds everything, and the card
+    /// was the one page that came back in the language it was built in.</summary>
+    private long? _detailId;
     /// <summary>The timeline column, which lives at width zero until asked for.</summary>
     private Panel? _detailSide;
     /// <summary>The handle down its left edge, hidden while the column is shut.</summary>
@@ -68,6 +72,9 @@ public partial class MainForm : Form {
     /// the rest of the session, so a driver who wants the log wide gets it wide on
     /// the next delivery too rather than pulling it out again each time.</summary>
     private int _timelineWidth = 480;
+    /// <summary>How tall the drawings are inside that column, the log taking the
+    /// rest. Kept the same way and for the same reason.</summary>
+    private int _routeHeight = 396;
     private RouteView? _cardMap;
     private HeightView? _cardProfile;
     private System.Windows.Forms.Timer? _detailSlide;
@@ -160,6 +167,10 @@ public partial class MainForm : Form {
 
         ReloadHistory();
         ReloadStats();
+        // The card is drawn once when a delivery is opened rather than by ShowPage,
+        // so a rebuilt window would show the page it was on with the old card still
+        // on it, in the language it was built in.
+        if (_page == "detail" && _detailId is { } open) ShowDetail(open);
         ShowPage(_page);
         UseDarkScrollbars(this);
     }
@@ -353,6 +364,11 @@ public partial class MainForm : Form {
         }
 
         var game = _mapGames[_mapGame.SelectedIndex];
+        // Same reasoning as the statistics: the page names the game it is showing, so
+        // a speed read off it is in that game's units. The distances beside a route
+        // come from its own row and were already right.
+        var shown = Units.For(_settings.Units, game);
+        map.FormatSpeed = kmh => shown.FormatSpeed(kmh);
         var routes = RoutesFor(game);
         map.Show(Layers(routes), 0, routes.Cities, null, routes.RunUps.Concat(_store.FreeroamRoutes(game)));
     }
@@ -1675,6 +1691,7 @@ public partial class MainForm : Form {
     private void ShowDetail(long id) {
         var d = _store.Detail(id);
         if (d == null) return;
+        _detailId = id;
         var u = Units.For(_settings.Units, d.Game);
 
         _detailPage.SuspendLayout();
@@ -1790,6 +1807,20 @@ public partial class MainForm : Form {
     /// which would leave the button saying the opposite of what the card is doing,
     /// and it may not eat the figures it sits beside.
     /// </summary>
+    /// <summary>How wide the log column is allowed to be: wide enough to be worth
+    /// opening, and never so wide that the figures beside it have nowhere to go.
+    /// The lower limit wins on a card too narrow for both, since a handle that has
+    /// been pushed off the edge cannot be pulled back.</summary>
+    private static int HeldWidth(int wanted, Control body) =>
+        Math.Clamp(wanted, 320, Math.Max(320, body.Width - 360));
+
+    /// <summary>The same for the drawings against the log under them. What the log
+    /// keeps is two entries and its heading: the point of pulling this down is to see
+    /// the map, and a column that insists on holding four rows of a list nobody is
+    /// reading gives away most of what a short window had to offer.</summary>
+    private static int HeldHeight(int wanted, Control side) =>
+        Math.Clamp(wanted, 200, Math.Max(200, side.Height - 120));
+
     private Control TimelineGrip(Panel side, Panel body) {
         var grip = new Panel {
             Dock = DockStyle.Right, Width = 5, BackColor = Canvas,
@@ -1823,8 +1854,7 @@ public partial class MainForm : Form {
         grip.MouseMove += (_, _) => {
             if (!pulling) return;
             // Leftwards is wider, which is the direction the column grows from.
-            var wanted = started + (from - Cursor.Position.X);
-            side.Width = Math.Clamp(wanted, 320, Math.Max(320, body.Width - 360));
+            side.Width = HeldWidth(started + (from - Cursor.Position.X), body);
         };
         grip.MouseUp += (_, _) => {
             if (!pulling) return;
@@ -1840,13 +1870,59 @@ public partial class MainForm : Form {
         return grip;
     }
 
+    /// <summary>
+    /// The handle across the column, between the drawings and the log.
+    ///
+    /// The column opens with the map and the profile above and the log below, and
+    /// which of them deserves the room is the same question as before, asked the
+    /// other way round. A drive with two events in it wants the map; a drive being
+    /// read event by event wants the list. Pulling this down gives the map the room
+    /// the log is not using.
+    /// </summary>
+    private Control RouteGrip(Panel side, Control drawings) {
+        var grip = new Panel {
+            Dock = DockStyle.Top, Height = 5, BackColor = Canvas, Cursor = Cursors.SizeNS,
+        };
+
+        grip.Paint += (_, e) => {
+            using var pen = new Pen(Line, 1f);
+            var mid = grip.Width / 2;
+            for (var x = mid - 14; x <= mid + 14; x += 4) e.Graphics.DrawLine(pen, x, 1, x, 3);
+        };
+
+        var pulling = false;
+        var from = 0;
+        var started = 0;
+
+        grip.MouseDown += (_, e) => {
+            if (e.Button != MouseButtons.Left) return;
+            pulling = true;
+            grip.Capture = true;
+            from = Cursor.Position.Y;
+            started = drawings.Height;
+        };
+        grip.MouseMove += (_, _) => {
+            if (!pulling) return;
+            drawings.Height = HeldHeight(started + (Cursor.Position.Y - from), side);
+        };
+        grip.MouseUp += (_, _) => {
+            if (!pulling) return;
+            pulling = false;
+            _routeHeight = drawings.Height;
+            if (_cardMap is { IsDisposed: false } shown) shown.Replay();
+            if (_cardProfile is { IsDisposed: false } beside) beside.Replay();
+        };
+
+        return grip;
+    }
+
     /// <summary>Slides the timeline in and out rather than showing or hiding it: the
     /// movement is what says where the panel came from, and a column that simply
     /// appears reads as the page having jumped.</summary>
     private void ToggleTimeline(Button button) {
         if (_detailSide is not { } side) return;
 
-        var target = side.Width > 0 ? 0 : _timelineWidth;
+        var target = side.Width > 0 ? 0 : HeldWidth(_timelineWidth, side.Parent ?? side);
         button.Text = Strings.T("detail.timelineOpen") + (target > 0 ? "   ▸" : "   ◂");
         // The handle appears with the column and goes with it, so a shut column
         // leaves no stray edge to grab at the side of the card.
@@ -2690,9 +2766,29 @@ public partial class MainForm : Form {
         // Added after the timeline so it docks outermost and takes its height off the
         // top, leaving the timeline the rest. The map stays put while the timeline
         // scrolls under it, which is what lets the two refer to each other.
+        var drawings = RoutePanel(d, u);
+        drawings.Height = _routeHeight;
         side.Controls.Add(timeline);
-        side.Controls.Add(RoutePanel(d, u));
+        // Between the two, so the drawings can be given more of the column and the
+        // log less, or the other way about.
+        side.Controls.Add(RouteGrip(side, drawings));
+        side.Controls.Add(drawings);
         _detailSide = side;
+
+        // Neither handle can be reached once the thing it moves has grown past the
+        // window, and a window can shrink under it: pulled wide on a full screen and
+        // then restored, the column filled the card and its handle was off the edge
+        // of it. So both are held inside what there is room for whenever the card
+        // changes size, not only while they are being pulled.
+        body.Resize += (_, _) => {
+            if (side.Width > 0) side.Width = HeldWidth(side.Width, body);
+            // Measured against what was asked for rather than against what it is now.
+            // A resize passes through sizes nobody chose, and clamping the current
+            // height at each of them ratcheted the drawings down to the floor and
+            // left them there. Asked for 396 and given room for 300, it takes 300;
+            // given the room back, it takes 396 again.
+            if (side.Height > 240) drawings.Height = HeldHeight(_routeHeight, side);
+        };
 
         body.Controls.Add(info);
         body.Controls.Add(notes);
@@ -2888,7 +2984,11 @@ public partial class MainForm : Form {
         // The same length of time immediately before this one, so a figure can say
         // what it did as well as what it is. There is no before for all of history.
         var before = slice.Previous is { } earlier ? _store.GetStats(earlier) : null;
-        var u = CurrentUnits();
+        // The units of the game these figures are about, not of the game last played.
+        // With the switch set to one game and the units following the game, a page of
+        // European deliveries was being answered in miles because the last drive
+        // happened to be American.
+        var u = Units.For(_settings.Units, slice.Game ?? _store.MostRecentGame());
         var gameHours = s.TotalGameMinutes / 60.0;
         var realHours = s.TotalDrivingMs / 3600000.0;
         // Distances are simulated km, so they pair with game hours - dividing by real
