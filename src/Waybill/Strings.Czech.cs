@@ -326,8 +326,6 @@ public static partial class Strings {
         ["event.collision"] = "Kolize",
         ["event.rest"] = "Odpočinek",
         ["event.save_loaded"] = "Načtená pozice",
-        ["unit.gameMinutes"] = "herních minut",
-        ["unit.damagePercent"] = "% poškození",
         ["msg.pickGameFolder"] = "Vyber složku, kde je hra nainstalovaná",
         ["msg.notGameFolder"] = "V této složce hra není.\nOčekává se složka, která obsahuje bin\\win_x64 se spustitelným souborem hry:",
         ["msg.gamePathSet"] = "Složka hry nastavena",

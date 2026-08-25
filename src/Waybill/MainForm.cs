@@ -1794,7 +1794,7 @@ public partial class MainForm : Form {
 
         try {
             var route = RoutesFor(d.Game).Routes.TryGetValue(d.Id, out var points) ? points : new List<RoutePoint>();
-            var written = WaybillSheet.Save(d, _store.TimelineRows(d.Id), route, u, dialog.FileName, 300f);
+            var written = WaybillSheet.Save(d, _store.TimelineRows(d.Id, u), route, u, dialog.FileName, 300f);
             MessageBox.Show(this,
                 Strings.T("sheet.saved") + "\n" + string.Join("\n", written),
                 Strings.T("detail.saveSheet"), MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -1823,7 +1823,7 @@ public partial class MainForm : Form {
 
         var map = NewMap(u);
         map.Show(Layers(RoutesFor(d.Game)), d.Id, RoutesFor(d.Game).Cities,
-                 _store.TimelineRows(d.Id), RoutesFor(d.Game).RunUps.Concat(_store.FreeroamRoutes(d.Game)));
+                 _store.TimelineRows(d.Id, u), RoutesFor(d.Game).RunUps.Concat(_store.FreeroamRoutes(d.Game)));
 
         // Drawn out once, when the panel it sits in is actually on the screen.
         // Watching the line grow says the order things happened in, which a finished
@@ -2396,7 +2396,7 @@ public partial class MainForm : Form {
         // be maximised.
         window.Shown += (_, _) => {
             map.Show(Layers(RoutesFor(d.Game)), d.Id, RoutesFor(d.Game).Cities,
-                     _store.TimelineRows(d.Id), RoutesFor(d.Game).RunUps.Concat(_store.FreeroamRoutes(d.Game)));
+                     _store.TimelineRows(d.Id, u), RoutesFor(d.Game).RunUps.Concat(_store.FreeroamRoutes(d.Game)));
             map.Replay();
         };
         window.Load += (_, _) => UseDarkTitleBar(window);
@@ -2414,7 +2414,7 @@ public partial class MainForm : Form {
         var side = new Panel { Dock = DockStyle.Right, Width = 0, BackColor = Canvas };
         var timeline = new Panel { Dock = DockStyle.Fill, BackColor = Surface, AutoScroll = true };
 
-        var events = _store.TimelineRows(d.Id);
+        var events = _store.TimelineRows(d.Id, u);
         if (events.Count == 0) {
             timeline.Controls.Add(new Label {
                 Dock = DockStyle.Top, Height = 30, Text = Strings.T("timeline.none"),
@@ -2464,7 +2464,7 @@ public partial class MainForm : Form {
         }
         Row(Strings.T("detail.timeGame"), $"{d.DrivingGameMin / 60:0.0} {Strings.T("stats.gameTime")}");
         Row(Strings.T("detail.timeReal"), $"{d.RealDurationMs / 60000.0:0} min");
-        Row(Strings.T("detail.rest"), $"{d.RestStops}x  ·  {d.RestMinutes:0} {Strings.T("unit.gameMinutes")}");
+        Row(Strings.T("detail.rest"), $"{d.RestStops}x  ·  {Units.Duration(d.RestMinutes)}");
 
         Group(Strings.T("detail.groupMoney"));
         var paid = d.Outcome == "delivered" ? d.Revenue : -d.Penalty;

@@ -332,8 +332,6 @@ public static partial class Strings {
         ["event.collision"] = "Kolízia",
         ["event.rest"] = "Odpočinok",
         ["event.save_loaded"] = "Načítaný save",
-        ["unit.gameMinutes"] = "herných minút",
-        ["unit.damagePercent"] = "% poškodenia",
         ["msg.pickGameFolder"] = "Vyber priečinok, v ktorom je nainštalovaná hra",
         ["msg.notGameFolder"] = "V tomto priečinku hra nie je.\nČaká sa priečinok, ktorý obsahuje bin\\win_x64 so spustiteľným súborom hry:",
         ["msg.gamePathSet"] = "Priečinok hry nastavený",

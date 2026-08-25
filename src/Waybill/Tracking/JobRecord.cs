@@ -142,6 +142,11 @@ public class JobEvent {
     public string Type = "";
     public double? Value;
     public string? Detail;
+    /// <summary>How much fuel went in, for a refuel. The game only tells us what it
+    /// cost, and a price with no quantity beside it says very little about a stop.
+    /// Measured from the tank rather than reported: the level rises over the seconds
+    /// the pump runs, and the total of that rise is what was put in.</summary>
+    public double? Litres;
 }
 
 /// <summary>One GPS-style sample along the route. Stored from day one even

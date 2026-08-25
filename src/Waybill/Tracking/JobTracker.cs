@@ -129,6 +129,9 @@ public class JobState {
     public double StartTruckWear;
     public double StartTrailerWear;
     public double StartFuelL;
+    /// <summary>Fuel added since the last pump receipt, which is what the next
+    /// one is for. Reset when it is claimed.</summary>
+    public double PendingRefuelL;
 
     public double DistanceKm;
     public double WorldDistanceKm;
@@ -917,7 +920,7 @@ public class JobTracker {
             if (!isTransport && !cargoMoved && j.LoadOnAtMs != 0) {
                 j.RestStops += 1;
                 j.RestMinutes += jumpedMin;
-                j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = Math.Round(jumpedMin, 1), Detail = Waybill.Strings.T("unit.gameMinutes") });
+                j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = Math.Round(jumpedMin, 1) });
             }
         }
 
@@ -945,15 +948,17 @@ public class JobTracker {
             // but only counted against the delivery once the load is on it.
             if (j.LoadOnAtMs != 0) {
                 j.Collisions += 1;
-                j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "collision", Value = Math.Round(damageStep * 100, 3), Detail = Waybill.Strings.T("unit.damagePercent") });
+                j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "collision", Value = Math.Round(damageStep * 100, 3) });
             }
         }
 
         TrackTrailerChain(j, snap);
 
-        // Fuel. An increase means a refuel, not negative consumption.
+        // Fuel. An increase means a refuel, not negative consumption; the rise is
+        // kept rather than ignored, because it is the only measure of how much went in.
         var fuelDelta = prev.Truck.FuelL - snap.Truck.FuelL;
         if (fuelDelta > 0) j.FuelUsedL += fuelDelta;
+        else j.PendingRefuelL += -fuelDelta;
 
         j.DrivingMs += dtMs;
         if (snap.Truck.SpeedKmh > j.TopSpeedKmh) j.TopSpeedKmh = snap.Truck.SpeedKmh;
@@ -1018,7 +1023,7 @@ public class JobTracker {
                 if (!isTransport && !cargoMoved && j.LoadOnAtMs != 0) {
                     j.RestStops += 1;
                     j.RestMinutes += gameMinutesPassed;
-                    j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = Math.Round(gameMinutesPassed, 1), Detail = Waybill.Strings.T("unit.gameMinutes") });
+                    j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = Math.Round(gameMinutesPassed, 1) });
                 }
             } else {
                 found.Add(new Anomaly { Code = wasPaused ? "paused_gap" : "client_gap", DtMs = dtMs });
@@ -1061,6 +1066,8 @@ public class JobTracker {
             j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "train", Value = e.TrainUsed.Price, Detail = $"{e.TrainUsed.Source} -> {e.TrainUsed.Target}" });
         }
         if (e.RefuelPaid != null) {
+            var litres = j.PendingRefuelL;
+            j.PendingRefuelL = 0;
             if (inGrace) {
                 // A Quick Job auto-fills the assigned truck's tank as part of the
                 // swap (see vehicle_swap above) and fires RefuelStart/End/Payed for
@@ -1071,7 +1078,10 @@ public class JobTracker {
                 found.Add(new Anomaly { Code = "system_refuel", Delta = e.RefuelPaid.Amount });
             } else {
                 j.Refuels += 1;
-                j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "refuel", Value = e.RefuelPaid.Amount });
+                j.Timeline.Add(new JobEvent {
+                    AtMs = nowMs, Type = "refuel", Value = e.RefuelPaid.Amount,
+                    Litres = litres > 0.5 ? litres : null,
+                });
             }
         }
     }

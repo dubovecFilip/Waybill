@@ -166,6 +166,10 @@ public class TimelineRow {
     public string Detail { get; set; } = "";
     public long AtMs { get; set; }
     public string Type { get; set; } = "";
+    /// <summary>The offence exactly as the game named it, for a fine. Kept beside
+    /// the readable version because folding a crash fine into its collision has to
+    /// compare identifiers: the readable version changes with the language.</summary>
+    public string Offence { get; set; } = "";
 }
 
 /// <summary>

@@ -326,8 +326,6 @@ public static partial class Strings {
         ["event.collision"] = "Colisión",
         ["event.rest"] = "Descanso",
         ["event.save_loaded"] = "Partida cargada",
-        ["unit.gameMinutes"] = "minutos de juego",
-        ["unit.damagePercent"] = "% de daños",
         ["msg.pickGameFolder"] = "Elige la carpeta donde está instalado el juego",
         ["msg.notGameFolder"] = "El juego no está en esta carpeta.\nSe espera una carpeta que contenga bin\\win_x64 con el ejecutable del juego:",
         ["msg.gamePathSet"] = "Carpeta del juego fijada",

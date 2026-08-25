@@ -326,8 +326,6 @@ public static partial class Strings {
         ["event.collision"] = "Kollision",
         ["event.rest"] = "Pause",
         ["event.save_loaded"] = "Spielstand geladen",
-        ["unit.gameMinutes"] = "Spielminuten",
-        ["unit.damagePercent"] = "% Schaden",
         ["msg.pickGameFolder"] = "Ordner auswählen, in dem das Spiel installiert ist",
         ["msg.notGameFolder"] = "In diesem Ordner ist das Spiel nicht.\nErwartet wird ein Ordner mit bin\\win_x64 und der ausführbaren Datei des Spiels:",
         ["msg.gamePathSet"] = "Spielordner gesetzt",

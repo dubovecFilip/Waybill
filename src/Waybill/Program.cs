@@ -185,7 +185,7 @@ if (args.Length >= 2 && args[0] == "--export-sheet") {
     var points = sheetStore.RoutesForGame(detail.Game).Routes.TryGetValue(sheetId, out var pts)
         ? pts
         : new List<RoutePoint>();
-    foreach (var file in WaybillSheet.Save(detail, sheetStore.TimelineRows(sheetId), points, units, sheetPath, 300f)) {
+    foreach (var file in WaybillSheet.Save(detail, sheetStore.TimelineRows(sheetId, units), points, units, sheetPath, 300f)) {
         Console.WriteLine($"Ulozene: {file}");
     }
     return;

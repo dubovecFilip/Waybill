@@ -325,8 +325,6 @@ public static partial class Strings {
         ["event.collision"] = "Collision",
         ["event.rest"] = "Rest",
         ["event.save_loaded"] = "Save loaded",
-        ["unit.gameMinutes"] = "game minutes",
-        ["unit.damagePercent"] = "% damage",
         ["msg.pickGameFolder"] = "Select the folder the game is installed in",
         ["msg.notGameFolder"] = "The game is not in this folder.\nWhat is expected is a folder containing bin\\win_x64 with the game executable:",
         ["msg.gamePathSet"] = "Game folder set",

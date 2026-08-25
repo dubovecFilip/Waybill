@@ -121,4 +121,20 @@ public class Units {
     public string FormatSpeed(double kmh, string format = "0") => $"{Speed(kmh).ToString(format)} {SpeedUnit}";
     public string FormatVolume(double litres, string format = "0.0") => $"{Volume(litres).ToString(format)} {VolumeUnit}";
     public string FormatMoney(double amount) => $"{Money(amount):0} {Currency}";
+
+    /// <summary>
+    /// A stretch of game time as a driver would say it.
+    ///
+    /// Sleep is measured in hours, not in the 601 minutes the game happens to have
+    /// counted, and nobody has ever said they slept for six hundred and one minutes.
+    /// Under an hour it stays in minutes, because "0 h" is not an answer.
+    ///
+    /// The symbols are left as they are in every language here: h and min are read
+    /// the same in all of them, and a translation table entry for "h" would be a
+    /// translation table entry for "h".
+    /// </summary>
+    public static string Duration(double gameMinutes) {
+        var minutes = Math.Abs(gameMinutes);
+        return minutes < 60 ? $"{minutes:0} min" : $"{minutes / 60:0} h";
+    }
 }

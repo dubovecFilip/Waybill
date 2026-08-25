@@ -638,8 +638,16 @@ public class DeliveryStore : IDisposable {
         }
     }
 
-    /// <summary>The event timeline of one delivery, oldest first.</summary>
-    public List<TimelineRow> TimelineRows(long deliveryId) {
+    /// <summary>
+    /// The event timeline of one delivery, oldest first, ready to read.
+    ///
+    /// The figure each event carries is a bare number in the table because that is
+    /// what it is, but a bare number on the screen is a riddle: 900 of what, 720 of
+    /// what. So each type says here what its own figure means, in the units the rest
+    /// of the window is using. Money as money, fuel as fuel, a sleep in hours rather
+    /// than in the several hundred game minutes the game counted.
+    /// </summary>
+    public List<TimelineRow> TimelineRows(long deliveryId, Units units) {
         lock (_gate) {
             var rows = new List<TimelineRow>();
             using var cmd = _conn.CreateCommand();
@@ -663,20 +671,25 @@ public class DeliveryStore : IDisposable {
             while (reader.Read()) {
                 var extra = reader.IsDBNull(3) ? null : reader.GetString(3);
                 string detail = "";
+                double? litres = null;
                 if (extra != null) {
                     try {
-                        detail = Newtonsoft.Json.Linq.JObject.Parse(extra)["Detail"]?.ToString() ?? "";
+                        var parsed = Newtonsoft.Json.Linq.JObject.Parse(extra);
+                        detail = parsed["Detail"]?.ToString() ?? "";
+                        litres = (double?)parsed["Litres"];
                     } catch { detail = ""; }
                 }
                 // Stored event types are identifiers, deliberately: they are data, and
                 // they outlive whatever language the window happens to be in. The
                 // reading of them belongs here, at the point they are shown.
                 var type = reader.GetString(1);
+                var raw = reader.IsDBNull(2) ? (double?)null : reader.GetDouble(2);
                 rows.Add(new TimelineRow {
                     Cas = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(0)).LocalDateTime.ToString("HH:mm:ss"),
                     Udalost = Strings.T("event." + type) is var t && t != "event." + type ? t : type,
-                    Hodnota = reader.IsDBNull(2) ? "" : reader.GetDouble(2).ToString("0.##"),
-                    Detail = detail,
+                    Hodnota = Figure(type, raw, units),
+                    Detail = Aside(type, detail, litres, units),
+                    Offence = type == "fine" ? detail : "",
                     AtMs = reader.GetInt64(0),
                     Type = type,
                 });
@@ -696,13 +709,47 @@ public class DeliveryStore : IDisposable {
     /// Only a fine for crashing merges. Being fined for speeding a second after an
     /// impact is genuinely two things, and the offence is what tells them apart.
     /// </summary>
+    /// <summary>What an event's own figure means, said in the units the window is
+    /// using.</summary>
+    private static string Figure(string type, double? value, Units units) {
+        if (value is not { } v) return "";
+        return type switch {
+            "fine" or "tollgate" or "ferry" or "train" or "refuel" => units.FormatMoney(v),
+            "collision" => $"{v:0.00} %",
+            // Hours, because that is how long a sleep is. The game counts them in
+            // minutes and nobody has ever slept for six hundred and one minutes.
+            "rest" or "save_loaded" => Units.Duration(v),
+            _ => v.ToString("0.##"),
+        };
+    }
+
+    /// <summary>What goes beside the figure: the offence for a fine, in words rather
+    /// than as the identifier it is stored under, and how much fuel a receipt was
+    /// for.</summary>
+    private static string Aside(string type, string detail, double? litres, Units units) {
+        if (type == "fine" && detail.Length > 0) {
+            var said = Strings.T("value." + detail);
+            return said == "value." + detail ? detail.Replace('_', ' ') : said;
+        }
+        if (type == "refuel" && litres is { } l) return units.FormatVolume(l);
+        // These two used to have their unit written into the row, in whatever
+        // language the app happened to be in that day. The figure carries it now, so
+        // the stored words are dropped rather than shown in last year's language.
+        if (type is "rest" or "collision" or "save_loaded") return "";
+        return detail;
+    }
+
     private static List<TimelineRow> Merge(List<TimelineRow> rows) {
         const long SameMomentMs = 2000;
         var merged = new List<TimelineRow>();
 
         foreach (var row in rows) {
+            // Against the stored identifier, not against the word it is shown as. The
+            // comparison used to be against the translation, so a crash fine folded
+            // into its collision in English and stopped folding in every other
+            // language the moment the word for it was not "crash".
             var crashFine = row.Type == "fine"
-                && row.Detail.Equals(Strings.T("value.Crash"), StringComparison.OrdinalIgnoreCase);
+                && row.Offence.Equals("Crash", StringComparison.OrdinalIgnoreCase);
             var into = crashFine
                 ? merged.LastOrDefault(m => m.Type == "collision" && row.AtMs - m.AtMs <= SameMomentMs)
                 : null;
@@ -868,7 +915,8 @@ public class DeliveryStore : IDisposable {
         // makes a delivery readable after the fact. Counters stamped with the finish
         // time (what this used to write) told you a fine happened but not where.
         foreach (var ev in r.Timeline) {
-            AddEvent(ev.AtMs, ev.Type, ev.Value, ev.Detail == null ? null : new { ev.Detail });
+            AddEvent(ev.AtMs, ev.Type, ev.Value,
+                ev.Detail == null && ev.Litres == null ? null : new { ev.Detail, ev.Litres });
         }
         foreach (var a in r.Anomalies) {
             AddEvent(a.AtMs, $"anomaly:{a.Code}", a.Delta ?? a.MovedKm ?? a.ImpliedKmh, a);
