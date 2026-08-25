@@ -1074,9 +1074,12 @@ public static class WaybillSheet {
             using var line = new Pen(Print, 0.35f);
             using var legend = F(FormFace, 2.3f, FontStyle.Bold);
             using var light = new SolidBrush(PrintLo);
-            // Left blank on purpose. A signature line is signed by whoever signs it,
-            // and printing a name onto one is the one thing a document must not do.
+            // Signed by the driver's own hand, drawn once in the settings and kept.
+            // Blank until they draw one: a signature line is signed by whoever signs
+            // it, and printing a name onto one is the thing a document must not do.
             var sx = Margin + ContentW - 74f;
+            Signature.Draw(g, Settings.Load().SignatureStrokes,
+                new RectangleF(sx + 4f, y + 1f, 70f, 15f), Ink, 0.45f);
             g.DrawLine(line, sx, y + 17f, Margin + ContentW, y + 17f);
             Spread(g, Strings.T("sheet.signature").ToUpperInvariant(), legend, light, sx, y + 18.2f, 0.42f);
         },

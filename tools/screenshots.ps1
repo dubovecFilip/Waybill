@@ -52,6 +52,7 @@ $script:p = if ($extra.Count -gt 0) { Start-Process $exe -ArgumentList $extra -P
 for ($i = 0; $i -lt 80 -and $script:p.MainWindowHandle -eq 0; $i++) { Start-Sleep -Milliseconds 250; $script:p.Refresh() }
 Start-Sleep -Seconds 4
 $script:h = $script:p.MainWindowHandle
+$script:main = $script:h
 [void][WB]::MoveWindow($script:h, 30, 30, 1280, 820, $true)
 Start-Sleep -Seconds 1
 
@@ -140,13 +141,14 @@ function Shot($name) {
 
 # A dialog is a window of its own, so it is found rather than assumed, sized to show
 # everything it holds at once, and photographed the same way as the main window.
-function Dialog($name, $w, $ht) {
-  $found = [IntPtr]::Zero
+# Aims everything that follows at a window of the app's own that is not the main one,
+# so a dialog can be filled in the same way the window is. UseMain puts it back.
+function FindDialog {
   $cb = [WB+Enum]{
     param($wh, $lp)
     $owner = 0
     [void][WB]::GetWindowThreadProcessId($wh, [ref]$owner)
-    if ($owner -eq $script:p.Id -and $wh -ne $script:h -and [WB]::IsWindowVisible($wh)) {
+    if ($owner -eq $script:p.Id -and $wh -ne $script:main -and [WB]::IsWindowVisible($wh)) {
       $script:found = $wh
       return $false
     }
@@ -154,9 +156,24 @@ function Dialog($name, $w, $ht) {
   }
   $script:found = [IntPtr]::Zero
   [void][WB]::EnumWindows($cb, [IntPtr]::Zero)
-  if ($script:found -eq [IntPtr]::Zero) { return "  no dialog found for $name" }
+  return $script:found
+}
+function UseDialog {
+  $wh = FindDialog
+  if ($wh -eq [IntPtr]::Zero) { throw "no dialog of the app's own is open" }
+  $script:h = $wh
+  $script:r = New-Object WB+POINT; [void][WB]::ClientToScreen($script:h, [ref]$script:r)
+}
+function UseMain {
+  $script:h = $script:main
+  $script:r = New-Object WB+POINT; [void][WB]::ClientToScreen($script:h, [ref]$script:r)
+}
+
+function Dialog($name, $w, $ht) {
+  $wh = FindDialog
+  if ($wh -eq [IntPtr]::Zero) { return "  no dialog found for $name" }
   $was = $script:h
-  $script:h = $script:found
+  $script:h = $wh
   [void][WB]::MoveWindow($script:h, 60, 60, $w, $ht, $true)
   Start-Sleep -Milliseconds 900
   Shot $name

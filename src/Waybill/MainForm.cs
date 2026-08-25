@@ -450,6 +450,7 @@ public partial class MainForm : Form {
         settings.DropDownItems.Add(BuildUnitsMenu());
         settings.DropDownItems.Add(BuildLanguageMenu());
         settings.DropDownItems.Add(BuildDiscordMenu());
+        settings.DropDownItems.Add(MenuAction(Strings.T("menu.signature"), SignHere));
         return settings;
     }
 
@@ -987,6 +988,20 @@ public partial class MainForm : Form {
     /// </summary>
     private static string Condition(double? before, double after) =>
         before is { } b ? $"{Damage(b)}  →  {Damage(after)}" : Damage(after);
+
+    /// <summary>
+    /// Signing the sheets.
+    ///
+    /// Drawn once and kept, rather than asked for on every export: a signature is the
+    /// same every time by definition, and being asked to draw one before each save
+    /// would make it a chore instead of a document.
+    /// </summary>
+    private void SignHere() {
+        using var pad = new SignaturePad(_settings.SignatureStrokes, Surface, Raised, Line, Ink, Muted);
+        if (pad.ShowDialog(this) != DialogResult.OK) return;
+        _settings.SignatureStrokes = pad.Written;
+        _settings.Save();
+    }
 
     /// <summary>A one line text prompt, because WinForms has no InputBox and the
     /// application ID has to come from somewhere. Returns null when cancelled,

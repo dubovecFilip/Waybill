@@ -29,6 +29,11 @@ public class Settings {
     /// not a secret: it only tells Discord whose icons and name to show.</summary>
     public string? DiscordAppId { get; set; }
 
+    /// <summary>The driver's signature, as the strokes they drew, for the foot of an
+    /// exported sheet. Empty means the line is left blank, which is what a form does
+    /// when nobody has signed it. See <see cref="Signature"/> for the notation.</summary>
+    public string? SignatureStrokes { get; set; }
+
     public string? PathFor(SimGame game) => game == SimGame.Ats ? AtsPath : Ets2Path;
 
     public void SetPathFor(SimGame game, string? path) {
