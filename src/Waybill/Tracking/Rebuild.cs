@@ -50,12 +50,21 @@ public static class Rebuild {
         var records = new List<JobRecord>();
         var roaming = new List<FreeroamRecord>();
         var spans = new List<(long From, long To)>();
+        // A job carried from one recording into the next, because a delivery does not
+        // have to fit inside one sitting: quit for the evening halfway to the drop and
+        // it lives in two files. Replaying each of them from nothing gave the first
+        // half to a record that was thrown away unfinished and started the second half
+        // from zero, which is a delivery missing however far it got on the first day.
+        // The recordings are named after their start and sorted, so this walks them in
+        // the order they were driven.
+        JobState? carried = null;
         foreach (var recording in recordings) {
             try {
-                var (found, roamed, span) = Replay(recording);
+                var (found, roamed, span, left) = Replay(recording, carried);
                 records.AddRange(found);
                 roaming.AddRange(roamed);
                 if (span is { } s) spans.Add(s);
+                carried = left;
             } catch (Exception ex) {
                 result.Skipped.Add($"{Path.GetFileName(recording)}: {ex.Message}");
             }
@@ -74,10 +83,17 @@ public static class Rebuild {
         return result;
     }
 
-    /// <summary>Replays one recording, returning what finished in it and the stretch
-    /// of time it covers.</summary>
-    private static (List<JobRecord> Records, List<FreeroamRecord> Roaming, (long From, long To)? Span) Replay(string path) {
+    /// <summary>Replays one recording, returning what finished in it, the stretch of
+    /// time it covers, and whatever job was still being driven when it ended.</summary>
+    private static (List<JobRecord> Records, List<FreeroamRecord> Roaming, (long From, long To)? Span, JobState? Left) Replay(string path, JobState? carried) {
         var tracker = new JobTracker();
+        if (carried != null) {
+            // Through JSON, the way a restart hands it over, so a rebuild cannot
+            // quietly do better than the app it is rebuilding for.
+            var restored = Newtonsoft.Json.JsonConvert.DeserializeObject<JobState>(
+                Newtonsoft.Json.JsonConvert.SerializeObject(carried));
+            if (restored != null) tracker.PrepareResume(restored);
+        }
         var records = new List<JobRecord>();
         var roaming = new List<FreeroamRecord>();
         long first = 0, last = 0;
@@ -105,7 +121,9 @@ public static class Rebuild {
         // has ended, so it is asked for whatever it is still holding.
         roaming.AddRange(tracker.FinishRoaming());
 
-        return (records, roaming, first > 0 ? (first, last) : null);
+        // Whatever is still being driven goes to the next recording rather than being
+        // dropped here.
+        return (records, roaming, first > 0 ? (first, last) : null, tracker.ActiveState);
     }
 
 }
