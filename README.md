@@ -84,10 +84,12 @@ Every state, flag and anomaly is listed with its meaning in
 * Names a trailer for what it is instead of for the file it came out of
 * Marks an oversize load as one, on its card and in the list
 * Draws the whole history as one map, built entirely from your own drives
-* Writes a delivery out as a printable A4 waybill, route and stamp included
+* Writes a delivery out as a three sheet A4 waybill, as pictures or as one PDF
+* Draws the route on that sheet over every road already driven, with the towns named
 * Keeps the driving between jobs too, as distance and as lines on the map
 * Resumes an interrupted job after a crash or after quitting mid drive
 * Launches the game from the window, including a telemetry plugin check
+* Shows a finished delivery on the live page, for looking at it with no game running
 * Shows the current delivery on Discord, over the local pipe, with no account
 * Imports history from TrucksBook
 * Stores in SQLite, exports to CSV and JSON, backs up and restores
@@ -142,13 +144,31 @@ can see it.
 
 ![The page the window opens on](assets/current-job.png)
 
+With a job under way the buttons give way to the delivery: where it came from and
+where it is going, the load and the pay, how far along it is, and the drive
+drawing itself underneath.
+
+![A delivery under way](assets/current-job-live.png)
+
+That picture is a finished delivery shown on the live page, cut off five eighths
+of the way along, because photographing the real thing needs a game running and a
+load on the hook. Everything in it is read from the delivery rather than invented,
+and you can put any of your own there the same way: `Waybill.exe --demo <id>`.
+Nothing is written and no telemetry is touched, and the moment a game connects the
+real drive takes the page back.
+
 The map is the drive so far and nothing else: the hollow ring is where the load
 went on, the line is coloured by speed like every other route here, and the
 filled marker is where the truck is now. It turns the drive to lie along the
 panel, which is far wider than it is tall, so a run from north to south fills the
-width instead of drawing a thread down the middle. There is no north to lose:
-this is the game's own space and it was never oriented to anything, and the shape
-and the angles within the route are untouched.
+width instead of drawing a thread down the middle.
+
+It does not turn far, though, and it says how far it turned. North in both games
+is the negative z of their own space, which the cities settle beyond doubt: sort
+the drops by z and Yakima comes first and Tucson last. So the drawing is held
+within sixty degrees either side of it and a compass in the corner carries
+whatever turn was taken. Free to spin, the panel would hand you a map of a place
+you know with south at the top, which is worse than a thread down the middle.
 
 The bar underneath counts the loaded leg against the game's own planned distance,
 with the run out to the trailer in its own quieter shade at the head of it. It is
@@ -180,6 +200,14 @@ top, the timeline underneath it. Both are worth reading when something went wron
 and worth nothing when nothing did, so they stay out of the way until asked for.
 
 ![The route and the timeline](assets/delivery-route.png)
+
+The column has a handle down its left edge, and how much of the card goes to the
+figures and how much to the log is a question with no one answer: a drive being
+picked apart wants the log wide and the map with it, a delivery being glanced at
+wants the figures. The width it is left at is the width the next delivery opens
+with.
+
+![The same card with the log pulled wider](assets/delivery-route-wide.png)
 
 *Statistics* is the logbook at a glance, on one screen with no scrolling. Two
 controls above the figures say which deliveries they are about: a period, and
@@ -219,9 +247,14 @@ it explains.
 
 ![Every mark, with what it means](assets/legend.png)
 
-One sign is deliberately missing. A fine for a crash is not listed apart from the
-crash: the game reports both, and two marks a second apart for one moment read as
-two things going wrong. The impact keeps its place and carries the amount.
+Two of them are for one moment, and that is deliberate too. A crash reports twice,
+as an impact and as the fine for it, and they were folded into a single line for a
+while on the grounds that two marks a second apart read as two things going wrong.
+Folded, neither figure could be read: a collision is a share of damage and a fine
+is an amount of money, and "Collision, 2.76 %, fined 900" is a line nobody can
+take either number out of. So they are two lines, and the collision names what
+took the hit, the truck or the trailer, with the load beside it when that was
+shaken as well.
 
 ## Doubles and triples
 
@@ -389,15 +422,44 @@ earlier save moves the truck mid drive. None of them were driven along.
 ## Saving a delivery as a sheet
 
 *Save sheet* on a delivery's card writes it out as the document the app is named
-after: A4 upright, the form printed and the figures written in. Shipper and
-consignee, the coupled set in hitching order, the route sketched in the same pen,
-the remarks entered along the way, and the verdict struck as a rubber stamp.
+after: A4 upright, the form printed and the figures written in.
 
 ![A delivery written out as a waybill](assets/waybill-sheet.png)
 
-It is rendered at 300 dpi, so it prints as well as it posts. A delivery with more
-than a sheet's worth of units or remarks runs onto a second one, which reprints
-the heading and carries the stamp at its foot, and the files are numbered.
+Three sheets, always the same three, because a consignment note has always been a
+document with a front and a back. The front is the consignment: shipper and
+consignee, the load, the figures, and the route as it was actually run. The
+second is the equipment: the tractor, the coupled set unit by unit with plates and
+condition, what the run cost in fuel, time and tolls, and the speed trace from the
+first mile to the last, which is the chart a tachograph would have drawn. The back
+is the log of everything that happened along the way, ruled to the foot of the
+page, with the driver's own note under it and the stamp beneath that.
+
+The route is drawn over every other road this profile has been down, faintly, with
+the towns named and the two ends of this delivery named in the hand the rest of it
+is written in. A thread across an empty panel says how far the truck went and
+nothing about where; with the network behind it, the same thread says which way it
+came out of Yakima.
+
+Nothing on any of the sheets is sized from the delivery. Every panel, every rule
+and every box is worked out from the paper alone, so the form is the same form
+every time and only the writing on it changes. That includes the hazard band,
+which is counted whether the load carries one or not: letting those seven
+millimetres back into the page on an ordinary delivery would move every rule on
+all three sheets, and make it a slightly different form for an oversize load. A
+quiet run leaves the lines ruled and empty rather than closing them up, which is
+what a printed form does.
+
+Everything the driver could have written is written: the values in the boxes, the
+coupled set, all four columns of the log, and the note pad at the foot. What was
+printed on the form stays printed. The figures are in the game's own units, not
+the window's, however the window is set: a sheet that says 68 459 € for a job the
+game paid 74 412 $ for is a translation of a receipt rather than the receipt.
+
+It saves as pictures or as one PDF, and offers your pictures folder rather than
+the app's own. It is rendered at 300 dpi either way, so it prints as well as it
+posts. A delivery with more remarks than the log has lines runs onto a fourth
+sheet, which reprints the heading and carries the stamp at its foot.
 
 This is the only place the paper idea lives, and that is deliberate. As a skin for
 the window it would have cost the map its zooming and clicking, or left two
@@ -409,7 +471,7 @@ too much content.
 From a script:
 
 ```bash
-Waybill.exe --export-sheet <id> [path.png]
+Waybill.exe --export-sheet <id> [path.png|path.pdf]
 ```
 
 ## Discord
@@ -455,6 +517,7 @@ Waybill.exe --import-trucksbook <csv>   # import history from TrucksBook
 Waybill.exe --backup [path]             # back up the database
 Waybill.exe --restore <path>            # restore from a backup
 Waybill.exe --export-sheet <id> [path]  # one delivery as an A4 waybill, 300 dpi
+Waybill.exe --demo <id>                 # show a finished delivery as though under way
 Waybill.exe --rebuild                   # recompute deliveries from recordings
 Waybill.exe --replay <recording>        # replay an old recording
 Waybill.exe --test-resume <recording> <line>   # test resume after a restart
