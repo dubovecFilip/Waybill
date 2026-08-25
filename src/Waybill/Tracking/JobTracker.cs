@@ -953,10 +953,10 @@ public class JobTracker {
         // informational: this project never penalises an assist.
         if (snap.CruiseControlOn) j.CruiseControlMs += dtMs;
 
-        // A sudden damage step is an impact. Recorded as metadata for safety stats
-        // (see project_vision) - it never invalidates a delivery, it just gets
-        // counted and shown. Warmup and vehicle swaps return earlier, so the big
-        // artificial damage steps those cause never reach this.
+        // A sudden damage step is an impact. Recorded because it is worth knowing and
+        // for no other reason: it never invalidates a delivery, it is counted and
+        // shown. Warmup and vehicle swaps return earlier, so the big artificial damage
+        // steps those cause never reach this.
         var truckDamageStep = snap.Truck.Wear.Total() - prev.Truck.Wear.Total();
 
         // Only when a trailer was reported on both sides. It vanishes from telemetry
@@ -1254,11 +1254,10 @@ public class JobTracker {
     }
 
     /// <summary>
-    /// Turns the raw anomaly list into a verdict. Per this project's philosophy
-    /// (see project_vision memory), a delivery is never hard-invalidated for a
-    /// driving assist or noisy telemetry field - only for the few signals that
-    /// are strong, direct evidence nothing was actually driven. Everything else
-    /// stays visible in Anomalies/flags for review, never blocks the delivery.
+    /// Turns the raw anomaly list into a verdict. A delivery is never refused for a
+    /// driving assist or a noisy telemetry field, only for the few signals that are
+    /// direct evidence nothing was driven. Everything else stays visible in the
+    /// anomalies and the flags, and none of it blocks the delivery.
     /// </summary>
     private static Validation Validate(JobRecord record) {
         var flags = new List<string>();
