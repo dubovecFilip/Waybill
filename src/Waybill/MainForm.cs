@@ -2150,8 +2150,11 @@ public partial class MainForm : Form {
     /// being fined for anything else are not the same thing to look at.
     /// </summary>
     private static Image? EventIcon(string type, string detail = "") {
+        // Against the identifier the game files the offence under, not against the word
+        // it is shown as: the word changes with the language, and the dial would have
+        // quietly stopped appearing in four of the five.
         var speeding = type == "fine"
-            && detail.Equals(Strings.T("value.Speeding"), StringComparison.OrdinalIgnoreCase);
+            && detail.Equals("Speeding", StringComparison.OrdinalIgnoreCase);
         var key = speeding ? "fine.speeding" : type;
         if (EventIcons.TryGetValue(key, out var made)) return made;
 
@@ -2642,7 +2645,7 @@ public partial class MainForm : Form {
         var time = new Label { Dock = DockStyle.Left, Width = 66, Text = e.Cas, ForeColor = Muted, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Consolas", 8.5F) };
         var icon = new PictureBox {
             Dock = DockStyle.Left, Width = 26, SizeMode = PictureBoxSizeMode.CenterImage,
-            Image = EventIcon(e.Type, e.Detail), BackColor = Color.Transparent,
+            Image = EventIcon(e.Type, e.Offence), BackColor = Color.Transparent,
         };
 
         line.Controls.Add(detail);

@@ -694,7 +694,7 @@ public class DeliveryStore : IDisposable {
                     Type = type,
                 });
             }
-            return Merge(rows);
+            return rows;
         }
     }
 
@@ -732,34 +732,22 @@ public class DeliveryStore : IDisposable {
             return said == "value." + detail ? detail.Replace('_', ' ') : said;
         }
         if (type == "refuel" && litres is { } l) return units.FormatVolume(l);
-        // These two used to have their unit written into the row, in whatever
-        // language the app happened to be in that day. The figure carries it now, so
-        // the stored words are dropped rather than shown in last year's language.
-        if (type is "rest" or "collision" or "save_loaded") return "";
+        if (type == "collision") {
+            // Identifiers, so they are read here rather than stored as words. Rows
+            // written before they were recorded have the old unit text instead, and
+            // that is not what was damaged, so it is dropped.
+            var parts = detail.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Where(x => x is "truck" or "trailer" or "cargo")
+                .Select(x => Strings.T("damage." + x));
+            return string.Join(" · ", parts);
+        }
+        // These used to have their unit written into the row, in whatever language
+        // the app happened to be in that day. The figure carries it now, so the
+        // stored words are dropped rather than shown in last year's language.
+        if (type is "rest" or "save_loaded") return "";
         return detail;
     }
 
-    private static List<TimelineRow> Merge(List<TimelineRow> rows) {
-        const long SameMomentMs = 2000;
-        var merged = new List<TimelineRow>();
-
-        foreach (var row in rows) {
-            // Against the stored identifier, not against the word it is shown as. The
-            // comparison used to be against the translation, so a crash fine folded
-            // into its collision in English and stopped folding in every other
-            // language the moment the word for it was not "crash".
-            var crashFine = row.Type == "fine"
-                && row.Offence.Equals("Crash", StringComparison.OrdinalIgnoreCase);
-            var into = crashFine
-                ? merged.LastOrDefault(m => m.Type == "collision" && row.AtMs - m.AtMs <= SameMomentMs)
-                : null;
-
-            if (into is null) { merged.Add(row); continue; }
-
-            into.Detail = $"{Strings.T("timeline.fined")} {row.Hodnota}";
-        }
-        return merged;
-    }
 
     /// <summary>Free-text note the user can attach to a delivery (roadmap: "edit notes").</summary>
     /// <summary>Everything about one delivery, for the detail card. The list itself

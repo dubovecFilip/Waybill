@@ -941,6 +941,13 @@ public class JobTracker {
         var trailerDamageStep = snap.Trailer.Present && prev.Trailer.Present
             ? snap.Trailer.Wear - prev.Trailer.Wear
             : 0;
+        // The load can take a knock the vehicles do not, so it is asked about too,
+        // but only to name what was hit. What counts as an impact stays the truck and
+        // the trailer, so this does not quietly start finding collisions that were
+        // never found before.
+        var cargoDamageStep = snap.Trailer.Present && prev.Trailer.Present
+            ? snap.Trailer.CargoDamage - prev.Trailer.CargoDamage
+            : 0;
         var damageStep = Math.Max(truckDamageStep, trailerDamageStep);
         if (damageStep > _config.CollisionDamageStep) {
             found.Add(new Anomaly { Code = "collision", Delta = damageStep });
@@ -948,7 +955,10 @@ public class JobTracker {
             // but only counted against the delivery once the load is on it.
             if (j.LoadOnAtMs != 0) {
                 j.Collisions += 1;
-                j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "collision", Value = Math.Round(damageStep * 100, 3) });
+                j.Timeline.Add(new JobEvent {
+                    AtMs = nowMs, Type = "collision", Value = Math.Round(damageStep * 100, 3),
+                    Detail = Hit(truckDamageStep, trailerDamageStep, cargoDamageStep, _config.CollisionDamageStep),
+                });
             }
         }
 
@@ -1084,6 +1094,18 @@ public class JobTracker {
                 });
             }
         }
+    }
+
+    /// <summary>
+    /// What an impact landed on, as identifiers rather than words: the vehicle that
+    /// took the step being reported, and the load beside it when that was shaken as
+    /// well. A percentage on its own says how bad it was and nothing about what it
+    /// happened to, which on a triple with a fragile load is most of the question.
+    /// </summary>
+    private static string Hit(double truck, double trailer, double cargo, double threshold) {
+        var parts = new List<string> { truck >= trailer ? "truck" : "trailer" };
+        if (cargo > threshold) parts.Add("cargo");
+        return string.Join(",", parts);
     }
 
     private static void Record(List<Anomaly> found, JobState j, long nowMs) {
