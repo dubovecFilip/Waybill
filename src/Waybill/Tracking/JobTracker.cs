@@ -256,6 +256,7 @@ public class JobTracker {
 
         var gap = dtMs > _config.MaxTickMs;
         var fp = Fingerprint(snap.Job);
+        var same = SameJob(snap.Job);
 
         // Loading an earlier save is the one thing that moves the game clock
         // backwards. Time never runs backwards while driving, and a teleport does
@@ -285,7 +286,7 @@ public class JobTracker {
 
         // New job accepted. Whatever was being driven up to now was not a delivery,
         // so it is closed off here rather than being swallowed by the job.
-        if (fp != null && fp != _current?.Fingerprint) {
+        if (fp != null && same != SameJob(_current?.Job)) {
             if (CloseRoam() is { } roamed) {
                 outEvents.Add(new TrackerEvent { Type = TrackerEventType.FreeroamFinished, Freeroam = roamed });
             }
@@ -296,10 +297,11 @@ public class JobTracker {
             }
 
             // Same job we were driving before the restart? Pick it back up with
-            // everything already accumulated rather than starting from zero. The
-            // fingerprint has to match exactly, so a leftover file from a different
-            // job is simply dropped.
-            if (_pendingResume != null && _pendingResume.Fingerprint == fp) {
+            // everything already accumulated rather than starting from zero. Every
+            // part of the job has to match, so a leftover file from a different one
+            // is simply dropped; only the payout is left out of the comparison,
+            // because the game moves it while you drive.
+            if (_pendingResume != null && SameJob(_pendingResume.Job) == same) {
                 _current = _pendingResume;
                 _pendingResume = null;
                 _current.MissingJobSinceMs = null;
@@ -607,9 +609,38 @@ public class JobTracker {
         return Convert.ToHexString(hash, 0, 16).ToLowerInvariant();
     }
 
+    /// <summary>
+    /// What the job is, for the identifier it will be stored under. Includes the
+    /// payout because it is part of the offer that was accepted, and because the
+    /// identifier has to keep deriving to the same value from the same recording
+    /// forever: a rebuild that derived new ones would insert every delivery again
+    /// instead of updating it.
+    /// </summary>
     private static string? Fingerprint(JobInfo? job) {
         if (job == null) return null;
         return string.Join("|", job.SourceCity, job.SourceCompany, job.DestinationCity, job.DestinationCompany, job.Cargo, job.Income, job.DeadlineMin);
+    }
+
+    /// <summary>
+    /// Whether two sightings are the same job, which is a different question from
+    /// what the job is.
+    ///
+    /// Everything the fingerprint has except the payout. The payout is not a
+    /// property of the job, it is the game's running estimate of what the job will
+    /// pay, and it moves while you drive: one haul here was offered 111422 in the
+    /// afternoon and 108668 the same evening, and was paid 74412 in the end.
+    ///
+    /// Comparing on it cost a delivery its first leg. The job was accepted and
+    /// driven for 377 km, the game was closed for the evening, and when it came back
+    /// the payout had drifted, so the job that was offered back did not look like
+    /// the job that had been saved. The resume was refused and a second delivery
+    /// opened over the top of the first. Worse, the same comparison decides whether
+    /// the job in front of us is still the one we are driving, so a long enough haul
+    /// could have been split in two without the game ever being closed.
+    /// </summary>
+    private static string? SameJob(JobInfo? job) {
+        if (job == null) return null;
+        return string.Join("|", job.SourceCity, job.SourceCompany, job.DestinationCity, job.DestinationCompany, job.Cargo, job.DeadlineMin);
     }
 
     private static double DistanceKmBetween(Snapshot a, Snapshot b) {
