@@ -169,14 +169,27 @@ public class HeightView : Control {
 
     private RectangleF Plot => new(Pad, Pad, Math.Max(1, Width - Pad * 2), Math.Max(1, Height - Pad * 2 - 12));
 
+    /// <summary>How much ground is left under the lowest point of the drive. The
+    /// lowest reading used to sit exactly on the floor, where it has no column at
+    /// all and the drive looks like it starts at sea level whatever it did.</summary>
+    private const float Footing = 7f;
+
     private PointF At(int i) {
         var plot = Plot;
-        var p = _points[i];
-        var x = plot.Left + plot.Width * (p.AtMs - _from) / _span;
+        // Spaced by reading rather than by the clock. A drive is not paused-shaped:
+        // sleeping for ten hours, sitting in a menu or quitting for the evening are
+        // all holes in the recording, and laying the strip out by time drew each of
+        // them as a long flat plateau with the driving squeezed either side of it.
+        // One step per reading gives every second of driving the same width and
+        // closes the holes to a single step.
+        var x = _points.Count > 1
+            ? plot.Left + plot.Width * i / (_points.Count - 1)
+            : plot.Left + plot.Width / 2;
         // A flat drive would divide by nothing, so it is drawn along the middle.
         var range = _high - _low;
+        var floor = plot.Bottom - Footing;
         var y = range > 0.01f
-            ? plot.Bottom - plot.Height * (p.Y - _low) / range
+            ? floor - (plot.Height - Footing) * (_points[i].Y - _low) / range
             : plot.Top + plot.Height / 2;
         return new PointF(x, y);
     }
