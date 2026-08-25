@@ -62,6 +62,12 @@ public partial class MainForm : Form {
     private readonly Panel _detailPage = new();
     /// <summary>The timeline column, which lives at width zero until asked for.</summary>
     private Panel? _detailSide;
+    /// <summary>The handle down its left edge, hidden while the column is shut.</summary>
+    private Panel? _detailGrip;
+    /// <summary>How wide the column opens. Set by dragging the handle and kept for
+    /// the rest of the session, so a driver who wants the log wide gets it wide on
+    /// the next delivery too rather than pulling it out again each time.</summary>
+    private int _timelineWidth = 480;
     private RouteView? _cardMap;
     private HeightView? _cardProfile;
     private System.Windows.Forms.Timer? _detailSlide;
@@ -1734,14 +1740,80 @@ public partial class MainForm : Form {
         return head;
     }
 
+    /// <summary>
+    /// The handle down the left edge of the timeline column.
+    ///
+    /// How much of the card goes to the figures and how much to the log is not a
+    /// question with one answer. A drive being picked apart wants the log wide and
+    /// the map with it; a delivery being glanced at wants the figures. Four pixels
+    /// of grabbable edge settles it per delivery instead of the layout deciding
+    /// once for everybody.
+    ///
+    /// Both ends are held: the column may not close itself by being dragged shut,
+    /// which would leave the button saying the opposite of what the card is doing,
+    /// and it may not eat the figures it sits beside.
+    /// </summary>
+    private Control TimelineGrip(Panel side, Panel body) {
+        var grip = new Panel {
+            Dock = DockStyle.Right, Width = 5, BackColor = Canvas,
+            Cursor = Cursors.SizeWE, Visible = false,
+        };
+        _detailGrip = grip;
+
+        grip.Paint += (_, e) => {
+            // A short bar rather than a full height rule: it says "hold here", where
+            // a line down the whole card reads as a border and nobody pulls a border.
+            using var pen = new Pen(Line, 1f);
+            var mid = grip.Height / 2;
+            for (var y = mid - 14; y <= mid + 14; y += 4) e.Graphics.DrawLine(pen, 1, y, 3, y);
+        };
+
+        var pulling = false;
+        var from = 0;
+        var started = 0;
+
+        grip.MouseDown += (_, e) => {
+            if (e.Button != MouseButtons.Left) return;
+            pulling = true;
+            // Held explicitly, so a pull that runs off the edge of five pixels of
+            // handle keeps arriving here instead of stopping halfway.
+            grip.Capture = true;
+            // Screen coordinates, not the handle's own: the handle moves as the
+            // column grows, so a position measured inside it chases itself.
+            from = Cursor.Position.X;
+            started = side.Width;
+        };
+        grip.MouseMove += (_, _) => {
+            if (!pulling) return;
+            // Leftwards is wider, which is the direction the column grows from.
+            var wanted = started + (from - Cursor.Position.X);
+            side.Width = Math.Clamp(wanted, 320, Math.Max(320, body.Width - 360));
+        };
+        grip.MouseUp += (_, _) => {
+            if (!pulling) return;
+            pulling = false;
+            _timelineWidth = side.Width;
+            // The drawings inside are laid out for the width they were built at, so
+            // they are drawn again now the pulling has stopped rather than on every
+            // pixel of it.
+            if (_cardMap is { IsDisposed: false } shown) shown.Replay();
+            if (_cardProfile is { IsDisposed: false } beside) beside.Replay();
+        };
+
+        return grip;
+    }
+
     /// <summary>Slides the timeline in and out rather than showing or hiding it: the
     /// movement is what says where the panel came from, and a column that simply
     /// appears reads as the page having jumped.</summary>
     private void ToggleTimeline(Button button) {
         if (_detailSide is not { } side) return;
 
-        var target = side.Width > 0 ? 0 : 480;
+        var target = side.Width > 0 ? 0 : _timelineWidth;
         button.Text = Strings.T("detail.timelineOpen") + (target > 0 ? "   ▸" : "   ◂");
+        // The handle appears with the column and goes with it, so a shut column
+        // leaves no stray edge to grab at the side of the card.
+        if (_detailGrip is { IsDisposed: false } grip) grip.Visible = target > 0;
 
         _detailSlide?.Stop();
         _detailSlide?.Dispose();
@@ -2567,6 +2639,8 @@ public partial class MainForm : Form {
 
         body.Controls.Add(info);
         body.Controls.Add(notes);
+        // Before the column, so it docks inside it and lands against its left edge.
+        body.Controls.Add(TimelineGrip(side, body));
         body.Controls.Add(side);
         // Added last so it docks outermost and gets the full width. The verdict is
         // the first thing anyone asks about a delivery, so it reads across the top
