@@ -380,12 +380,33 @@ rather than only tested.
 - Export to CSV and JSON, backup and restore, TrucksBook import
 - Rebuild from the raw recordings, which is what makes every judgement above
   revisable rather than frozen at whatever the tracker believed that day
+- The sheet grown into a document of three: the consignment and the route on the
+  front, the equipment, the running costs and a speed trace on the second, the log,
+  the driver's own note and the stamp on the back. It saves as pictures or as one
+  PDF, the route is drawn over every road already driven with the towns named, and
+  the driver signs it in their own hand
+- The condition of the truck, each unit and the load before and after, rather than
+  only what the delivery added
+- Driving style judged against the length of the run, since three fines crossing
+  town and three across fifteen hundred kilometres are not the same driver
+- The state or the country beside a city, from a table, because neither game
+  reports it
+- The window in English, Slovak, Czech, German and Spanish
+- Money converted rather than relabelled when one system is forced, so a column
+  holding both games adds up to something
+- A finished delivery shown on the live page as though it were under way, which is
+  the only way to look at that page, or photograph it, without a game running
 
 **Phase 2, partly.** Export tools are there, and so are period comparisons: the
 statistics page answers for a week or a month and says how each figure moved
 against the same length of time before it, and it can be narrowed to one game.
 Achievements and session statistics are not built, and neither is comparing one
 truck against another, which wants a different shape of page than a row of tiles.
+
+A session is recorded as a file already, and the tracker counts the deliveries in
+the run it is having, so session statistics are a page rather than a measurement
+problem: start and end, distance, profit, deliveries, average speed and the breaks
+are all in what is already stored.
 
 **Phase 3, mostly.** The map is drawn: a delivery's own route with its events
 marked on it, and a page showing every drive of one game at once, where clicking a
@@ -410,6 +431,39 @@ faced again, since both formats want real coordinates.
 sharing. The one piece of groundwork that exists is that a delivery now has a
 stable identity, so the same drive can be referred to across machines without
 inventing a server first.
+
+**What this document asked for that the telemetry cannot give.** Worth writing
+down, because each of these reads like an oversight and none of them is.
+
+- *Lane assist enabled.* The plan names it twice, once as the reason this project
+  exists and once as an event to record. The SDK has no field for it: the game does
+  not report whether the assist is on. What the project promised is kept anyway,
+  since keeping every delivery valid needs no such field, but the assist itself
+  cannot be shown in the statistics because nothing outside the game knows it.
+- *XP.* Not reported either. It is stored on rows imported from TrucksBook, which
+  had it, and stays empty on everything Waybill tracked itself.
+- *Profile name.* Not reported. A delivery knows its game, its truck and its
+  trailer, and nothing about which profile drove it.
+- *Cargo previews.* There is no image in the telemetry, only names and
+  identifiers. Already on the postponed list, and this is why it stays there.
+- *Replay from inside the cab.* One position a second and no wheel angles or
+  camera is a line on a map, which is what it was made into. A drive played back
+  through the windscreen would need the recording to be something else entirely.
+
+**Small things still open, in the order they are worth doing.**
+
+- Session statistics, as above
+- Achievements, which want a rule engine rather than another query
+- One truck against another, which wants a page shaped for comparison
+- Fuel and cargo weight as totals in the logbook: every refuel is stored with what
+  it cost and every delivery with what it carried, but neither is summed anywhere
+- GPX and KML, which need the coordinate decision above faced again, since both
+  formats want real ones
+- The city identifier stored beside the city name. The game reports both and only
+  the name is kept, which is why the region table cannot tell the Salina in Utah
+  from the one in Kansas
+- Heading in the trip points. The telemetry has it and the recording keeps
+  position and speed only, so a drawn route has no facing to it
 
 ---
 
