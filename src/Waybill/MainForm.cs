@@ -15,29 +15,6 @@ namespace Waybill;
 /// </summary>
 /// <summary>Menus are drawn by the framework from a fixed colour table, so a dark
 /// window needs its own or the drop-downs stay white.</summary>
-internal class DarkMenuColours : ProfessionalColorTable {
-    private static readonly Color Bg = Color.FromArgb(30, 34, 39);
-    private static readonly Color Raised = Color.FromArgb(38, 43, 50);
-    private static readonly Color Edge = Color.FromArgb(48, 54, 62);
-    private static readonly Color Highlight = Color.FromArgb(52, 45, 33);
-
-    public override Color MenuStripGradientBegin => Bg;
-    public override Color MenuStripGradientEnd => Bg;
-    public override Color ToolStripDropDownBackground => Bg;
-    public override Color ImageMarginGradientBegin => Bg;
-    public override Color ImageMarginGradientMiddle => Bg;
-    public override Color ImageMarginGradientEnd => Bg;
-    public override Color MenuItemSelected => Highlight;
-    public override Color MenuItemSelectedGradientBegin => Highlight;
-    public override Color MenuItemSelectedGradientEnd => Highlight;
-    public override Color MenuItemPressedGradientBegin => Raised;
-    public override Color MenuItemPressedGradientMiddle => Raised;
-    public override Color MenuItemPressedGradientEnd => Raised;
-    public override Color MenuItemBorder => Edge;
-    public override Color MenuBorder => Edge;
-    public override Color SeparatorDark => Edge;
-    public override Color SeparatorLight => Edge;
-}
 
 public partial class MainForm : Form {
     // One dark palette for the whole window, so nothing has to invent a colour
@@ -109,10 +86,15 @@ public partial class MainForm : Form {
 
         // The window icon comes from the same .ico the exe is built with, so the
         // taskbar, alt-tab and the title bar all match.
-        var iconPath = Path.Combine(AppContext.BaseDirectory, "waybill.ico");
-        if (File.Exists(iconPath)) {
-            try { Icon = new Icon(iconPath); } catch { /* a missing icon is not worth failing over */ }
-        }
+        // Beside the exe when the project was built the ordinary way, and out of
+        // the exe itself when it was published as a single file, where nothing is
+        // beside it to find. Without the second path the published build ran under
+        // the blank default icon while carrying its own the whole time.
+        try {
+            var iconPath = Path.Combine(AppContext.BaseDirectory, "waybill.ico");
+            if (File.Exists(iconPath)) Icon = new Icon(iconPath);
+            else if (Environment.ProcessPath is { } exe) Icon = Icon.ExtractAssociatedIcon(exe);
+        } catch { /* a missing icon is not worth failing over */ }
 
         Strings.Language = _settings.Language;
 
@@ -1925,14 +1907,28 @@ public partial class MainForm : Form {
     /// bright blue highlight, both of which arrive from the system theme and land on
     /// a dark window looking like somebody else's menu. Only the few colours that
     /// show are overridden.</summary>
+    /// <summary>
+    /// The dark colours the menus are drawn in.
+    ///
+    /// Every surface a menu can paint has to be named here, because the ones left
+    /// out fall back to the system's light theme. Opening a top level menu used to
+    /// turn its own name into a pale block: a menu whose drop-down is open is drawn
+    /// "pressed", and the pressed colours were the three that had been forgotten.
+    /// </summary>
     private sealed class DarkMenuColours : ProfessionalColorTable {
         public override Color ToolStripDropDownBackground => Surface;
         public override Color ImageMarginGradientBegin => Surface;
         public override Color ImageMarginGradientMiddle => Surface;
         public override Color ImageMarginGradientEnd => Surface;
+        public override Color MenuStripGradientBegin => Surface;
+        public override Color MenuStripGradientEnd => Surface;
         public override Color MenuItemSelected => Raised;
         public override Color MenuItemSelectedGradientBegin => Raised;
         public override Color MenuItemSelectedGradientEnd => Raised;
+        // The open one, which is what "pressed" means for a menu.
+        public override Color MenuItemPressedGradientBegin => Raised;
+        public override Color MenuItemPressedGradientMiddle => Raised;
+        public override Color MenuItemPressedGradientEnd => Raised;
         public override Color MenuItemBorder => Line;
         public override Color MenuBorder => Line;
         public override Color SeparatorDark => Line;
