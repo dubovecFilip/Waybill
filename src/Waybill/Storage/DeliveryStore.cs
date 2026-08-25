@@ -859,8 +859,10 @@ public class DeliveryStore : IDisposable {
         }
     }
 
-    /// <summary>One compact line per delivery, newest first - for `--list`. Each line
-    /// is in its own game's units.</summary>
+    /// <summary>One compact line per delivery, newest first, for `--list`. Each line
+    /// is in its own game's units and starts with the delivery's own number, which is
+    /// what the commands that work on one delivery ask for and what the window has
+    /// nowhere to show.</summary>
     public List<string> RecentDeliveries(int limit, string unitSetting) {
         lock (_gate) {
             var lines = new List<string>();
@@ -868,7 +870,7 @@ public class DeliveryStore : IDisposable {
             cmd.CommandText = """
                 SELECT started_at_ms, source_city, destination_city, cargo,
                        actual_distance_km, revenue, offered_income, validation_status,
-                       validation_flags, COALESCE(game, '')
+                       validation_flags, COALESCE(game, ''), id
                 FROM deliveries
                 ORDER BY started_at_ms DESC
                 LIMIT $limit;
@@ -887,7 +889,7 @@ public class DeliveryStore : IDisposable {
                 var status = reader.GetString(7);
                 var flags = reader.GetString(8);
                 var flagsSuffix = string.IsNullOrEmpty(flags) ? "" : $" [{flags}]";
-                lines.Add($"{startedAt:yyyy-MM-dd HH:mm}  {source,-15} -> {dest,-15}  {cargo,-20}  "
+                lines.Add($"#{reader.GetInt64(10),-5} {startedAt:yyyy-MM-dd HH:mm}  {source,-15} -> {dest,-15}  {cargo,-20}  "
                         + $"{distance,7:0.0} {units.DistanceUnit,-3} {revenue,7:0} {units.Currency,-3} {status}{flagsSuffix}");
             }
             return lines;
