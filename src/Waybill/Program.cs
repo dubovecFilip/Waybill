@@ -178,14 +178,14 @@ if (args.Length >= 2 && args[0] == "--export-sheet") {
         Console.WriteLine($"Zasielka {sheetId} neexistuje.");
         return;
     }
-    var units = Units.For(Settings.Load().Units, detail.Game);
+    // The game's own units, not the window's: see WaybillSheet.UnitsFor.
+    var units = WaybillSheet.UnitsFor(detail.Game);
     var sheetPath = args.Length >= 3
         ? args[2]
         : Path.Combine(DeliveryStore.DefaultDir(), WaybillSheet.SuggestedName(detail));
-    var points = sheetStore.RoutesForGame(detail.Game).Routes.TryGetValue(sheetId, out var pts)
-        ? pts
-        : new List<RoutePoint>();
-    foreach (var file in WaybillSheet.Save(detail, sheetStore.TimelineRows(sheetId, units), points, units, sheetPath, 300f)) {
+    var atlas = sheetStore.RoutesForGame(detail.Game);
+    var points = atlas.Routes.TryGetValue(sheetId, out var pts) ? pts : new List<RoutePoint>();
+    foreach (var file in WaybillSheet.Save(detail, sheetStore.TimelineRows(sheetId, units), points, units, sheetPath, 300f, atlas)) {
         Console.WriteLine($"Ulozene: {file}");
     }
     return;

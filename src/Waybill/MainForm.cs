@@ -1800,16 +1800,34 @@ public partial class MainForm : Form {
     /// project is about.
     /// </summary>
     private void SaveSheet(DeliveryDetail d, Units u) {
+        // Somewhere a saved delivery can be found again without being looked for.
+        // The app's own folder is where its data lives, which is the wrong answer for
+        // something made to be kept and shown.
+        var home = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Waybill");
+        try { Directory.CreateDirectory(home); } catch { home = ""; }
+
         using var dialog = new SaveFileDialog {
             Title = Strings.T("sheet.saveTitle"),
-            Filter = "PNG|*.png",
+            // Two sheets are two pictures or one document, and which of those is
+            // wanted depends on whether it is being posted or filed. The name is
+            // suggested without an ending so that the choice puts one on it.
+            Filter = "PNG (*.png)|*.png|PDF (*.pdf)|*.pdf",
+            DefaultExt = "png",
+            AddExtension = true,
+            InitialDirectory = home,
             FileName = WaybillSheet.SuggestedName(d),
         };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
 
         try {
-            var route = RoutesFor(d.Game).Routes.TryGetValue(d.Id, out var points) ? points : new List<RoutePoint>();
-            var written = WaybillSheet.Save(d, _store.TimelineRows(d.Id, u), route, u, dialog.FileName, 300f);
+            // The whole atlas rather than this one route: the sheet draws the roads
+            // already driven behind the delivery, and names the towns from it.
+            var atlas = RoutesFor(d.Game);
+            var route = atlas.Routes.TryGetValue(d.Id, out var points) ? points : new List<RoutePoint>();
+            // The document is written in the game's own units, whatever the window is
+            // set to, so the timeline figures on it are read in those as well.
+            var paper = WaybillSheet.UnitsFor(d.Game);
+            var written = WaybillSheet.Save(d, _store.TimelineRows(d.Id, paper), route, paper, dialog.FileName, 300f, atlas);
             MessageBox.Show(this,
                 Strings.T("sheet.saved") + "\n" + string.Join("\n", written),
                 Strings.T("detail.saveSheet"), MessageBoxButtons.OK, MessageBoxIcon.Information);
