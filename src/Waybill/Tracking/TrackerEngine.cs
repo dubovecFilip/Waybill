@@ -97,6 +97,34 @@ public class TrackerEngine : IDisposable {
     public int DeliveriesThisRun { get; private set; }
     public JobInfo? ActiveJob { get; private set; }
     public JobState? ActiveState => _tracker.ActiveState;
+
+    /// <summary>
+    /// Shows a finished delivery as though it were being driven now.
+    ///
+    /// The live page is the one part of Waybill that cannot be photographed or shown
+    /// to anybody without a game running and a load on the hook, which makes it the
+    /// one part nobody can see before they install it. This puts a real delivery,
+    /// read back out of the database and cut off part way, into the page that would
+    /// be showing it: real figures, real route, real drawing code, and nothing
+    /// invented.
+    ///
+    /// It changes nothing else. No telemetry is read, nothing is written, and the
+    /// moment a game does connect the tracker goes back to what the game says.
+    /// </summary>
+    public void ShowDemo(JobInfo job, JobState state) {
+        ActiveJob = job;
+        _demo = true;
+        _tracker.ShowDemo(state);
+        // Whatever was on the hook before this is not resumable now, and the pretend
+        // job must not be left behind as though it were.
+        ClearInProgress();
+    }
+
+    /// <summary>Whether the job on the page is a demonstration. Nothing about one is
+    /// written down: it is a finished delivery being shown twice, and saved it would
+    /// become a second delivery that never happened, counted in the totals of a
+    /// driver who only wanted to look at the page.</summary>
+    private bool _demo;
     public string? StartupError { get; private set; }
 
     /// <summary>An unfinished job was found on disk and is waiting to be picked back
@@ -333,6 +361,11 @@ public class TrackerEngine : IDisposable {
     public void SaveInProgress(bool force = false) {
         var state = _tracker.ActiveState;
         if (state == null) return;
+        // A demonstration is never written down. Saved here it would be picked up as
+        // an unfinished job by the next start, found to be days old, and written off
+        // as a delivery: the driver would come back to a cancelled duplicate of a run
+        // they had already made, sitting in their history and counted in their totals.
+        if (_demo) return;
         if (!force && DateTime.UtcNow - _lastStateSave < _saveStateEvery) return;
         _lastStateSave = DateTime.UtcNow;
         try {

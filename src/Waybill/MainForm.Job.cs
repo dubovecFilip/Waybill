@@ -175,6 +175,53 @@ public partial class MainForm {
     /// <summary>
     /// Brings the page up to date with whatever the tracker can see, twice a second.
     /// </summary>
+    /// <summary>
+    /// A delivery that has already been driven, dressed up as one in progress.
+    ///
+    /// Cut off at five eighths of the way along, which is far enough that the figures
+    /// read like a job under way and short enough that the route on the map is
+    /// plainly still being drawn. Everything in it is read from the delivery: the
+    /// cities, the load, the pay, the plan, and the drive as far as that point.
+    /// </summary>
+    private bool ShowDemoJob(long id) {
+        if (_engine is null) return false;
+        var d = _store.Detail(id);
+        if (d is null) return false;
+
+        var route = _store.RoutesForGame(d.Game).Routes.TryGetValue(id, out var pts)
+            ? pts
+            : new List<RoutePoint>();
+        if (route.Count < 4) return false;
+
+        const double Along = 0.625;
+        var upTo = Math.Max(2, (int)(route.Count * Along));
+        var loaded = Math.Max(0, d.DistanceKm - d.DistanceToLoadKm) * Along;
+
+        var job = new JobInfo {
+            SourceCity = d.SourceCity, SourceCompany = d.SourceCompany,
+            DestinationCity = d.DestinationCity, DestinationCompany = d.DestinationCompany,
+            Cargo = d.Cargo, CargoMassKg = d.CargoMassKg,
+            Income = d.OfferedIncome > 0 ? d.OfferedIncome : d.Revenue,
+            PlannedDistanceKm = d.PlannedDistanceKm,
+            SpecialJob = d.SpecialTransport, CargoLoaded = true,
+        };
+
+        var state = new JobState {
+            JobUid = $"demo-{id}",
+            Game = d.Game,
+            StartedAtMs = route[0].AtMs,
+            Job = job,
+            DistanceKm = d.DistanceToLoadKm + loaded,
+            DistanceToLoadKm = d.DistanceToLoadKm,
+            TripPoints = route.Take(upTo)
+                .Select(p => new TripPoint { AtMs = p.AtMs, X = p.X, Y = 0, Z = p.Z, SpeedKmh = p.SpeedKmh })
+                .ToList(),
+        };
+
+        _engine.ShowDemo(job, state);
+        return true;
+    }
+
     private void RefreshJob() {
         if (_engine is null || _jobMap is null) return;
 

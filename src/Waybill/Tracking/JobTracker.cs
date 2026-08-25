@@ -214,6 +214,10 @@ public class JobTracker {
     /// driving so a restart can hand it back via <see cref="PrepareResume"/>.</summary>
     public JobState? ActiveState => _current;
 
+    /// <summary>Puts a job in front of the tracker without any telemetry behind it,
+    /// for the demonstration mode. See <see cref="TrackerEngine.ShowDemo"/>.</summary>
+    public void ShowDemo(JobState state) => _current = state;
+
     /// <summary>Offer a previously persisted job back to the tracker. It is only
     /// adopted if the next job the game reports is the same one (same fingerprint);
     /// anything else is ignored, so a stale file can't attach itself to a new job.</summary>

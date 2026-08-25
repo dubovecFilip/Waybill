@@ -328,5 +328,11 @@ void RunWindow() {
     // to whichever thread adds it, so on the main thread it would never fire for
     // anything thrown inside the message loop.
     Application.ThreadException += (_, e) => ReportCrash(e.Exception, fatal: false);
+    // A delivery shown on the live page as though it were under way. Read only, and
+    // no Discord: see MainForm.DemoDelivery.
+    var demoAt = Array.IndexOf(args, "--demo");
+    if (demoAt >= 0 && args.Length > demoAt + 1 && long.TryParse(args[demoAt + 1], out var demoId)) {
+        MainForm.DemoDelivery = demoId;
+    }
     Application.Run(new MainForm());
 }

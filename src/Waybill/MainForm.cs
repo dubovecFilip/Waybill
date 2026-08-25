@@ -761,6 +761,16 @@ public partial class MainForm : Form {
 
     // ---------- the engine ----------
 
+    /// <summary>
+    /// A delivery to put on the live page as though it were happening, set by
+    /// <c>--demo &lt;id&gt;</c> on the command line.
+    ///
+    /// For showing and photographing the one page that otherwise needs a game
+    /// running and a load on the hook. Nothing is written and no telemetry is
+    /// touched; the moment a game connects, the real drive takes the page back.
+    /// </summary>
+    public static long? DemoDelivery;
+
     private void StartEngine() {
         _engine = new TrackerEngine(_store);
         _engine.Message += m => BeginInvoke(() => AddLog(m));
@@ -795,6 +805,16 @@ public partial class MainForm : Form {
 
         ReloadHistory();
         ReloadStats();
+
+        if (DemoDelivery is { } demo && ShowDemoJob(demo)) {
+            // Deliberately without Discord. Telling the world this driver is halfway
+            // to Camp Verde because a screenshot was being taken is a lie told to
+            // their friends rather than to a picture.
+            AddLog($"{Strings.T("msg.demoMode")}  #{demo}");
+            RefreshJob();
+            return;
+        }
+
         StartDiscord();
     }
 
@@ -2174,6 +2194,23 @@ public partial class MainForm : Form {
             if (Eye(true) is { } open) g.DrawImageUnscaled(open, 6, (r.Height - open.Height) / 2);
             if (Eye(false) is { } shut) g.DrawImageUnscaled(shut, 26, (r.Height - shut.Height) / 2);
         }, Strings.T("legend.layers"), Strings.T("legend.layersWhy"));
+        // The needle on the live map, drawn small and turned a little, since a
+        // compass pointing straight up says nothing about what it is for.
+        Entry((g, r) => {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            var at = new PointF(23, r.Height / 2f);
+            using var rim = new Pen(Color.FromArgb(120, 138, 148, 163));
+            g.DrawEllipse(rim, at.X - 9, at.Y - 9, 18, 18);
+            const float lean = -0.42f;
+            var nx = MathF.Sin(lean);
+            var ny = -MathF.Cos(lean);
+            using var needle = new SolidBrush(Accent);
+            g.FillPolygon(needle, new[] {
+                new PointF(at.X + nx * 6.5f, at.Y + ny * 6.5f),
+                new PointF(at.X - ny * 2.6f, at.Y + nx * 2.6f),
+                new PointF(at.X + ny * 2.6f, at.Y - nx * 2.6f),
+            });
+        }, Strings.T("legend.compass"), Strings.T("legend.compassWhy"));
 
         Heading(Strings.T("legend.elsewhere"));
         Entry((g, r) => {
