@@ -16,8 +16,9 @@ public class TrailerUnitRecord {
     /// <summary>The condition it was in when it was hitched. Damage taken says what
     /// this delivery did to it and nothing about what it was handed over as, and a
     /// unit that arrives at eighteen percent is a different conversation depending on
-    /// whether it left at nothing or at seventeen.</summary>
-    public double StartDamage;
+    /// whether it left at nothing or at seventeen. Null on units recorded before this
+    /// was kept, where zero would be a claim that they were hitched undamaged.</summary>
+    public double? StartDamage;
 }
 
 /// <summary>

@@ -449,7 +449,7 @@ public static class WaybillSheet {
                 unit.BodyType.StartsWith('_') ? "" : unit.BodyType,
                 unit.Plate,
                 Strings.T(unit.Owned ? "detail.owned" : "value.hired"),
-                Condition(unit.StartDamage, unit.StartDamage + unit.Damage),
+                Condition(unit.StartDamage, (unit.StartDamage ?? 0) + unit.Damage),
             }).ToList();
             pieces.AddRange(Table(Strings.T("sheet.equipment"),
                 new[] {

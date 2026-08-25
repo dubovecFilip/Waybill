@@ -883,10 +883,6 @@ public partial class MainForm : Form {
         header.Controls.Add(arrow);
         header.Controls.Add(caption);
 
-        // Zero on a unit recorded before the hitching condition was kept, which reads
-        // as the same thing the figure alone used to say.
-        static double Hitched(TrailerUnitRecord unit) => unit.StartDamage;
-
         var body = new Panel { Dock = DockStyle.Top, Height = openHeight - 30, BackColor = Raised, Visible = false };
         var lines = new List<Control>();
         if (trailers.Count > 1) {
@@ -900,7 +896,7 @@ public partial class MainForm : Form {
             var label = $"{i + 1}.  {Strings.T("value." + unit.Kind)}"
                       + (unit.Owned ? $"  ({Strings.T("detail.owned")})" : "");
             var line = UnitLine(label,
-                $"{name}   ·   {unit.Plate}   ·   {Condition(Hitched(unit), Hitched(unit) + unit.Damage)}",
+                $"{name}   ·   {unit.Plate}   ·   {Condition(unit.StartDamage, (unit.StartDamage ?? 0) + unit.Damage)}",
                 unit.Kind == "dolly" ? Muted : Ink, lineHeight);
             // The reading is a convenience; the identifier is what the data says, and
             // it stays one hover away.
