@@ -251,7 +251,11 @@ public partial class MainForm {
 
         if (_jobLaunch is { } running) running.Visible = false;
         _status.Text = $"{Strings.T("live.jobRunning")}   ({Strings.T("live.ticks")}: {_engine.TickCount}, {Strings.T("live.deliveriesThisRun")}: {_engine.DeliveriesThisRun})".ToUpperInvariant();
-        _jobLine.Text = $"{job.SourceCity}  →  {job.DestinationCity}";
+        // Named the way the history names them, with the state or the country after
+        // the city when the driver has asked for that.
+        _jobLine.Text = _settings.CityRegions
+            ? $"{Places.Say(state.Game, job.SourceCity)}  →  {Places.Say(state.Game, job.DestinationCity)}"
+            : $"{job.SourceCity}  →  {job.DestinationCity}";
         _jobLine.ForeColor = Ink;
         _jobDetail.Text = $"{job.Cargo} · {u.MassTonnes(job.CargoMassKg):0.0} {u.MassUnit}"
                         + $"   ·   {Strings.T("live.reward")} {u.FormatMoney(job.Income)}";

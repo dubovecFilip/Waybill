@@ -86,6 +86,8 @@ Every state, flag and anomaly is listed with its meaning in
 * Draws the whole history as one map, built entirely from your own drives
 * Writes a delivery out as a three sheet A4 waybill, as pictures or as one PDF
 * Draws the route on that sheet over every road already driven, with the towns named
+* Signs that sheet in your own hand, drawn once with the mouse and kept
+* Names the state or the country a city is in, in the list, on the card and on the sheet
 * Keeps the driving between jobs too, as distance and as lines on the map
 * Resumes an interrupted job after a crash or after quitting mid drive
 * Launches the game from the window, including a telemetry plugin check
@@ -201,13 +203,18 @@ and worth nothing when nothing did, so they stay out of the way until asked for.
 
 ![The route and the timeline](assets/delivery-route.png)
 
-The column has a handle down its left edge, and how much of the card goes to the
-figures and how much to the log is a question with no one answer: a drive being
-picked apart wants the log wide and the map with it, a delivery being glanced at
-wants the figures. The width it is left at is the width the next delivery opens
-with.
+The column has a handle down its left edge and another across it, between the
+drawings and the log. How much of the card goes to the figures and how much to
+the log is a question with no one answer, and so is how much of the column goes
+to the map: a drive being picked apart wants the log wide, a drive with two
+events in it wants the map. Whatever they are left at is what the next delivery
+opens with.
 
 ![The same card with the log pulled wider](assets/delivery-route-wide.png)
+
+Neither handle can be lost. Both are held inside what the card has room for
+whenever it changes size, so a column pulled wide on a full screen does not fill
+the whole card when the window is restored and leave its handle off the edge.
 
 *Statistics* is the logbook at a glance, on one screen with no scrolling. Two
 controls above the figures say which deliveries they are about: a period, and
@@ -255,6 +262,24 @@ is an amount of money, and "Collision, 2.76 %, fined 900" is a line nobody can
 take either number out of. So they are two lines, and the collision names what
 took the hit, the truck or the trailer, with the load beside it when that was
 shaken as well.
+
+## Where a city is
+
+A list of thirty deliveries reads as a list of names unless you already know the
+map. With the state or the country after them they are places: Yakima, WA down
+to Camp Verde, AZ. It shows in the list, on the card, on the live page and on the
+sheet, where two letters are worth the room. Not on the maps, which have the
+names in them already and would become a page of abbreviations with a route
+somewhere underneath. *Settings* has a switch for it.
+
+Neither game reports it. Telemetry gives the city and the company and nothing
+about the region either sits in, so it is a table keyed by the name the game
+reports, and it is deliberately incomplete. A city that is not in it is shown
+exactly as the game named it, which is what happens for every map mod and for
+the handful of names the table refuses to guess at: American Truck Simulator has
+a Salina in Utah and another in Kansas, and the name alone cannot tell them
+apart. A missing code says "not known"; a wrong one would say something false
+about a delivery.
 
 ## Doubles and triples
 
@@ -468,6 +493,14 @@ coupled set, all four columns of the log, and the note pad at the foot. What was
 printed on the form stays printed. The figures are in the game's own units, not
 the window's, however the window is set: a sheet that says 68 459 € for a job the
 game paid 74 412 $ for is a translation of a receipt rather than the receipt.
+
+The signature at the foot is your own. *Settings → Signature* opens a pad on the
+same stock, in the same ink, with the same rule under it; sign it once with the
+mouse and every sheet from then on carries it. It is kept as the strokes rather
+than as a picture, so it is fitted to whatever room the sheet has and drawn in
+the sheet's ink. Until it is drawn the line is left blank, which is what a form
+does when nobody has signed it: printing a name onto a signature line is the one
+thing a document must not do.
 
 It saves as pictures or as one PDF, and offers your pictures folder rather than
 the app's own. It is rendered at 300 dpi either way, so it prints as well as it

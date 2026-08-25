@@ -73,6 +73,19 @@ means anything. Measured against this history the rate leaves every run anybody
 would call spirited where it was, moves a busy three hundred kilometre hop into
 them, and forgives a long haul its third knock.
 
+## The region a city is in
+
+Not stored and not reported by either game. `Places` holds a table of city names
+against a state code for American Truck Simulator and a country code for Euro
+Truck Simulator 2, and the window and the sheet look a city up in it when the
+`CityRegions` preference is on.
+
+The table is deliberately incomplete: mod maps are not in it, and neither are
+names that appear twice in one game. A lookup that misses adds nothing to the
+city, which is the honest answer. Nothing is derived from it and nothing depends
+on it, so it can be corrected or extended at any time without touching stored
+data.
+
 ## Validation flags
 
 Column `validation_flags`, comma separated. Three of them reject; the rest are
