@@ -68,6 +68,16 @@ public class DeliveryStore : IDisposable {
             // apart from the total because the game plans its route from the load.
             ("deliveries", "distance_to_load_km", "REAL"),
             ("deliveries", "special_transport", "INTEGER"),
+            // The condition of the truck, the trailer and the load at the moment the
+            // load went on. What was already stored is the difference, which says
+            // what this delivery did and nothing about what was handed over: a
+            // trailer that arrives at eighteen percent is a different conversation
+            // depending on whether it left at nothing or at seventeen. Null on every
+            // row recorded before this, which is why they are nullable and not zero:
+            // zero would be a claim that the set left the yard undamaged.
+            ("deliveries", "truck_damage_start_pct", "REAL"),
+            ("deliveries", "trailer_damage_start_pct", "REAL"),
+            ("deliveries", "cargo_damage_start_pct", "REAL"),
         };
 
         foreach (var group in expected.GroupBy(e => e.Table)) {
@@ -275,7 +285,8 @@ public class DeliveryStore : IDisposable {
                     fines_count, fines_total,
                     started_at_ms, finished_at_ms, real_duration_ms, game_duration_min,
                     job_type, trailer_chain_type, trailer_owned, trailer_units,
-                    distance_to_load_km, special_transport
+                    distance_to_load_km, special_transport,
+                    truck_damage_start_pct, trailer_damage_start_pct, cargo_damage_start_pct
                 ) VALUES (
                     $job_uid, $game, $game_version, $outcome, $validation_status, $validation_flags,
                     $truck_make, $truck_model, $truck_id, $trailer_name, $trailer_id,
@@ -292,7 +303,8 @@ public class DeliveryStore : IDisposable {
                     $fines_count, $fines_total,
                     $started_at_ms, $finished_at_ms, $real_duration_ms, $game_duration_min,
                     $job_type, $trailer_chain_type, $trailer_owned, $trailer_units,
-                    $distance_to_load_km, $special_transport
+                    $distance_to_load_km, $special_transport,
+                    $truck_damage_start_pct, $trailer_damage_start_pct, $cargo_damage_start_pct
                 );
                 """;
 
@@ -339,6 +351,9 @@ public class DeliveryStore : IDisposable {
             cmd.Parameters.AddWithValue("$speeding_share", r.SpeedingShare);
             cmd.Parameters.AddWithValue("$hard_speeding_share", r.HardSpeedingShare);
             cmd.Parameters.AddWithValue("$driving_style", r.DrivingStyle);
+            cmd.Parameters.AddWithValue("$truck_damage_start_pct", (object?)r.StartTruckDamage ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$trailer_damage_start_pct", (object?)r.StartTrailerDamage ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$cargo_damage_start_pct", (object?)r.StartCargoDamage ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$truck_damage_pct", r.TruckDamage);
             cmd.Parameters.AddWithValue("$trailer_damage_pct", r.TrailerDamage);
             cmd.Parameters.AddWithValue("$cargo_damage_pct", (object?)r.DeliveredCargoDamage ?? DBNull.Value);
@@ -774,7 +789,8 @@ public class DeliveryStore : IDisposable {
                        sim_speed_distance_km, COALESCE(job_type, ''), cargo_damage_pct,
                        COALESCE(trailer_chain_type, ''), COALESCE(trailer_owned, 0),
                        COALESCE(trailer_units, ''), COALESCE(distance_to_load_km, 0),
-                       COALESCE(special_transport, 0)
+                       COALESCE(special_transport, 0),
+                       truck_damage_start_pct, trailer_damage_start_pct, cargo_damage_start_pct
                 FROM deliveries WHERE id = $id;
                 """;
             cmd.Parameters.AddWithValue("$id", id);
@@ -816,6 +832,7 @@ public class DeliveryStore : IDisposable {
                 TrailerUnits = ReadUnits(r.GetString(46)),
                 DistanceToLoadKm = Num(47),
                 SpecialTransport = Num(48) != 0,
+                TruckDamageStart = Opt(49), TrailerDamageStart = Opt(50), CargoDamageStart = Opt(51),
             };
         }
     }

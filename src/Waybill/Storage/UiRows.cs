@@ -57,6 +57,10 @@ public class DeliveryDetail {
     public double FuelUsedL, TopSpeedKmh, SpeedingShare, HardSpeedingShare, CruiseShare;
     public double? AvgConsumption;
     public double TruckDamage, TrailerDamage, CargoDamage, DrivingGameMin, RestMinutes, FinesTotal, TollsPaid;
+    /// <summary>What each was in when the load went on, where it is known. The three
+    /// above are what this delivery added to them, except the cargo, which the game
+    /// reports outright on arrival. Null on rows recorded before it was kept.</summary>
+    public double? TruckDamageStart, TrailerDamageStart, CargoDamageStart;
     public long RealDurationMs;
     public int RestStops, FinesCount, Collisions, Ferries, Refuels;
     public string Outcome = "", Status = "", Flags = "", Style = "", Notes = "", Source = "";

@@ -20,11 +20,23 @@ public class TrackerConfig {
     // Share of driving time clearly over the limit that separates the two styles.
     public double StyleSpeedingShareMax = 0.05;
     // Collisions barely enter into it: one bad moment on a long haul says nothing
-    // about how someone drives. Only a run of them does.
-    public int StyleCollisionsMax = 3;
-    // Same reasoning for fines. One is a moment of inattention on a long run, not a
-    // way of driving, so it takes a handful of them to say anything.
-    public int StyleFinesMax = 3;
+    // about how someone drives. Only a run of them does. Same reasoning for fines.
+    // These two are what a delivery of no length at all is allowed; the road it
+    // covered buys more, below.
+    public int StyleCollisionsMax = 2;
+    public int StyleFinesMax = 2;
+    // One more fine, and one more collision, forgiven for every stretch of this much
+    // road. A count on its own says nothing without the distance it was counted over:
+    // three fines crossing town and three across fifteen hundred kilometres are not
+    // the same driver, and judging both against one number made the short run look
+    // like the wild one.
+    //
+    // Five hundred, measured against this history rather than picked: it leaves the
+    // runs anybody would call spirited exactly where they were, moves a busy three
+    // hundred kilometre hop into them, and forgives a long haul its third knock. A
+    // faster rate than this started calling six fines on one delivery clean, which is
+    // not a thing anybody would say out loud.
+    public double StyleAllowanceEveryKm = 500;
     // The odometer counts simulated km at the game's compressed time rate, so at
     // highway speed a single ~1s poll legitimately advances it by ~0.4-0.7 km.
     // This cap is set well above that: it only catches gross manipulation, not
@@ -128,6 +140,8 @@ public class JobState {
 
     public double StartTruckWear;
     public double StartTrailerWear;
+    /// <summary>How knocked about the load was when it went on. Null until it does.</summary>
+    public double? StartCargoDamage;
     public double StartFuelL;
     /// <summary>Fuel added since the last pump receipt, which is what the next
     /// one is for. Reset when it is claimed.</summary>
@@ -591,6 +605,7 @@ public class JobTracker {
                 // Never negative: a unit repaired mid job would otherwise read as
                 // having taken away damage.
                 Damage = Math.Max(0, Math.Round(last - start, 6)),
+                StartDamage = Math.Round(start, 6),
             };
         }).ToList();
 
@@ -737,6 +752,12 @@ public class JobTracker {
         if (j.LoadOnAtMs == 0 && j.TrailerCoupled && j.CargoOn) {
             j.LoadOnAtMs = nowMs;
             j.StartTruckWear = snap.Truck.Wear.Total();
+            // The load's own condition at the moment it became this delivery's
+            // problem. Usually nothing, but a job picked back up after a restart, or
+            // one where the game hands over a load already knocked about, starts
+            // somewhere other than zero, and reporting what it arrived at as though
+            // it all happened on this run blames the wrong drive.
+            j.StartCargoDamage = snap.Trailer.CargoDamage;
         }
 
         // Same instant as the previous snapshot, kept only because it carries an
@@ -1166,6 +1187,11 @@ public class JobTracker {
             SpeedingShare = j.DrivingMs > 0 ? Math.Round((double)j.SpeedingMs / j.DrivingMs, 4) : 0,
             TruckDamage = Math.Round(snap.Truck.Wear.Total() - j.StartTruckWear, 4),
             TrailerDamage = Math.Round(snap.Trailer.Wear - j.StartTrailerWear, 4),
+            // What each of them was in when the load went on, so the delivery can say
+            // the condition before and after rather than only the difference.
+            StartTruckDamage = Math.Round(j.StartTruckWear, 4),
+            StartTrailerDamage = Math.Round(j.StartTrailerWear, 4),
+            StartCargoDamage = j.StartCargoDamage is { } c ? Math.Round(c, 4) : null,
             Fines = j.Fines,
             TollsPaid = j.Tolls,
             FerriesUsed = j.Ferries,
@@ -1212,9 +1238,18 @@ public class JobTracker {
     /// Read from what was measured rather than declared up front, which means it can
     /// be derived again for every past delivery from its recording.</summary>
     private string Style(JobRecord record, int fines, int collisions) {
-        var clean = fines < _config.StyleFinesMax
-            && record.HardSpeedingShare < _config.StyleSpeedingShareMax
-            && collisions < _config.StyleCollisionsMax;
+        // What the length of the run forgives. Counting incidents against one fixed
+        // number treats every delivery as the same amount of road, which none of them
+        // are: the same two fines are a bad habit on a city hop and a long day on a
+        // haul across three states.
+        //
+        // The share of the drive spent clearly over the limit is not scaled, and does
+        // not need to be. It is already a proportion of the driving it was measured
+        // over, so it asks the same question of twenty minutes as of twenty hours.
+        var forgiven = (int)(record.DistanceKm / _config.StyleAllowanceEveryKm);
+        var clean = fines < _config.StyleFinesMax + forgiven
+            && collisions < _config.StyleCollisionsMax + forgiven
+            && record.HardSpeedingShare < _config.StyleSpeedingShareMax;
         return clean ? "clean" : "spirited";
     }
 

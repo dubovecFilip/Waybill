@@ -13,6 +13,11 @@ public class TrailerUnitRecord {
     /// <summary>Damage taken during this delivery, as a share, measured from the
     /// condition the unit was in when it was hitched.</summary>
     public double Damage;
+    /// <summary>The condition it was in when it was hitched. Damage taken says what
+    /// this delivery did to it and nothing about what it was handed over as, and a
+    /// unit that arrives at eighteen percent is a different conversation depending on
+    /// whether it left at nothing or at seventeen.</summary>
+    public double StartDamage;
 }
 
 /// <summary>
@@ -240,6 +245,10 @@ public class JobRecord {
     public long PausedMs;
     public double SpeedingShare;
     public double TruckDamage;
+    /// <summary>What the truck, the trailer and the load were in when the load went
+    /// on. Null on rows recorded before this was kept, where only the difference is
+    /// known and the delivery says just that.</summary>
+    public double? StartTruckDamage, StartTrailerDamage, StartCargoDamage;
     public double TrailerDamage;
 
     public List<FineRecord> Fines = new();

@@ -449,7 +449,7 @@ public static class WaybillSheet {
                 unit.BodyType.StartsWith('_') ? "" : unit.BodyType,
                 unit.Plate,
                 Strings.T(unit.Owned ? "detail.owned" : "value.hired"),
-                $"{unit.Damage * 100:0.00} %",
+                Condition(unit.StartDamage, unit.StartDamage + unit.Damage),
             }).ToList();
             pieces.AddRange(Table(Strings.T("sheet.equipment"),
                 new[] {
@@ -468,9 +468,15 @@ public static class WaybillSheet {
             (Strings.T("sheet.commodity"), d.Cargo, true),
             (Strings.T("sheet.weight"), $"{u.MassTonnes(d.CargoMassKg):0.0} {u.MassUnit}", false),
             (Strings.T("detail.special"), Strings.T(d.SpecialTransport ? "value.yes" : "value.no"), false),
-            ($"{Strings.T("col.truck")} · {Strings.T("detail.damage")}", $"{d.TruckDamage * 100:0.00} %", false),
-            ($"{Strings.T("detail.trailer")} · {Strings.T("detail.damage")}", $"{d.TrailerDamage * 100:0.00} %", false),
-            ($"{Strings.T("col.cargo")} · {Strings.T("detail.damage")}", $"{d.CargoDamage * 100:0.00} %", false),
+            // Before and after, which on a consignment note is the point of the box:
+            // the driver signs for what they took and what they brought back, not for
+            // the difference between them.
+            ($"{Strings.T("col.truck")} · {Strings.T("sheet.condition")}",
+             Condition(d.TruckDamageStart, (d.TruckDamageStart ?? 0) + d.TruckDamage), false),
+            ($"{Strings.T("detail.trailer")} · {Strings.T("sheet.condition")}",
+             Condition(d.TrailerDamageStart, (d.TrailerDamageStart ?? 0) + d.TrailerDamage), false),
+            ($"{Strings.T("col.cargo")} · {Strings.T("sheet.condition")}",
+             Condition(d.CargoDamageStart, d.CargoDamage), false),
         }, 3, 15f));
 
         pieces.Add(Gap(3.5f));
@@ -524,6 +530,12 @@ public static class WaybillSheet {
         d.TrailerUnits.Count > 0 ? Waybill.Tracking.TrailerNames.Describe(d.TrailerUnits[0]) : d.Trailer;
 
     private static Piece Gap(float mm) => new() { Height = mm, Filler = true };
+
+    /// <summary>What something was in when it was taken on, and what it was in when
+    /// it was handed over. A form asks for both: the difference between them is
+    /// arithmetic anybody can do, and neither figure can be recovered from it.</summary>
+    private static string Condition(double? before, double after) =>
+        before is { } b ? $"{b * 100:0.00} → {after * 100:0.00} %" : $"{after * 100:0.00} %";
 
     private static string Where(string company, string city) =>
         string.Join(", ", new[] { company, city }.Where(s => s.Length > 0));

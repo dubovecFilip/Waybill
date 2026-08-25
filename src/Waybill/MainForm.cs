@@ -883,6 +883,10 @@ public partial class MainForm : Form {
         header.Controls.Add(arrow);
         header.Controls.Add(caption);
 
+        // Zero on a unit recorded before the hitching condition was kept, which reads
+        // as the same thing the figure alone used to say.
+        static double Hitched(TrailerUnitRecord unit) => unit.StartDamage;
+
         var body = new Panel { Dock = DockStyle.Top, Height = openHeight - 30, BackColor = Raised, Visible = false };
         var lines = new List<Control>();
         if (trailers.Count > 1) {
@@ -895,7 +899,8 @@ public partial class MainForm : Form {
             var name = TrailerNames.Describe(unit);
             var label = $"{i + 1}.  {Strings.T("value." + unit.Kind)}"
                       + (unit.Owned ? $"  ({Strings.T("detail.owned")})" : "");
-            var line = UnitLine(label, $"{name}   ·   {unit.Plate}   ·   {Damage(unit.Damage)}",
+            var line = UnitLine(label,
+                $"{name}   ·   {unit.Plate}   ·   {Condition(Hitched(unit), Hitched(unit) + unit.Damage)}",
                 unit.Kind == "dolly" ? Muted : Ink, lineHeight);
             // The reading is a convenience; the identifier is what the data says, and
             // it stays one hover away.
@@ -954,6 +959,22 @@ public partial class MainForm : Form {
     /// numbers turns every clean drive into a flat zero.</summary>
     private static string Damage(double share) =>
         share <= 0 ? $"0 %" : $"{share * 100:0.00} %";
+
+    /// <summary>
+    /// The condition of something before and after the delivery.
+    ///
+    /// A single figure has never been enough here. "2.98 %" against a truck means
+    /// what this drive did to it, and against the load it means what it arrived in,
+    /// which are two different questions answered in the same shape. Said as one
+    /// figure arriving at another, both are on the line and neither can be mistaken
+    /// for the other.
+    ///
+    /// Deliveries recorded before the starting condition was kept have only the
+    /// difference, and say only that rather than pretending the set left the yard
+    /// undamaged.
+    /// </summary>
+    private static string Condition(double? before, double after) =>
+        before is { } b ? $"{Damage(b)}  →  {Damage(after)}" : Damage(after);
 
     /// <summary>A one line text prompt, because WinForms has no InputBox and the
     /// application ID has to come from somewhere. Returns null when cancelled,
@@ -2645,10 +2666,13 @@ public partial class MainForm : Form {
         // Damage on its own, one line per thing that can take it. Truck and trailer
         // used to share a line and the cargo was not shown at all, which left no way
         // to see that a load arrived damaged without a collision behind it.
+        // Before and after, where the before is known. The truck and the trailer
+        // store what this delivery added to them; the load's figure is what the game
+        // reported outright on arrival, so it is already the after.
         Group(Strings.T("detail.groupDamage"));
-        Row(Strings.T("col.truck"), Damage(d.TruckDamage));
-        Row(Strings.T("detail.trailer"), Damage(d.TrailerDamage));
-        Row(Strings.T("col.cargo"), Damage(d.CargoDamage));
+        Row(Strings.T("col.truck"), Condition(d.TruckDamageStart, (d.TruckDamageStart ?? 0) + d.TruckDamage));
+        Row(Strings.T("detail.trailer"), Condition(d.TrailerDamageStart, (d.TrailerDamageStart ?? 0) + d.TrailerDamage));
+        Row(Strings.T("col.cargo"), Condition(d.CargoDamageStart, d.CargoDamage));
 
         // Docked children stack in reverse order of adding, so the list goes in
         // backwards to come out in the order it was built.
