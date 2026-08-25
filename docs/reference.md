@@ -44,15 +44,34 @@ has no effect on the verdict.
 
 | Value | Meaning |
 |---|---|
-| `clean` | Under 5% of driving time clearly over the limit, fewer than 3 fines, fewer than 3 collisions |
+| `clean` | Under 5% of driving time clearly over the limit, and fewer fines and fewer collisions than the run allows |
 | `spirited` | Anything else |
 
 "Clearly over" means more than 10 km/h above the posted limit, stored separately
 as `hard_speeding_share`. Drifting a few km/h over is not what anyone means by
 driving hard, so it does not count here; `speeding_share` remains the strict
-measure of any excess at all. Single fines and collisions barely enter into it,
-since one bad moment on a long haul says nothing about how someone drives; it
-takes a handful of them before the pattern means anything.
+measure of any excess at all. The share is not scaled by anything: it is already
+a proportion of the driving it was measured over, so it asks the same question of
+twenty minutes as of twenty hours.
+
+The two counts are scaled, because a count means nothing without the road it was
+counted over. Three fines crossing town and three across fifteen hundred
+kilometres are not the same driver, and judging both against one number made the
+short run look like the wild one. A delivery is allowed 2 of each, plus one more
+of each for every 500 km driven:
+
+| Driven | Fines or collisions allowed |
+|---|---|
+| under 500 km | 2 |
+| 500 km | 3 |
+| 1500 km | 5 |
+| 2500 km | 7 |
+
+Single fines and collisions still barely enter into it, since one bad moment on a
+long haul says nothing about how someone drives; it takes a pattern before it
+means anything. Measured against this history the rate leaves every run anybody
+would call spirited where it was, moves a busy three hundred kilometre hop into
+them, and forgives a long haul its third knock.
 
 ## Validation flags
 
@@ -217,8 +236,8 @@ vehicle rather than a road train.
 
 `trailer_units` holds every coupled unit in hitching order, each with its
 identifier, name, plate, body type, whether it is a `trailer` or a `dolly`,
-whether it is owned, and the damage it took over that delivery measured from the
-condition it was hitched in.
+whether it is owned, the damage it took over that delivery, and `StartDamage`,
+the condition it was hitched in that the damage is measured from.
 
 `trailer_owned` is true when any unit is the driver's own. Owned units are
 identified the way trucks are, as `vehicle.something`, and carry a name; a trailer
@@ -226,6 +245,14 @@ handed over with the job is named for its type and has none.
 
 `trailer_damage_pct` stays the worst across the set, which is the set's condition
 and what the game itself shows.
+
+`truck_damage_pct` and `trailer_damage_pct` are what the delivery added;
+`cargo_damage_pct` is what the game reported outright on arrival.
+`truck_damage_start_pct`, `trailer_damage_start_pct` and `cargo_damage_start_pct`
+hold what each was in at the moment the load went on, so both ends of the run can
+be shown rather than only the difference between them. They are null, never zero,
+on rows recorded before they were kept: zero would be a claim that the set left
+undamaged. A rebuild fills them in from the recordings.
 
 The name a unit is shown under is worked out for display only; nothing about it is
 stored, so improving it improves every past delivery at once. An owned unit uses

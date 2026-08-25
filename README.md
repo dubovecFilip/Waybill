@@ -262,9 +262,10 @@ The game shows one condition for the whole set however many units are behind the
 truck. Telemetry has them separately, and Waybill keeps each one.
 
 The *Trailer* line folds the set away: closed it says what the set is, opened it
-lists every unit in the order they are hitched, with its plate and the damage it
-took. A dolly is named as a dolly, so counting or averaging does not treat the
-converter as cargo capacity, and a trailer you own says so.
+lists every unit in the order they are hitched, with its plate and the condition
+it was hitched in against the condition it arrived in. A dolly is named as a
+dolly, so counting or averaging does not treat the converter as cargo capacity,
+and a trailer you own says so.
 
 A unit you own carries the name you gave it. One handed over with the job has
 none, and the game identifies it by the file it came out of, so
@@ -283,6 +284,18 @@ Splitting the set apart is not only bookkeeping. On one triple the leading unit
 took fifteen times the body damage of the others while the wheels wore evenly
 across all three, which is the difference between clipping something and simply
 driving a long way. One figure for the set hides that entirely.
+
+Damage is given as two figures throughout, on the card and on the sheet: what the
+truck, each unit and the load were in when the load went on, and what they were
+in when it came off. One figure was never enough. Against a truck it meant what
+this drive did to it, against the load it meant what it arrived in, and the two
+were told apart only by knowing which was which. Said as one figure arriving at
+another, a trailer that gets to the drop at eighteen percent says plainly whether
+it left the yard at nothing or at seventeen.
+
+Deliveries recorded before this was kept have only the difference and say only
+that, rather than claiming the set left undamaged. *Data → Rebuild* fills them in
+from their recordings.
 
 ## The map
 
