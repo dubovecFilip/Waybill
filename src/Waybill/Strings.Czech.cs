@@ -284,6 +284,7 @@ public static partial class Strings {
         ["sheet.tacho"] = "Průběh rychlosti",
         ["sheet.notes"] = "Vlastní záznam řidiče",
         ["menu.signature"] = "Podpis...",
+        ["menu.cityRegions"] = "Psát stát u města",
         ["sign.title"] = "Tvůj podpis",
         ["sign.hint"] = "Podepiš se nad čáru, tak jako na papíře. Bude dole na každém uloženém listu.",
         ["sign.clear"] = "Smazat",

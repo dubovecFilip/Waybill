@@ -451,6 +451,15 @@ public partial class MainForm : Form {
         settings.DropDownItems.Add(BuildLanguageMenu());
         settings.DropDownItems.Add(BuildDiscordMenu());
         settings.DropDownItems.Add(MenuAction(Strings.T("menu.signature"), SignHere));
+
+        var regions = new ToolStripMenuItem(Strings.T("menu.cityRegions")) { Checked = _settings.CityRegions };
+        regions.Click += (_, _) => {
+            _settings.CityRegions = !_settings.CityRegions;
+            _settings.Save();
+            regions.Checked = _settings.CityRegions;
+            AfterMenuCloses(BuildLayout);
+        };
+        settings.DropDownItems.Add(regions);
         return settings;
     }
 
@@ -1367,6 +1376,13 @@ public partial class MainForm : Form {
             foreach (var numeric in new[] { nameof(DeliveryRow.Vzdialenost), nameof(DeliveryRow.Odmena), nameof(DeliveryRow.Pokuty), nameof(DeliveryRow.Kolizie) }) {
                 if (_grid.Columns[numeric] is { } c) c.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
             }
+            // Wide enough for the longest name either end of a delivery, with its
+            // state written after it: at the default width "Salt Lake City, UT" came
+            // out as "Salt Lake City, ...", which is the one thing the state was
+            // added to avoid.
+            foreach (var place in new[] { nameof(DeliveryRow.Odkial), nameof(DeliveryRow.Kam) }) {
+                if (_grid.Columns[place] is { } c) c.Width = 132;
+            }
             SetGutterTips();
         }
     }
@@ -1723,6 +1739,11 @@ public partial class MainForm : Form {
         UseDarkScrollbars(_detailPage);
     }
 
+    /// <summary>A city as this driver has asked to see it: with the state or the
+    /// country it is in, or as the game names it.</summary>
+    private string Where(DeliveryDetail d, string city) =>
+        _settings.CityRegions ? Places.Say(d.Game, city) : city;
+
     private Control DetailHeader(DeliveryDetail d, Units u) {
         var head = new Panel { Dock = DockStyle.Top, Height = 108, BackColor = Surface, Padding = new Padding(24, 16, 24, 12) };
 
@@ -1761,7 +1782,7 @@ public partial class MainForm : Form {
         actions.Controls.Add(timelineButton);
 
         var route = new Label {
-            Dock = DockStyle.Top, Height = 36, Text = $"{d.SourceCity}  →  {d.DestinationCity}",
+            Dock = DockStyle.Top, Height = 36, Text = $"{Where(d, d.SourceCity)}  →  {Where(d, d.DestinationCity)}",
             ForeColor = Ink, Font = new Font("Segoe UI", 16F, FontStyle.Bold),
         };
         var sub = new Label {
@@ -2648,7 +2669,7 @@ public partial class MainForm : Form {
     /// for room.</summary>
     private void BigMap(DeliveryDetail d, Units u) {
         using var window = new Form {
-            Text = $"{d.SourceCity}  →  {d.DestinationCity}",
+            Text = $"{Where(d, d.SourceCity)}  →  {Where(d, d.DestinationCity)}",
             StartPosition = FormStartPosition.CenterScreen,
             WindowState = FormWindowState.Maximized,
             BackColor = Canvas, ForeColor = Ink, KeyPreview = true,
@@ -2920,6 +2941,15 @@ public partial class MainForm : Form {
 
     private void ReloadHistory() {
         _rows = _store.RecentDeliveryRows(500, _settings.Units).ToList();
+        // Written into the rows rather than at the moment they are drawn, because the
+        // list is bound to them: the column shows the field, and the search box reads
+        // it too, so "Yakima, WA" can also be searched for by its state.
+        if (_settings.CityRegions) {
+            foreach (var row in _rows) {
+                row.Odkial = Places.Say(row.Hra, row.Odkial);
+                row.Kam = Places.Say(row.Hra, row.Kam);
+            }
+        }
         _routes.Clear();
         ApplyFilter();
         ReloadMapPage();

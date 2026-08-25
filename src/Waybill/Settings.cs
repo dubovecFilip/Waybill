@@ -29,6 +29,12 @@ public class Settings {
     /// not a secret: it only tells Discord whose icons and name to show.</summary>
     public string? DiscordAppId { get; set; }
 
+    /// <summary>Name the state or the country beside a city: "Yakima, WA". Off shows
+    /// the city as the game names it. Only the delivery list, the card and the sheet
+    /// ask: the maps have the names in them already and a code on every one of them
+    /// would be a page of abbreviations with a route somewhere underneath.</summary>
+    public bool CityRegions { get; set; } = true;
+
     /// <summary>The driver's signature, as the strokes they drew, for the foot of an
     /// exported sheet. Empty means the line is left blank, which is what a form does
     /// when nobody has signed it. See <see cref="Signature"/> for the notation.</summary>

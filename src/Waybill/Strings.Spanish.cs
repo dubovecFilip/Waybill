@@ -284,6 +284,7 @@ public static partial class Strings {
         ["sheet.tacho"] = "Velocidad del trayecto",
         ["sheet.notes"] = "Nota del conductor",
         ["menu.signature"] = "Firma...",
+        ["menu.cityRegions"] = "Indicar el estado o país",
         ["sign.title"] = "Tu firma",
         ["sign.hint"] = "Firma sobre la línea, como en papel. Irá al pie de cada hoja que guardes.",
         ["sign.clear"] = "Borrar",

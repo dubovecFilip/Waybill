@@ -283,6 +283,7 @@ public static partial class Strings {
         ["sheet.tacho"] = "Speed as run",
         ["sheet.notes"] = "Driver's own note",
         ["menu.signature"] = "Signature...",
+        ["menu.cityRegions"] = "Name the state or country",
         ["sign.title"] = "Your signature",
         ["sign.hint"] = "Sign above the line, the way you would on paper. It goes at the foot of every sheet you save.",
         ["sign.clear"] = "Clear",

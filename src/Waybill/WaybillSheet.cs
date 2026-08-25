@@ -382,8 +382,8 @@ public static class WaybillSheet {
             // Joined rather than glued together with a comma. A special transport
             // names no company at either end, and the comma was printed anyway, so
             // the box read ", Stockton" as though something had gone missing.
-            (Strings.T("sheet.shipper"), Where(d.SourceCompany, d.SourceCity), true),
-            (Strings.T("sheet.consignee"), Where(d.DestinationCompany, d.DestinationCity), true),
+            (Strings.T("sheet.shipper"), Where(d.SourceCompany, Town(d, d.SourceCity)), true),
+            (Strings.T("sheet.consignee"), Where(d.DestinationCompany, Town(d, d.DestinationCity)), true),
             (Strings.T("detail.jobType"), d.JobType.Length > 0 ? Label(d.JobType) : "—", false),
             (Strings.T("sheet.commodity"), d.Cargo, true),
             (Strings.T("sheet.weight"), $"{u.MassTonnes(d.CargoMassKg):0.0} {u.MassUnit}", false),
@@ -539,6 +539,13 @@ public static class WaybillSheet {
 
     private static string Where(string company, string city) =>
         string.Join(", ", new[] { company, city }.Where(s => s.Length > 0));
+
+    /// <summary>The city with its state or country, if the driver has asked for that.
+    /// On a document naming two places a thousand miles apart it is worth the two
+    /// letters; the sketch of the route is left alone, where a code beside every town
+    /// would be a page of abbreviations with a route somewhere underneath.</summary>
+    private static string Town(DeliveryDetail d, string city) =>
+        Settings.Load().CityRegions ? Places.Say(d.Game, city) : city;
 
     private static string Label(string key) {
         var t = Strings.T("value." + key);
