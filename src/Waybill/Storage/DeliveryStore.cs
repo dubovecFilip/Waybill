@@ -86,6 +86,37 @@ public class DeliveryStore : IDisposable {
                 alter.ExecuteNonQuery();
             }
         }
+
+        DropPlaceholderStarts();
+    }
+
+    /// <summary>
+    /// Throws away the one route point that was never a place anybody drove.
+    ///
+    /// A job accepted over the loading screen used to record its opening point
+    /// before the truck existed in the world, where the game reports a placeholder
+    /// a metre from the origin. The tracker no longer stores it, but a history
+    /// written before that fix has one at the head of about one route in five, and
+    /// it does real damage there: it is where the map draws the pickup, it stretches
+    /// the frame all the way to the origin, and it is what the city anchor learns
+    /// that city's position from.
+    ///
+    /// Only the first point of a delivery, and only within two metres of the origin,
+    /// which no road in either game comes near. Run at every start because it costs
+    /// nothing once it has nothing to find, and a database restored from an old
+    /// backup deserves the same repair.
+    /// </summary>
+    private void DropPlaceholderStarts() {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+            DELETE FROM trip_points
+            WHERE rowid IN (
+                SELECT p.rowid FROM trip_points p
+                WHERE p.at_ms = (SELECT MIN(q.at_ms) FROM trip_points q WHERE q.delivery_id = p.delivery_id)
+                  AND ABS(p.x) < 2 AND ABS(p.z) < 2
+            );
+            """;
+        cmd.ExecuteNonQuery();
     }
 
     public static string DefaultDir() =>

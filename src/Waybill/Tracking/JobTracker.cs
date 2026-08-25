@@ -647,7 +647,19 @@ public class JobTracker {
             TrailerCoupled = snap.Trailer.Attached,
             CargoOn = snap.Job?.CargoLoaded ?? false,
         };
-        _current.TripPoints.Add(new TripPoint { AtMs = nowMs, X = snap.PosX, Y = snap.PosY, Z = snap.PosZ, SpeedKmh = snap.Truck.SpeedKmh });
+        // Only once the truck is really in the world. A job is very often accepted
+        // over the loading screen, and until it finishes the game reports the
+        // position as a placeholder a metre from the world origin with the odometer
+        // reading exactly 0. Accumulate() already refuses to record a point on such
+        // a tick, and this is the one path that used to slip past it.
+        //
+        // It mattered more than one bad point sounds. It was the first point of the
+        // route, so it was where the map drew the pickup, where the frame stretched
+        // to, and where the city anchor learned that city's position from. One
+        // delivery in five started at the origin and dragged its city with it.
+        if (snap.Truck.OdometerKm > 0) {
+            _current.TripPoints.Add(new TripPoint { AtMs = nowMs, X = snap.PosX, Y = snap.PosY, Z = snap.PosZ, SpeedKmh = snap.Truck.SpeedKmh });
+        }
     }
 
     private List<Anomaly> Accumulate(Snapshot snap, Snapshot prev, long dtMs, bool gap, bool reloaded, bool instant, long nowMs) {
