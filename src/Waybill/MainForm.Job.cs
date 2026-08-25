@@ -161,6 +161,10 @@ public partial class MainForm {
         // running north to south would otherwise draw itself as a thread down the
         // middle with nine tenths of the panel empty either side.
         _jobMap.Straighten = true;
+        // And a compass, because a drawing that is allowed to turn has to say by
+        // how much. It never turns more than sixty degrees off north, so up on the
+        // panel is still roughly up on the map in the cab.
+        _jobMap.ShowCompass = true;
         // A picture, not an instrument. The map page is one click away for anyone who
         // wants to zoom something.
         _jobMap.Cursor = Cursors.Default;

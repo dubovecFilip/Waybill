@@ -165,6 +165,24 @@ public class RouteView : Control {
     /// <summary>How far the drawing is turned, in radians.</summary>
     private float _spin;
 
+    /// <summary>
+    /// How far from north the drawing may be turned.
+    ///
+    /// North is up when this is zero, which is how the game's own map draws it. A
+    /// drive laid exactly along the panel would sometimes want a quarter turn or
+    /// more, and at that point the picture stops agreeing with the map in the cab:
+    /// somewhere you know is north of you is drawn to the left. Sixty degrees is
+    /// enough to win most of the width back and little enough that up is still
+    /// roughly up.
+    /// </summary>
+    private const float MostTurn = MathF.PI / 3;
+
+    /// <summary>Whether the corner carries a compass. On wherever the drawing is
+    /// allowed to turn, because a turned map without one is a map that quietly lies
+    /// about which way you are looking.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool ShowCompass { get; set; }
+
     /// <summary>Raised when a route is clicked with none singled out, which is the
     /// history map's way of opening a delivery.</summary>
     public event Action<long>? RouteChosen;
@@ -350,11 +368,13 @@ public class RouteView : Control {
         if (Math.Abs(xx - zz) < 1e-6 && Math.Abs(xz) < 1e-6) return _spin;
 
         var axis = 0.5 * Math.Atan2(2 * xz, xx - zz);
-        var wanted = (float)-axis;
-        if (Height > Width) wanted += MathF.PI / 2;
+        // Half a turn draws the same line upside down, so the two orientations of
+        // the axis are the same answer; take whichever is nearer to north.
+        var wanted = Wrap((float)-axis);
+        // Held near north rather than laid flat against the panel. A drive that
+        // wants more than this gets as much of it as the limit allows.
+        wanted = Math.Clamp(wanted, -MostTurn, MostTurn);
 
-        // Angles half a turn apart draw the same picture upside down, so the
-        // comparison has to be made modulo half a turn or a flip reads as a swing.
         var diff = MathF.Abs(Wrap(wanted - _spin));
         return diff > 0.26f ? wanted : _spin;
     }
@@ -603,6 +623,7 @@ public class RouteView : Control {
         if (ShowCities) DrawCities(g);
         if (ShowMarks) DrawMarks(g);
         DrawCompanion(g);
+        if (ShowCompass) DrawCompass(g);
         DrawReadout(g);
 
         if (Hint.Length > 0 && _hoverPoint < 0 && _hoverMark < 0 && _lit == 0) {
@@ -829,6 +850,46 @@ public class RouteView : Control {
             g.FillRectangle(halo, RectangleF.Inflate(label, 2, 0));
             g.DrawString(city.Name, font, text, label.Location);
         }
+    }
+
+    /// <summary>
+    /// Which way north is, in the corner.
+    ///
+    /// North is the game's own negative z, which the cities settle beyond doubt:
+    /// sorted by z, Yakima comes first and Tucson last. Unturned that is straight up
+    /// the screen, and the needle simply carries the same turn the drawing did.
+    /// </summary>
+    private void DrawCompass(Graphics g) {
+        const float r = 15f;
+        var at = new PointF(Width - r - 12, r + 12);
+
+        using (var face = new SolidBrush(Color.FromArgb(170, 22, 25, 29)))
+        using (var rim = new Pen(Color.FromArgb(120, 138, 148, 163))) {
+            g.FillEllipse(face, at.X - r, at.Y - r, r * 2, r * 2);
+            g.DrawEllipse(rim, at.X - r, at.Y - r, r * 2, r * 2);
+        }
+
+        // North turned the way everything else on the drawing is turned. Up is
+        // negative on the screen, which is why the y term carries the minus.
+        var nx = MathF.Sin(_spin);
+        var ny = -MathF.Cos(_spin);
+        var tip = new PointF(at.X + nx * (r - 4), at.Y + ny * (r - 4));
+        var tail = new PointF(at.X - nx * (r - 7), at.Y - ny * (r - 7));
+        // Across the needle, for a shape with two sides rather than a bare line.
+        var wx = -ny * 3.5f;
+        var wy = nx * 3.5f;
+
+        using (var north = new SolidBrush(Accent))
+        using (var south = new SolidBrush(Color.FromArgb(150, 138, 148, 163))) {
+            g.FillPolygon(north, new[] { tip, new PointF(at.X + wx, at.Y + wy), new PointF(at.X - wx, at.Y - wy) });
+            g.FillPolygon(south, new[] { tail, new PointF(at.X + wx, at.Y + wy), new PointF(at.X - wx, at.Y - wy) });
+        }
+
+        using var font = new Font("Segoe UI", 7F, FontStyle.Bold);
+        using var ink = new SolidBrush(Ink);
+        using var centre = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        // Outside the dial, on the needle's own side, so it stays with north.
+        g.DrawString("N", font, ink, new PointF(at.X + nx * (r + 7), at.Y + ny * (r + 7)), centre);
     }
 
     /// <summary>Where the profile beside this map is being pointed at. Drawn in the
