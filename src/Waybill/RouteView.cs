@@ -160,13 +160,18 @@ public class RouteView : Control {
     public bool ShowMarks { get; set; } = true;
 
     /// <summary>
-    /// Turns the drive to lie along the longer side of whatever it is drawn in.
+    /// Turns the drive to whatever angle fills the shape it is drawn in.
     ///
-    /// For a panel that is much wider than it is tall, which a route running north
-    /// to south leaves nine tenths empty while drawing itself as a thin thread.
+    /// Not to lie flat, which is what it used to do: the panel is as often tall as
+    /// wide, and a drive turned onto its side to suit a panel that was never wide is
+    /// a worse picture than one left alone. The angle is chosen by trying half a turn
+    /// of them and keeping whichever draws the route biggest in the room there is, so
+    /// a tall panel gets the drive standing up and a wide one gets it lying down.
+    ///
     /// There is no north here to lose: this is the game's own space and it was never
-    /// oriented to anything, so turning it costs nothing a compass would notice.
-    /// The shape, the lengths and the angles within the route are all untouched.
+    /// oriented to anything, so turning it costs nothing a compass would notice, and
+    /// the corner carries one anyway. The shape, the lengths and the angles within
+    /// the route are all untouched.
     ///
     /// Off everywhere else. On the history map there is no one drive to turn, and on
     /// a delivery's card the route sits beside a profile of the same drive; turning
@@ -179,16 +184,18 @@ public class RouteView : Control {
     private float _spin;
 
     /// <summary>
-    /// How far from north the drawing may be turned.
+    /// How far from north the drawing may be turned, either way.
     ///
-    /// North is up when this is zero, which is how the game's own map draws it. A
-    /// drive laid exactly along the panel would sometimes want a quarter turn or
-    /// more, and at that point the picture stops agreeing with the map in the cab:
-    /// somewhere you know is north of you is drawn to the left. Sixty degrees is
-    /// enough to win most of the width back and little enough that up is still
-    /// roughly up.
+    /// North is up at zero, which is how the game's own map draws it. A quarter turn
+    /// each way covers every angle a line can lie at, so nothing is out of reach, and
+    /// the compass in the corner is what keeps the picture honest about it.
     /// </summary>
-    private const float MostTurn = MathF.PI / 3;
+    private const float MostTurn = MathF.PI / 2;
+
+    /// <summary>How many angles are tried across that half turn. Every five degrees,
+    /// which is finer than the eye can tell in a bounding box and cheap enough to do
+    /// on every fit of a live drive.</summary>
+    private const int TurnsTried = 36;
 
     /// <summary>Whether the corner carries a compass. On wherever the drawing is
     /// allowed to turn, because a turned map without one is a map that quietly lies
@@ -366,30 +373,48 @@ public class RouteView : Control {
     private float Spin(List<RoutePoint> points) {
         if (points.Count < 60) return _spin;
 
-        double mx = 0, mz = 0;
-        foreach (var p in points) { mx += p.X; mz += p.Z; }
-        mx /= points.Count;
-        mz /= points.Count;
+        // A handful of points is enough to find the angle: the bounding box of a
+        // drive is decided by its outermost points, and thinning the line barely
+        // moves them while making this cheap enough to run once a second.
+        var sample = Thin(points, 400);
 
-        double xx = 0, zz = 0, xz = 0;
-        foreach (var p in points) {
-            var dx = p.X - mx;
-            var dz = p.Z - mz;
-            xx += dx * dx; zz += dz * dz; xz += dx * dz;
+        // The angle in use has to be beaten by a margin, or a live drive would swing
+        // about under the driver every time it grew by a second.
+        var best = _spin;
+        var bestFit = Fits(sample, _spin) * 1.06f;
+        for (var i = 0; i < TurnsTried; i++) {
+            var turn = -MostTurn + i * (MostTurn * 2 / TurnsTried);
+            var fit = Fits(sample, turn);
+            if (fit <= bestFit) continue;
+            bestFit = fit;
+            best = turn;
         }
-        // A drive that went nowhere in particular has no axis worth respecting.
-        if (Math.Abs(xx - zz) < 1e-6 && Math.Abs(xz) < 1e-6) return _spin;
+        return best;
+    }
 
-        var axis = 0.5 * Math.Atan2(2 * xz, xx - zz);
-        // Half a turn draws the same line upside down, so the two orientations of
-        // the axis are the same answer; take whichever is nearer to north.
-        var wanted = Wrap((float)-axis);
-        // Held near north rather than laid flat against the panel. A drive that
-        // wants more than this gets as much of it as the limit allows.
-        wanted = Math.Clamp(wanted, -MostTurn, MostTurn);
+    /// <summary>How big the drive would be drawn at one angle: the scale that fits
+    /// its bounding box into the room there is, which is the thing being maximised.</summary>
+    private float Fits(List<RoutePoint> points, float spin) {
+        float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
+        foreach (var p in points) {
+            var (x, z) = Turn(p.X, p.Z, spin);
+            minX = Math.Min(minX, x); maxX = Math.Max(maxX, x);
+            minZ = Math.Min(minZ, z); maxZ = Math.Max(maxZ, z);
+        }
+        var w = Math.Max(maxX - minX, 1f);
+        var h = Math.Max(maxZ - minZ, 1f);
+        return Math.Min((Width - Pad * 2) / w, (Height - Pad * 2) / h);
+    }
 
-        var diff = MathF.Abs(Wrap(wanted - _spin));
-        return diff > 0.26f ? wanted : _spin;
+    /// <summary>Every so many points, up to a limit, with the last one always kept so
+    /// the near end of a live drive is never left out.</summary>
+    private static List<RoutePoint> Thin(List<RoutePoint> points, int most) {
+        if (points.Count <= most) return points;
+        var step = points.Count / most + 1;
+        var thinned = new List<RoutePoint>(most + 2);
+        for (var i = 0; i < points.Count; i += step) thinned.Add(points[i]);
+        thinned.Add(points[^1]);
+        return thinned;
     }
 
     /// <summary>An angle folded into plus or minus a quarter turn, which is as far
@@ -414,7 +439,9 @@ public class RouteView : Control {
         if (scope.Count == 0 && alsoSecondary.Count == 0) { _fitScale = 1f; _centre = PointF.Empty; return; }
 
         var points = scope.SelectMany(d => d.Runs).Concat(alsoSecondary).SelectMany(r => r).ToList();
+        var was = _spin;
         _spin = Straighten ? Spin(points) : 0;
+        var spun = MathF.Abs(_spin - was) > 0.001f;
 
         float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
         foreach (var p in points) {
@@ -425,17 +452,106 @@ public class RouteView : Control {
         // The centre is held unturned, since everything is turned about it on the way
         // to the screen; turning it as well would turn the drawing twice.
         var mid = Turn((minX + maxX) / 2, (minZ + maxZ) / 2, -_spin);
-        _centre = new PointF(mid.X, mid.Z);
 
         var w = Math.Max(maxX - minX, 1f);
         var h = Math.Max(maxZ - minZ, 1f);
         // One scale for both axes. Stretching the route to fill the control would
         // make a straight motorway look like a curve, which is a lie about the only
         // thing this control does claim to show.
-        _fitScale = Math.Min((Width - Pad * 2) / w, (Height - Pad * 2) / h);
-        if (_fitScale <= 0 || float.IsInfinity(_fitScale)) _fitScale = 1f;
+        var wanted = Math.Min((Width - Pad * 2) / w, (Height - Pad * 2) / h);
+        if (wanted <= 0 || float.IsInfinity(wanted)) wanted = 1f;
+
+        GlideTo(wanted, new PointF(mid.X, mid.Z), spun || _snapNext);
+        _snapNext = false;
         Discard();
         Invalidate();
+    }
+
+    /// <summary>How far off the frame may drift before it is worth moving. A live
+    /// drive is refitted every second and almost every second of it lands well inside
+    /// the frame already drawn; moving the picture for that is all cost and no
+    /// information.</summary>
+    private const float FrameSlack = 0.04f;
+
+    /// <summary>How long the picture takes to settle into a new frame.</summary>
+    private const int GlideMs = 320;
+
+    /// <summary>Set when the next fit has to arrive at once rather than glide: the
+    /// panel changed size under it, and a frame chosen for the old size is simply
+    /// wrong rather than nearly right.</summary>
+    private bool _snapNext = true;
+
+    private float _wantScale = 1f;
+    private PointF _wantCentre;
+    private float _fromScale = 1f;
+    private PointF _fromCentre;
+    private int _glideFrom;
+    private System.Windows.Forms.Timer? _glide;
+
+    /// <summary>
+    /// Takes the drawing to a new frame without it jumping there.
+    ///
+    /// A drive being watched as it happens is refitted once a second, and each fit
+    /// wants the picture very slightly smaller than the one before. Snapping to each
+    /// one reads as a twitch every second. So a frame close enough to the one already
+    /// drawn is ignored altogether, and a frame far enough to matter is eased into
+    /// over a third of a second, which the eye follows instead of noticing.
+    ///
+    /// The first fit of anything, and any fit where the angle changed, arrives at
+    /// once: there is nothing on screen yet to glide away from.
+    /// </summary>
+    private void GlideTo(float scale, PointF centre, bool turned) {
+        _wantScale = scale;
+        _wantCentre = centre;
+
+        var settled = _glide is null && _fitScale > 0;
+        var offBy = Math.Abs(scale - _fitScale) / Math.Max(scale, 0.0001f);
+        var driftX = Math.Abs(centre.X - _centre.X) * scale;
+        var driftY = Math.Abs(centre.Y - _centre.Y) * scale;
+        var drift = Math.Max(driftX, driftY) / Math.Max(Math.Min(Width, Height), 1);
+
+        // Near enough that moving would be noticed and nothing else.
+        if (settled && !turned && offBy < FrameSlack && drift < FrameSlack) return;
+
+        // Far enough that easing would be a slow lurch rather than a glide, or the
+        // first sight of this drive, or a new angle, which turns everything anyway.
+        if (turned || _fitScale <= 0 || offBy > 0.5f) {
+            StopGlide();
+            _fitScale = scale;
+            _centre = centre;
+            return;
+        }
+
+        _fromScale = _fitScale;
+        _fromCentre = _centre;
+        _glideFrom = Environment.TickCount;
+        _glide ??= NewGlide();
+        _glide.Start();
+    }
+
+    private System.Windows.Forms.Timer NewGlide() {
+        // Thirty a second rather than sixty: every step throws away the drawn-once
+        // layer underneath and paints it again, and ten of those is a glide already.
+        var timer = new System.Windows.Forms.Timer { Interval = 33 };
+        timer.Tick += (_, _) => {
+            var gone = (Environment.TickCount - _glideFrom) / (float)GlideMs;
+            // Easing out, so the picture arrives rather than stops dead.
+            var into = gone >= 1 ? 1 : 1 - MathF.Pow(1 - gone, 2f);
+            _fitScale = _fromScale + (_wantScale - _fromScale) * into;
+            _centre = new PointF(
+                _fromCentre.X + (_wantCentre.X - _fromCentre.X) * into,
+                _fromCentre.Y + (_wantCentre.Y - _fromCentre.Y) * into);
+            if (gone >= 1) StopGlide();
+            Discard();
+            Invalidate();
+        };
+        return timer;
+    }
+
+    private void StopGlide() {
+        _glide?.Stop();
+        _glide?.Dispose();
+        _glide = null;
     }
 
     /// <summary>Pixels per world metre. Named for what it is rather than "scale",
@@ -464,6 +580,7 @@ public class RouteView : Control {
     protected override void OnResize(EventArgs e) {
         base.OnResize(e);
         _fitted = false;
+        _snapNext = true;
         Discard();
     }
 
