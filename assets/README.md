@@ -13,6 +13,7 @@
 | `trailer-chain.png` | A triple with its units and dollies opened out. |
 | `map.png` | The map page, with one route lit under the pointer. |
 | `statistics.png` | The statistics page, with the period and game it is answering for. |
+| `sessions.png` | The sittings at the wheel, one of them picked. |
 | `waybill-sheet.png` | A delivery exported as three A4 sheets, side by side. |
 | `legend.png` | Every mark the window uses, with what it means. |
 

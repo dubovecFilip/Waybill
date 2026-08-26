@@ -400,13 +400,10 @@ rather than only tested.
 **Phase 2, partly.** Export tools are there, and so are period comparisons: the
 statistics page answers for a week or a month and says how each figure moved
 against the same length of time before it, and it can be narrowed to one game.
-Achievements and session statistics are not built, and neither is comparing one
-truck against another, which wants a different shape of page than a row of tiles.
-
-A session is recorded as a file already, and the tracker counts the deliveries in
-the run it is having, so session statistics are a page rather than a measurement
-problem: start and end, distance, profit, deliveries, average speed and the breaks
-are all in what is already stored.
+Session statistics are built: a page of sittings at the wheel, each with what was
+driven in it, where a sitting is one run of the app and runs close together are
+the same sitting. Achievements are not built, and neither is comparing one truck
+against another, which wants a different shape of page than a row of tiles.
 
 **Phase 3, mostly.** The map is drawn: a delivery's own route with its events
 marked on it, and a page showing every drive of one game at once, where clicking a
@@ -452,18 +449,15 @@ down, because each of these reads like an oversight and none of them is.
 
 **Small things still open, in the order they are worth doing.**
 
-- Session statistics, as above
 - Achievements, which want a rule engine rather than another query
 - One truck against another, which wants a page shaped for comparison
 - Fuel and cargo weight as totals in the logbook: every refuel is stored with what
   it cost and every delivery with what it carried, but neither is summed anywhere
 - GPX and KML, which need the coordinate decision above faced again, since both
   formats want real ones
-- The city identifier stored beside the city name. The game reports both and only
-  the name is kept, which is why the region table cannot tell the Salina in Utah
-  from the one in Kansas
-- Heading in the trip points. The telemetry has it and the recording keeps
-  position and speed only, so a drawn route has no facing to it
+- Heading in the recording. It is read live now, for the needle on the map of the
+  drive in progress, but the field it comes from is internal to the SDK and never
+  written to a recording, so a finished drive still has no facing to it
 
 ---
 

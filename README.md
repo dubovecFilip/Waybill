@@ -88,6 +88,8 @@ Every state, flag and anomaly is listed with its meaning in
 * Draws the route on that sheet over every road already driven, with the towns named
 * Signs that sheet in your own hand, drawn once with the mouse and kept
 * Names the state or the country a city is in, in the list, on the card and on the sheet
+* Groups a night's driving into one sitting and says what came of it
+* Draws the drive in progress a second at a time, with a needle for which way it points
 * Keeps the driving between jobs too, as distance and as lines on the map
 * Resumes an interrupted job after a crash or after quitting mid drive
 * Launches the game from the window, including a telemetry plugin check
@@ -161,7 +163,12 @@ real drive takes the page back.
 
 The map is the drive so far and nothing else: the hollow ring is where the load
 went on, the line is coloured by speed like every other route here, and the
-filled marker is where the truck is now. It turns the drive to lie along the
+filled marker is where the truck is now, with a needle for which way it is
+pointing. Where the truck is going can be worked out from two positions, where
+it is pointing cannot, and the two are different things reversing onto a dock.
+It redraws every second, which is the rate the tracker records at, and it can be
+switched off in *Settings* for anyone who would rather the machine spent those
+milliseconds on the game. It turns the drive to lie along the
 panel, which is far wider than it is tall, so a run from north to south fills the
 width instead of drawing a thread down the middle.
 
@@ -263,6 +270,26 @@ take either number out of. So they are two lines, and the collision names what
 took the hit, the truck or the trailer, with the load beside it when that was
 shaken as well.
 
+## A night's driving
+
+*Sessions* is the page for the question a driver asks getting up from the desk:
+what did I get done. The delivery card answers about one drive and the
+statistics about a week or a month; neither of those is an evening.
+
+![Sittings at the wheel](assets/sessions.png)
+
+A sitting is one run of the app, and runs that follow one another closely are
+the same sitting. An hour is the gap, and it is a preference rather than a
+constant because it is the one number here that somebody made up: closing
+Waybill for a moment, or a crash and a restart, is not the end of an evening's
+driving. Left open, a sitting never ends however long the pause, since what ends
+one is the driver getting up rather than the driving stopping. The column
+counting the runs says how many times that happened.
+
+It reads the whole history, so the sittings go back as far as the recordings do,
+and the one selected shows its deliveries beside it, each a click from its own
+card. `Waybill.exe --sessions` prints the same list.
+
 ## Where a city is
 
 A list of thirty deliveries reads as a list of names unless you already know the
@@ -273,13 +300,17 @@ names in them already and would become a page of abbreviations with a route
 somewhere underneath. *Settings* has a switch for it.
 
 Neither game reports it. Telemetry gives the city and the company and nothing
-about the region either sits in, so it is a table keyed by the name the game
-reports, and it is deliberately incomplete. A city that is not in it is shown
-exactly as the game named it, which is what happens for every map mod and for
-the handful of names the table refuses to guess at: American Truck Simulator has
-a Salina in Utah and another in Kansas, and the name alone cannot tell them
-apart. A missing code says "not known"; a wrong one would say something false
-about a delivery.
+about the region either sits in, so it is a table, and it is deliberately
+incomplete. A city that is not in it is shown exactly as the game named it,
+which is what happens for every map mod. A missing code says "not known"; a
+wrong one would say something false about a delivery.
+
+The game names a city twice, once for a person and once for itself, and both are
+kept. Two cities can share a name inside one game and never an identifier, so
+where the name is ambiguous the identifier settles it: American Truck Simulator
+has a Salina in Utah and another in Kansas, and the Utah one is `salina`. The
+identifier is also what the game calls a city in every language, so none of this
+depends on the game being in English.
 
 ## Doubles and triples
 
@@ -563,6 +594,7 @@ Waybill.exe --import-trucksbook <csv>   # import history from TrucksBook
 Waybill.exe --backup [path]             # back up the database
 Waybill.exe --restore <path>            # restore from a backup
 Waybill.exe --export-sheet <id> [path]  # one delivery as an A4 waybill, 300 dpi
+Waybill.exe --sessions                  # the sittings at the wheel
 Waybill.exe --demo <id>                 # show a finished delivery as though under way
 Waybill.exe --rebuild                   # recompute deliveries from recordings
 Waybill.exe --replay <recording>        # replay an old recording

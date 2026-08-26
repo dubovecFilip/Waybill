@@ -73,12 +73,35 @@ means anything. Measured against this history the rate leaves every run anybody
 would call spirited where it was, moves a busy three hundred kilometre hop into
 them, and forgives a long haul its third knock.
 
+## Sittings at the wheel
+
+Table `session_files`, one row per recording: its name, the first and last
+timestamp in it, and how many ticks it holds. Reading a recording to its end is
+the only way to learn when it ends, so the answer is kept; a file already
+measured is never opened again, except the one still being written, which grows.
+
+Sittings themselves are not stored. They are the recordings grouped by the gap
+between them, `SessionGapMinutes` in the preferences, an hour by default, and
+their totals are read from the deliveries and the free roaming that started
+inside each window. Nothing about a sitting is written down, so the rule can be
+changed at any time and the whole history regroups itself.
+
+A delivery belongs to the sitting it started in rather than the one it finished
+in: a haul begun at midnight and finished the next evening was that evening's
+work in nobody's telling of it.
+
 ## The region a city is in
 
 Not stored and not reported by either game. `Places` holds a table of city names
 against a state code for American Truck Simulator and a country code for Euro
 Truck Simulator 2, and the window and the sheet look a city up in it when the
 `CityRegions` preference is on.
+
+Columns `source_city_id` and `destination_city_id` hold what the game calls each
+end when it is talking to itself. The lookup asks by identifier first, since two
+cities can share a name inside one game and never an identifier, and falls back
+to the name for rows recorded before identifiers were kept. They come out of the
+recordings, so a rebuild fills them in.
 
 The table is deliberately incomplete: mod maps are not in it, and neither are
 names that appear twice in one game. A lookup that misses adds nothing to the
