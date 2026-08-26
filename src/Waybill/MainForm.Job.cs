@@ -234,6 +234,11 @@ public partial class MainForm {
         }
 
         _engine.ShowDemo(job, state);
+        // The strip along the foot fills from telemetry, which a demonstration has
+        // none of, so it is given the two lines this job would have put there by the
+        // time it reached the point it is being shown at.
+        Happened(Strings.T("feed.coupled"));
+        Happened(Strings.T("feed.loaded"));
         return true;
     }
 

@@ -180,6 +180,85 @@ public partial class MainForm : Form {
     /// <summary>Deliveries and statistics used to be tabs. As a sidebar they read as
     /// two places in the app rather than two folders inside one, and the labels get
     /// room to be words instead of cramped tab strips.</summary>
+    // ---------- what just happened ----------
+
+    private readonly Panel _feed = new();
+    private readonly List<(DateTime At, string Text)> _feedLines = new();
+
+    /// <summary>How many of the last things that happened are kept in front of the
+    /// driver. Five, because the strip has to be able to hold all of them at once
+    /// without getting in the way of the page it sits under.</summary>
+    private const int FeedLines = 5;
+
+    /// <summary>
+    /// A strip along the foot of the window saying what just happened.
+    ///
+    /// The log on the live page answers "is the tracker seeing the game", which is a
+    /// different question and belongs to that page. This answers "did it notice what
+    /// I just did", and it has to be legible from whichever page the driver happens
+    /// to be on, so it lives under all of them.
+    ///
+    /// It takes no room until there is something to say and never more than five
+    /// lines of it.
+    /// </summary>
+    private Control BuildFeed() {
+        _feed.Dock = DockStyle.Bottom;
+        _feed.BackColor = Surface;
+        _feed.Padding = new Padding(16, 4, 16, 4);
+        _feed.Height = 0;
+        _feed.Controls.Clear();
+        DrawFeed();
+        return _feed;
+    }
+
+    /// <summary>
+    /// Notes one thing worth noticing.
+    ///
+    /// Coupling is the moment on a hired trailer, since it comes already loaded and
+    /// hitching it is the whole of taking the load on. With the driver's own trailer
+    /// they were hitched up long before the dock, so the moment is the cargo going
+    /// on. Recording whichever of the two actually meant something keeps the strip to
+    /// things that happened rather than things that were reported.
+    /// </summary>
+    private void FeedNote(JobEvent e) {
+        var owned = _engine?.ActiveState?.TrailerChain.Any(u => u.IsOwned) ?? false;
+        var text = e.Type switch {
+            "trailer_coupled" when !owned => Strings.T("feed.coupled"),
+            "cargo_loaded" when owned => Strings.T("feed.loaded"),
+            _ => null,
+        };
+        if (text is not null) Happened(text);
+    }
+
+    private void Happened(string text) {
+        _feedLines.Add((DateTime.Now, text));
+        while (_feedLines.Count > FeedLines) _feedLines.RemoveAt(0);
+        DrawFeed();
+    }
+
+    private void DrawFeed() {
+        _feed.SuspendLayout();
+        _feed.Controls.Clear();
+
+        // Newest at the top, so a new line always arrives in the same place and the
+        // older ones move down and off rather than the whole strip shifting.
+        foreach (var (at, text) in _feedLines) {
+            var line = new Panel { Dock = DockStyle.Top, Height = 19, BackColor = Surface };
+            line.Controls.Add(new Label {
+                Dock = DockStyle.Fill, Text = text, ForeColor = Ink, AutoEllipsis = true,
+                Font = new Font("Segoe UI", 8.5F), TextAlign = ContentAlignment.MiddleLeft,
+            });
+            line.Controls.Add(new Label {
+                Dock = DockStyle.Left, Width = 58, Text = at.ToString("HH:mm:ss"), ForeColor = Muted,
+                Font = new Font("Consolas", 8F), TextAlign = ContentAlignment.MiddleLeft,
+            });
+            _feed.Controls.Add(line);
+        }
+
+        _feed.Height = _feedLines.Count == 0 ? 0 : _feedLines.Count * 19 + 8;
+        _feed.ResumeLayout();
+    }
+
     // ---------- one truck against another ----------
 
     private readonly DataGridView _truckGrid = new();
@@ -560,7 +639,10 @@ public partial class MainForm : Form {
     private void ShowPage(string page) {
         _page = page;
 
+        // Every page is hidden but the one asked for. The strip along the foot is not
+        // a page and carries no tag, so it is left alone: it belongs to all of them.
         foreach (Control c in _content.Controls) {
+            if (ReferenceEquals(c, _feed)) continue;
             c.Visible = (string?)c.Tag == page;
         }
 
@@ -606,6 +688,9 @@ public partial class MainForm : Form {
         _content.Controls.Add(trucks);
         _content.Controls.Add(map);
         _content.Controls.Add(stats);
+        // Added last of all, so it docks against the foot of the content and the
+        // pages take what is left above it.
+        _content.Controls.Add(BuildFeed());
         return _content;
     }
 
@@ -1128,9 +1213,16 @@ public partial class MainForm : Form {
         _engine.Message += m => BeginInvoke(() => AddLog(m));
         _engine.JobStarted += j => BeginInvoke(() => AddLog($"{Strings.T("msg.jobStart")}  {j.SourceCity} -> {j.DestinationCity} ({j.Cargo})"));
         _engine.JobResumed += j => BeginInvoke(() => AddLog($"{Strings.T("msg.jobResume")}  {j.SourceCity} -> {j.DestinationCity}"));
-        _engine.Noted += e => BeginInvoke(() => AddLog(NoteLine(e)));
+        _engine.Noted += e => BeginInvoke(() => { AddLog(NoteLine(e)); FeedNote(e); });
         _engine.JobFinished += r => BeginInvoke(() => {
             AddLog($"{Strings.T("msg.jobEnd")}  {r.SourceCity} -> {r.DestinationCity}: {r.DistanceKm:0.0} km, {r.Validation.Status}");
+            var paid = Units.For(_settings.Units, r.Game);
+            // A cancelled job has no revenue and a penalty instead, so the line says
+            // what the delivery actually did to the balance rather than assuming it
+            // paid.
+            var balance = r.Revenue ?? -(r.Penalty ?? 0);
+            Happened($"{Strings.T("feed.delivered")}   {r.SourceCity}  →  {r.DestinationCity}"
+                   + $"   ·   {paid.FormatDistance(r.DistanceKm)}   ·   {paid.FormatMoney(balance)}");
             ReloadHistory();
             ReloadStats();
         });
