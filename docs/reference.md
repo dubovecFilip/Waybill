@@ -127,6 +127,22 @@ city, which is the honest answer. Nothing is derived from it and nothing depends
 on it, so it can be corrected or extended at any time without touching stored
 data.
 
+## Rest
+
+A sleep in these games is a whole number of hours. The measurement is not: a rest
+is read as the distance the game's clock moved between two samples taken a second
+apart, and either sample can sit a moment either side of the sleep itself, which
+is how ten hours came out as 601 and 602 minutes.
+
+So a jump within five minutes of a whole hour is recorded as that whole hour, and
+anything further off is kept exactly as measured. Five minutes is wider than any
+sampling slop and nowhere near wide enough to turn a short stop into an hour.
+
+Subtracting the time that would have passed during the tick anyway was tried
+first and made it worse, turning fifteen hours into 899 minutes and one ten hour
+sleep into 594: the clock does not run during the load that follows a sleep, so
+there was no ordinary passage there to take off.
+
 ## Validation flags
 
 Column `validation_flags`, comma separated. Three of them reject; the rest are

@@ -953,9 +953,10 @@ public class JobTracker {
             var cargoMoved = CargoChangedHands(snap, prev);
             if (cargoMoved) found.Add(new Anomaly { AtMs = nowMs, Code = "cargo_handling", DtMs = dtMs, Delta = jumpedMin });
             if (!isTransport && !cargoMoved && j.LoadOnAtMs != 0) {
+                var slept = Slept(jumpedMin);
                 j.RestStops += 1;
-                j.RestMinutes += jumpedMin;
-                j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = Math.Round(jumpedMin, 1) });
+                j.RestMinutes += slept;
+                j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = slept });
             }
         }
 
@@ -1068,9 +1069,10 @@ public class JobTracker {
                     found.Add(new Anomaly { AtMs = nowMs, Code = "cargo_handling", DtMs = dtMs, Delta = gameMinutesPassed });
                 }
                 if (!isTransport && !cargoMoved && j.LoadOnAtMs != 0) {
+                    var slept = Slept(gameMinutesPassed);
                     j.RestStops += 1;
-                    j.RestMinutes += gameMinutesPassed;
-                    j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = Math.Round(gameMinutesPassed, 1) });
+                    j.RestMinutes += slept;
+                    j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = slept });
                 }
             } else {
                 found.Add(new Anomaly { Code = wasPaused ? "paused_gap" : "client_gap", DtMs = dtMs });
@@ -1143,6 +1145,31 @@ public class JobTracker {
         var parts = new List<string> { truck >= trailer ? "truck" : "trailer" };
         if (cargo > threshold) parts.Add("cargo");
         return string.Join(",", parts);
+    }
+
+    /// <summary>
+    /// How long the driver actually slept, out of a clock that jumped.
+    ///
+    /// A sleep in these games is a whole number of hours, and the measurement is not:
+    /// it is the distance the clock moved between two samples taken a second apart,
+    /// and either sample can sit a moment either side of the sleep itself. Measured
+    /// that way, ten hours came out as 601 and 602 minutes.
+    ///
+    /// So a jump within a few minutes of a whole hour is that whole hour, and
+    /// anything further off is left exactly as measured. Five minutes is wide enough
+    /// for any sampling slop and nowhere near wide enough to turn a short stop into
+    /// an hour of sleep.
+    ///
+    /// Taking off the time that would have passed anyway was tried first and made it
+    /// worse, turning fifteen hours into 899 minutes and one ten hour sleep into 594:
+    /// the clock does not run during the load that follows a sleep, so there was no
+    /// ordinary passage there to take off.
+    /// </summary>
+    private static double Slept(double jumpedMin) {
+        // The game's clock only has whole minutes, so neither has this.
+        var minutes = Math.Max(0, Math.Round(jumpedMin));
+        var hours = Math.Round(minutes / 60);
+        return hours >= 1 && Math.Abs(minutes - hours * 60) <= 5 ? hours * 60 : minutes;
     }
 
     private static void Record(List<Anomaly> found, JobState j, long nowMs) {
