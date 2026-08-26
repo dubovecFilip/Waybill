@@ -323,6 +323,21 @@ public partial class MainForm : Form {
         UseDarkScrollbars(_truckGrid);
     }
 
+    /// <summary>
+    /// Says on hover what a column heading has no room to say.
+    ///
+    /// A heading is one or two words or it wraps, and one or two words cannot carry
+    /// "the damage this tractor takes on an average delivery, rather than in total".
+    /// So the rule for the whole window is the short word in the heading and the
+    /// sentence under the pointer, on the cells as well as on the heading, since
+    /// somebody who wonders about a figure points at the figure.
+    /// </summary>
+    private static void Explain(DataGridView grid, string column, string key) {
+        if (grid.Columns[column] is not { } col) return;
+        col.ToolTipText = Strings.T(key);
+        col.HeaderCell.ToolTipText = Strings.T(key);
+    }
+
     private void OnTrucksBound(object? sender, DataGridViewBindingCompleteEventArgs e) {
         var captions = new Dictionary<string, string> {
             [nameof(TruckRow.Kamion)] = Strings.T("col.truck"),
@@ -333,7 +348,7 @@ public partial class MainForm : Form {
             [nameof(TruckRow.Priemer)] = Strings.T("sess.speed"),
             [nameof(TruckRow.Pokuty)] = Strings.T("col.fines"),
             [nameof(TruckRow.Kolizie)] = Strings.T("col.collisions"),
-            [nameof(TruckRow.Poskodenie)] = Strings.T("truck.damagePerJob"),
+            [nameof(TruckRow.Poskodenie)] = Strings.T("detail.damage"),
             [nameof(TruckRow.Styl)] = Strings.T("col.style"),
         };
         foreach (DataGridViewColumn col in _truckGrid.Columns) {
@@ -349,13 +364,19 @@ public partial class MainForm : Form {
         // The damage column is wide enough for its own heading in every language it
         // has one in: "Damage / job" and "Poškodenie / zák." both wrapped onto a
         // second line at the width the figure alone would have needed.
-        var widths = new[] { 150, 84, 96, 96, 104, 76, 88, 84, 118, 78 };
+        var widths = new[] { 172, 84, 96, 96, 104, 76, 88, 84, 96, 78 };
         for (var i = 0; i < order.Length; i++) {
             if (_truckGrid.Columns[order[i]] is not { } col) continue;
             col.DisplayIndex = i;
             col.Width = widths[i];
             if (i > 0) col.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
         }
+        Explain(_truckGrid, nameof(TruckRow.Poskodenie), "why.truckDamage");
+        Explain(_truckGrid, nameof(TruckRow.Palivo), "why.truckFuel");
+        Explain(_truckGrid, nameof(TruckRow.Priemer), "why.speed");
+        Explain(_truckGrid, nameof(TruckRow.Styl), "why.style");
+        Explain(_truckGrid, nameof(TruckRow.Pokuty), "why.fines");
+
         foreach (var hidden in new[] {
             nameof(TruckRow.DistanceKm), nameof(TruckRow.Zarobok), nameof(TruckRow.PalivoRaw),
             nameof(TruckRow.SpeedKmh), nameof(TruckRow.PokutyRaw), nameof(TruckRow.DamagePerJob),
@@ -498,6 +519,14 @@ public partial class MainForm : Form {
         }) {
             if (_sessionGrid.Columns[numeric] is { } c) c.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
         }
+        // The two that mean something particular on this page, and the three that
+        // mean what they do everywhere else.
+        Explain(_sessionGrid, nameof(SessionRow.Zasielky), "why.sessDeliveries");
+        Explain(_sessionGrid, nameof(SessionRow.Vzdialenost), "why.sessDistance");
+        Explain(_sessionGrid, nameof(SessionRow.Trvanie), "why.sessLasted");
+        Explain(_sessionGrid, nameof(SessionRow.Priemer), "why.speed");
+        Explain(_sessionGrid, nameof(SessionRow.Oddych), "why.sessRest");
+
         foreach (var hidden in new[] {
             nameof(SessionRow.Do), nameof(SessionRow.FromMs), nameof(SessionRow.ToMs),
             nameof(SessionRow.DistanceKm), nameof(SessionRow.Zarobok), nameof(SessionRow.Hra),

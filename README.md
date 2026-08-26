@@ -276,7 +276,7 @@ shaken as well.
 
 *Trucks* puts every tractor that has pulled a delivery on a line of its own:
 what it has carried, how far, what it earned, what it drank, how fast it
-averaged, what it cost in fines, and how much damage it has taken in its life.
+averaged, what it cost in fines, and what a run costs it in damage.
 
 ![Every tractor, side by side](assets/trucks.png)
 
@@ -285,6 +285,15 @@ comparison worth having: one of them has pulled twenty-six loads and another a
 single one, and a week's window would hide exactly that. Each row is in the unit
 its own truck drinks, so a battery reads in kilowatt hours on the same page as a
 tank reading in gallons.
+
+Damage is what the tractor takes on an average delivery rather than what it has
+taken in total. A total grows with how much a truck has been driven, so it
+compares your history rather than the trucks: 26.9 % against 0.4 % says only
+that one of them has done twenty-six jobs and the other one.
+
+A heading is one or two words throughout, and the ones that cannot be read off
+those words say what they mean when the pointer rests on them, on the figures as
+well as on the heading.
 
 ## A night's driving
 
@@ -301,9 +310,12 @@ advances while the game is running. Neither is special, and a crash and a
 restart in the middle of an evening is neither.
 
 The hour is a preference rather than a constant, because it is the one number
-here that somebody made up. The last column counts the restarts: how many times
-the driving stopped and started again inside the sitting, whether that was the
-game or Waybill being restarted. Nought means it ran straight through.
+here that somebody made up.
+
+Two of its columns mean something particular and say so on hover: what was
+finished in a sitting is counted there, with what it paid, and what was driven
+in a sitting is measured there. A haul spanning an afternoon, an evening and the
+next morning puts its kilometres in all three.
 
 A delivery does not have to fit inside one sitting, and the page does not
 pretend otherwise. What was finished in a sitting is counted there, with what it
