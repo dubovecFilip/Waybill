@@ -35,6 +35,10 @@ public class SessionRow {
 public class DeliveryRow {
     public long Id { get; set; }
     public DateTime Datum { get; set; }
+    /// <summary>When it was finished. Not a column in the list, which is ordered by
+    /// when a delivery began; it is here so a sitting can say which deliveries were
+    /// being driven during it rather than only which ones began in it.</summary>
+    public DateTime Dokoncene { get; set; }
     public string Hra { get; set; } = "";
     public string Odkial { get; set; } = "";
     public string Kam { get; set; } = "";

@@ -86,9 +86,22 @@ their totals are read from the deliveries and the free roaming that started
 inside each window. Nothing about a sitting is written down, so the rule can be
 changed at any time and the whole history regroups itself.
 
-A delivery belongs to the sitting it started in rather than the one it finished
-in: a haul begun at midnight and finished the next evening was that evening's
-work in nobody's telling of it.
+A delivery does not have to fit inside one sitting, so the two questions a
+sitting answers are answered separately.
+
+**What was finished here** is counted here, with what it paid: that is when the
+job was done and when the money arrived.
+
+**What was driven here** is measured here. Each delivery the window touches
+contributes the share of itself that was actually driven inside it, taken from
+how many of its recorded trip points fall in the window. The tracker writes one
+point per second of driving, so the share is a share of the time at the wheel.
+Sleeping needs no such treatment, since a rest is an event with a time on it,
+and neither does free roaming.
+
+The case this exists for: Yakima to Camp Verde took an afternoon, an evening and
+the next morning, 15.6 %, 38.5 % and 45.9 % of the driving. Counted where it
+began, two of those three sittings read as though nobody had driven at all.
 
 ## The region a city is in
 

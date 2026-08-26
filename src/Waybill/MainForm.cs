@@ -242,7 +242,7 @@ public partial class MainForm : Form {
             // A sitting with nothing delivered in it has no distance and no earnings,
             // and no game to read them in either: "0 km" there is a figure about a
             // game that was never started, and a currency picked out of the air.
-            var drove = s.Zasielky > 0 || s.FreeroamKm > 0.05;
+            var drove = s.DistanceKm > 0.05 || s.FreeroamKm > 0.05;
             s.Vzdialenost = drove ? u.FormatDistance(s.DistanceKm) : "";
             s.Odmena = drove ? u.FormatMoney(s.Zarobok) : "";
             s.Zarobok = u.Money(s.Zarobok);
@@ -326,7 +326,11 @@ public partial class MainForm : Form {
 
         var from = DateTimeOffset.FromUnixTimeMilliseconds(picked.FromMs).LocalDateTime;
         var to = DateTimeOffset.FromUnixTimeMilliseconds(picked.ToMs).LocalDateTime;
-        var inside = _rows.Where(r => r.Datum >= from && r.Datum <= to).ToList();
+        // Overlapping, not beginning inside. An evening spent halfway through a haul
+        // that started yesterday is an evening of driving that delivery, and a panel
+        // headed "driven in this one" that leaves it out is answering another
+        // question entirely.
+        var inside = _rows.Where(r => r.Datum <= to && r.Dokoncene >= from).ToList();
 
         var lines = new List<Control>();
         foreach (var row in inside) {
@@ -339,7 +343,10 @@ public partial class MainForm : Form {
             var what = new Label {
                 Dock = DockStyle.Top, Height = 16, ForeColor = Muted, AutoEllipsis = true,
                 Font = new Font("Segoe UI", 8F),
-                Text = $"{row.Datum:HH:mm}   ·   {row.Naklad}   ·   {row.Vzdialenost}   ·   {row.Odmena}",
+                // The date as well when it began before the sitting did, or a haul
+                // picked up this morning reads as though it started at six last night.
+                Text = $"{(row.Datum.Date == from.Date ? row.Datum.ToString("HH:mm") : row.Datum.ToString("dd.MM HH:mm"))}"
+                     + $"   ·   {row.Naklad}   ·   {row.Vzdialenost}   ·   {row.Odmena}",
             };
             line.Controls.Add(what);
             line.Controls.Add(where);
@@ -3210,7 +3217,7 @@ public partial class MainForm : Form {
             nameof(DeliveryRow.Flags), nameof(DeliveryRow.Special), nameof(DeliveryRow.Stav),
             // And the identifiers behind the two city names, which are how the region
             // beside a city is looked up and not something anybody reads.
-            nameof(DeliveryRow.OdkialId), nameof(DeliveryRow.KamId),
+            nameof(DeliveryRow.OdkialId), nameof(DeliveryRow.KamId), nameof(DeliveryRow.Dokoncene),
         }) {
             if (_grid.Columns[hidden] is { } col) col.Visible = false;
         }

@@ -286,6 +286,13 @@ driving. Left open, a sitting never ends however long the pause, since what ends
 one is the driver getting up rather than the driving stopping. The column
 counting the runs says how many times that happened.
 
+A delivery does not have to fit inside one sitting, and the page does not
+pretend otherwise. What was finished in a sitting is counted there, with what it
+paid, since that is when the job was done. What was driven in a sitting is
+measured there: a haul spanning an afternoon, an evening and the next morning
+puts its kilometres in all three, in the proportion they were driven. Counted
+where it began, the other two evenings read as though nobody had driven at all.
+
 It reads the whole history, so the sittings go back as far as the recordings do,
 and the one selected shows its deliveries beside it, each a click from its own
 card. `Waybill.exe --sessions` prints the same list.

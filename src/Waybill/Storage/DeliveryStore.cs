@@ -582,7 +582,8 @@ public class DeliveryStore : IDisposable {
                        validation_status, COALESCE(notes, ''), COALESCE(game, ''),
                        COALESCE(outcome, ''), COALESCE(driving_style, ''),
                        COALESCE(validation_flags, ''), COALESCE(special_transport, 0),
-                       COALESCE(source_city_id, ''), COALESCE(destination_city_id, '')
+                       COALESCE(source_city_id, ''), COALESCE(destination_city_id, ''),
+                       COALESCE(finished_at_ms, started_at_ms)
                 FROM deliveries
                 ORDER BY started_at_ms DESC
                 LIMIT $limit;
@@ -619,6 +620,7 @@ public class DeliveryStore : IDisposable {
                     Special = reader.GetInt32(16) != 0,
                     OdkialId = reader.GetString(17),
                     KamId = reader.GetString(18),
+                    Dokoncene = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(19)).LocalDateTime,
                 });
             }
             return rows;
@@ -908,10 +910,18 @@ public class DeliveryStore : IDisposable {
     /// <summary>
     /// What was driven between two moments, for one sitting.
     ///
-    /// A delivery belongs to the sitting it started in rather than the one it
-    /// finished in: a haul begun at midnight and finished the next evening was that
-    /// evening's work in nobody's telling of it. Driving off the job is counted where
-    /// it happened, since it has no such story to it.
+    /// A delivery does not have to fit inside one sitting. Yakima to Camp Verde took
+    /// an afternoon, an evening and the next morning, and counting it where it began
+    /// left two of those three reading as though nobody had driven at all.
+    ///
+    /// So the two questions are answered separately. What was finished here is
+    /// counted here, with what it paid, because that is when the job was done and
+    /// when the money arrived. What was driven here is measured here: each delivery
+    /// contributes the share of it that was actually driven inside the window, taken
+    /// from how many of its recorded points fall in it. The tracker writes one point
+    /// a second of driving, so that share is a share of the time at the wheel, and a
+    /// delivery that spans three sittings puts its kilometres where they happened
+    /// rather than all in the first.
     /// </summary>
     public SessionRow SessionTotals(long fromMs, long toMs, int runs) {
         lock (_gate) {
@@ -923,36 +933,70 @@ public class DeliveryStore : IDisposable {
                 Behy = runs,
             };
 
+            // Finished here: the count and the pay.
             using (var cmd = _conn.CreateCommand()) {
                 cmd.CommandText = """
-                    SELECT COUNT(*), COALESCE(SUM(actual_distance_km), 0),
-                           COALESCE(SUM(COALESCE(revenue, 0) - COALESCE(penalty, 0)), 0),
-                           COALESCE(SUM(driving_game_min), 0), COALESCE(SUM(rest_minutes), 0),
-                           COALESCE(MAX(game), '')
+                    SELECT COUNT(*), COALESCE(SUM(COALESCE(revenue, 0) - COALESCE(penalty, 0)), 0)
                     FROM deliveries
-                    WHERE started_at_ms BETWEEN $from AND $to;
+                    WHERE finished_at_ms BETWEEN $from AND $to;
                     """;
                 cmd.Parameters.AddWithValue("$from", fromMs);
                 cmd.Parameters.AddWithValue("$to", toMs);
                 using var reader = cmd.ExecuteReader();
                 if (reader.Read()) {
                     row.Zasielky = reader.GetInt32(0);
-                    row.DistanceKm = reader.GetDouble(1);
-                    row.Zarobok = reader.GetDouble(2);
-                    row.GameMinutes = reader.GetDouble(3);
-                    row.RestMinutes = reader.GetDouble(4);
-                    row.Hra = reader.GetString(5);
+                    row.Zarobok = reader.GetDouble(1);
                 }
+            }
+
+            // Driven here: every delivery the window touches, each counted for the
+            // share of its points that fall inside it.
+            using (var cmd = _conn.CreateCommand()) {
+                cmd.CommandText = """
+                    SELECT COALESCE(d.actual_distance_km, 0), COALESCE(d.driving_game_min, 0),
+                           SUM(CASE WHEN p.at_ms BETWEEN $from AND $to THEN 1 ELSE 0 END),
+                           COUNT(p.id), COALESCE(d.game, '')
+                    FROM deliveries d
+                    JOIN trip_points p ON p.delivery_id = d.id
+                    WHERE d.finished_at_ms >= $from AND d.started_at_ms <= $to
+                    GROUP BY d.id;
+                    """;
+                cmd.Parameters.AddWithValue("$from", fromMs);
+                cmd.Parameters.AddWithValue("$to", toMs);
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read()) {
+                    var points = reader.GetInt32(3);
+                    if (points == 0) continue;
+                    var share = reader.GetInt32(2) / (double)points;
+                    row.DistanceKm += reader.GetDouble(0) * share;
+                    row.GameMinutes += reader.GetDouble(1) * share;
+                    if (row.Hra.Length == 0) row.Hra = reader.GetString(4);
+                }
+            }
+
+            // Sleeping is an event with a time on it, so it needs no apportioning.
+            using (var cmd = _conn.CreateCommand()) {
+                cmd.CommandText = """
+                    SELECT COALESCE(SUM(value), 0) FROM events
+                    WHERE event_type = 'rest' AND at_ms BETWEEN $from AND $to;
+                    """;
+                cmd.Parameters.AddWithValue("$from", fromMs);
+                cmd.Parameters.AddWithValue("$to", toMs);
+                row.RestMinutes = Convert.ToDouble(cmd.ExecuteScalar() ?? 0.0);
             }
 
             using (var cmd = _conn.CreateCommand()) {
                 cmd.CommandText = """
-                    SELECT COALESCE(SUM(distance_km), 0) FROM freeroam
+                    SELECT COALESCE(SUM(distance_km), 0), COALESCE(MAX(game), '') FROM freeroam
                     WHERE started_at_ms BETWEEN $from AND $to;
                     """;
                 cmd.Parameters.AddWithValue("$from", fromMs);
                 cmd.Parameters.AddWithValue("$to", toMs);
-                row.FreeroamKm = Convert.ToDouble(cmd.ExecuteScalar() ?? 0.0);
+                using var reader = cmd.ExecuteReader();
+                if (reader.Read()) {
+                    row.FreeroamKm = reader.GetDouble(0);
+                    if (row.Hra.Length == 0) row.Hra = reader.GetString(1);
+                }
             }
 
             return row;
