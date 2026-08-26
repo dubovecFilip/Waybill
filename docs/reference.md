@@ -128,8 +128,41 @@ and converting it to gallons produced a delivery claiming 228.8 gal and 1.4 mpg
 where the truth was 866.1 kWh and 268.8 kWh/100 mi. The delivery card and the
 sheet both read it as energy now.
 
-The statistics page does not yet: its fuel tile sums the raw figure across every
-delivery, so a battery and a tank are added together there.
+The statistics page keeps the two apart for the same reason: diesel and
+kilowatt hours are summed separately there, and the battery figure appears only
+once something has been driven on one.
+
+## Awards
+
+Forty of them, defined in `Awards.All` and measured in `Awards.Measure`. Three
+kinds, because three different questions are being asked. A milestone is a total
+that only climbs, kilometres or deliveries or money or hours, and it can never be
+lost. A feat asks whether one drive or one sitting went a particular way, and is
+either done or not. A collection asks how many different states, cargoes, trucks
+or cities there have been.
+
+Measured by walking the deliveries in the order they happened rather than by
+adding up a column, so a milestone can name the drive that carried it over: the
+hundredth delivery is a fact about a particular evening.
+
+Imported rows are left out. One from TrucksBook carries a distance and a payout
+and nothing else, no damage, no fines, no route, so half of these could never be
+true of it and the other half would be true for nothing.
+
+An award is written to the `awards` table the first time it is measured as
+reached, with the date and the delivery that did it, and what is written stands
+even if the rule behind it changes later. Only the pass that runs when a delivery
+has just finished says anything in the event strip, since anything newly reached
+then can only have been reached by that drive or by the sitting it belongs to.
+Every other pass is quiet, so a first run or a rebuild does not announce fifteen
+awards at once for driving that happened weeks ago. That pass runs before the
+history reloads, because the reload runs a quiet pass of its own and a quiet pass
+writes an award down without saying anything.
+
+Names carry their figure after them, "Deliveries · 100" rather than "100
+deliveries", so no name has to agree with a numeral in five languages. A target
+is defined in kilometres and shown in whatever the driver reads in, which is why
+a ten thousand kilometre award for American Truck Simulator reads 6214 mi.
 
 ## The region a city is in
 

@@ -91,6 +91,7 @@ Every state, flag and anomaly is listed with its meaning in
 * Signs that sheet in your own hand, drawn once with the mouse and kept
 * Names the state or the country a city is in, in the list, on the card and on the sheet
 * Groups a night's driving into one sitting and says what came of it
+* Keeps forty awards, and says how far off the ones still to come are
 * Draws the drive in progress a second at a time, with a needle for which way it points
 * Keeps the driving between jobs too, as distance and as lines on the map
 * Resumes an interrupted job after a crash or after quitting mid drive
@@ -294,6 +295,31 @@ that one of them has done twenty-six jobs and the other one.
 A heading is one or two words throughout, and the ones that cannot be read off
 those words say what they mean when the pointer rests on them, on the figures as
 well as on the heading.
+
+## What is worth having done
+
+*Awards* is forty of them on one page, reached at the top and the rest below with
+a bar for how far off each one is.
+
+![Reached, and still to come](assets/awards.png)
+
+Three kinds, because a driver asks three different things. A milestone is a total
+that only climbs: kilometres, deliveries, money, experience, hours at the wheel,
+hours slept. A feat is one drive that went a particular way: a thousand
+kilometres in one go, a delivery without a scratch, five hundred kilometres with
+no fine and no collision, an oversize load, a road train, a battery, a night that
+ran past midnight. A collection is ground covered: states and countries, kinds of
+cargo, tractors, cities.
+
+They count what Waybill watched. A row imported from TrucksBook carries a
+distance and a payout and nothing else, so half of these could never be true of
+it and the other half would be true for nothing. Everything already in the
+logbook counts from the day the page arrives, and it is backfilled in silence:
+the strip along the foot names an award only when the delivery just finished is
+the one that carried it over.
+
+Nothing here is ever lost. An award is a record of something that happened, in a
+program whose first rule is that a delivery is never taken away from the driver.
 
 ## A night's driving
 

@@ -250,6 +250,15 @@ public class DeliveryStore : IDisposable {
             -- the pieces are put back together against whatever gap the driver has
             -- chosen, so changing that preference regroups the history without
             -- reading a single file again.
+            -- What has been reached, and when. Written once and never rewritten:
+            -- an award is a record of something that happened, and this project does
+            -- not take back what a driver has done.
+            CREATE TABLE IF NOT EXISTS awards (
+                id           TEXT PRIMARY KEY,
+                at_ms        INTEGER NOT NULL,
+                delivery_id  INTEGER
+            );
+
             CREATE TABLE IF NOT EXISTS session_spans (
                 name      TEXT NOT NULL,
                 seq       INTEGER NOT NULL,
@@ -945,6 +954,105 @@ public class DeliveryStore : IDisposable {
                 });
             }
             return rows;
+        }
+    }
+
+    /// <summary>
+    /// Every delivery Waybill watched itself, reduced to what an award needs.
+    ///
+    /// Imported rows are left out. One from TrucksBook carries a distance and a
+    /// payout and nothing else, so half the awards could never be true of it and the
+    /// other half would be true for nothing.
+    /// </summary>
+    public List<Waybill.Tracking.AwardDelivery> AwardDeliveries() {
+        lock (_gate) {
+            var rows = new List<Waybill.Tracking.AwardDelivery>();
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT id, COALESCE(finished_at_ms, started_at_ms), COALESCE(game, ''),
+                       COALESCE(actual_distance_km, 0),
+                       COALESCE(revenue, 0) - COALESCE(penalty, 0),
+                       COALESCE(xp, 0), COALESCE(driving_ms, 0), COALESCE(rest_minutes, 0),
+                       COALESCE(fines_count, 0), COALESCE(collisions, 0),
+                       COALESCE(special_transport, 0), COALESCE(electric, 0),
+                       COALESCE(truck_damage_pct, 0), COALESCE(trailer_damage_pct, 0),
+                       COALESCE(cargo_damage_pct, 0),
+                       COALESCE(cargo, ''), truck_make || ' ' || truck_model,
+                       COALESCE(trailer_units, ''),
+                       COALESCE(source_city, ''), COALESCE(destination_city, ''),
+                       COALESCE(source_city_id, ''), COALESCE(destination_city_id, ''),
+                       COALESCE(started_at_ms, 0)
+                FROM deliveries
+                WHERE COALESCE(source, '') != 'trucksbook'
+                ORDER BY COALESCE(finished_at_ms, started_at_ms);
+                """;
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read()) {
+                var game = reader.GetString(2);
+                var started = reader.GetInt64(22);
+                var finished = reader.GetInt64(1);
+                var row = new Waybill.Tracking.AwardDelivery {
+                    Id = reader.GetInt64(0),
+                    FinishedAtMs = finished,
+                    Game = game,
+                    DistanceKm = reader.GetDouble(3),
+                    Paid = reader.GetDouble(4),
+                    Xp = reader.GetInt32(5),
+                    DrivingMs = reader.GetInt64(6),
+                    RestMinutes = reader.GetDouble(7),
+                    Fines = reader.GetInt32(8),
+                    Collisions = reader.GetInt32(9),
+                    Special = reader.GetInt32(10) != 0,
+                    Electric = reader.GetInt32(11) != 0,
+                    Spotless = reader.GetDouble(12) + reader.GetDouble(13) + reader.GetDouble(14) < 0.0001,
+                    Cargo = reader.GetString(15),
+                    Truck = reader.IsDBNull(16) ? "" : reader.GetString(16),
+                    Units = ReadUnits(reader.GetString(17)).Count,
+                    Overnight = DateTimeOffset.FromUnixTimeMilliseconds(started).LocalDateTime.Date
+                                != DateTimeOffset.FromUnixTimeMilliseconds(finished).LocalDateTime.Date,
+                };
+                foreach (var (city, id) in new[] {
+                    (reader.GetString(18), reader.GetString(20)),
+                    (reader.GetString(19), reader.GetString(21)),
+                }) {
+                    if (city.Length == 0) continue;
+                    row.Cities.Add($"{game}:{city}");
+                    if (Places.Code(game, city, id) is { } code) row.Regions.Add($"{game}:{code}");
+                }
+                rows.Add(row);
+            }
+            return rows;
+        }
+    }
+
+    /// <summary>The awards already reached, by identifier.</summary>
+    public Dictionary<string, (DateTime At, long? DeliveryId)> ReachedAwards() {
+        lock (_gate) {
+            var reached = new Dictionary<string, (DateTime, long?)>(StringComparer.OrdinalIgnoreCase);
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = "SELECT id, at_ms, delivery_id FROM awards;";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read()) {
+                reached[reader.GetString(0)] = (
+                    DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(1)).LocalDateTime,
+                    reader.IsDBNull(2) ? null : reader.GetInt64(2));
+            }
+            return reached;
+        }
+    }
+
+    /// <summary>Writes down that an award was reached, once and for good.</summary>
+    public void ReachAward(string id, DateTime at, long? deliveryId) {
+        lock (_gate) {
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO awards (id, at_ms, delivery_id) VALUES ($id, $at, $delivery)
+                ON CONFLICT(id) DO NOTHING;
+                """;
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.Parameters.AddWithValue("$at", new DateTimeOffset(at).ToUnixTimeMilliseconds());
+            cmd.Parameters.AddWithValue("$delivery", (object?)deliveryId ?? DBNull.Value);
+            cmd.ExecuteNonQuery();
         }
     }
 

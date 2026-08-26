@@ -259,6 +259,155 @@ public partial class MainForm : Form {
         _feed.ResumeLayout();
     }
 
+    // ---------- what is worth having done ----------
+
+    private readonly Panel _awardsPage = new();
+    private List<Tracking.AwardStanding> _awards = new();
+
+    /// <summary>
+    /// The awards, reached and not.
+    ///
+    /// A list rather than a grid: what matters about an award is its name, the one
+    /// line saying what it takes, and how far off it is, and none of those is a
+    /// column of figures. The ones still to come carry a bar, because "34 000 of
+    /// 50 000" says more than either number on its own.
+    /// </summary>
+    private Panel BuildAwardsPage() {
+        _awardsPage.Dock = DockStyle.Fill;
+        _awardsPage.BackColor = Canvas;
+        _awardsPage.Padding = new Padding(16, 12, 16, 16);
+        _awardsPage.AutoScroll = true;
+        return _awardsPage;
+    }
+
+    /// <summary>
+    /// Works out where every award stands and writes down the ones newly reached.
+    ///
+    /// Run when a delivery has just finished, anything newly reached is said in the
+    /// strip along the foot: it can only have been that drive, or the sitting that
+    /// drive belongs to, that reached it. Run for any other reason it is a catching-up
+    /// pass over the whole history and stays quiet, since a first run would otherwise
+    /// announce fifteen awards at once for driving that happened weeks ago.
+    /// </summary>
+    private void ReloadAwards(bool announce = false) {
+        var sittings = Tracking.Sessions.List(_store, _settings.SessionGapMinutes)
+            .Select(s => new Tracking.AwardSitting {
+                EndedAtMs = s.ToMs, Deliveries = s.Zasielky, DistanceKm = s.DistanceKm,
+            }).ToList();
+
+        _awards = Tracking.Awards.Measure(_store.AwardDeliveries(), sittings);
+        var reached = _store.ReachedAwards();
+
+        foreach (var s in _awards) {
+            if (reached.TryGetValue(s.Award.Id, out var was)) {
+                // What was written down stands, even if the rule behind it changes
+                // later: an award is a record of something that happened.
+                s.Unlocked = true;
+                s.At = was.At;
+                s.DeliveryId ??= was.DeliveryId;
+                continue;
+            }
+            if (!s.Unlocked) continue;
+
+            _store.ReachAward(s.Award.Id, s.At ?? DateTime.Now, s.DeliveryId);
+            if (announce) Happened($"{Strings.T("award.reached")}   {AwardName(s.Award)}");
+        }
+
+        DrawAwards();
+    }
+
+    /// <summary>A milestone or a collection is named for what it takes, with the
+    /// figure after it rather than inside it: "Deliveries · 100" needs no agreement
+    /// with the number in any of the five languages, and "100 deliveries" needs a
+    /// different ending in three of them.</summary>
+    private string AwardName(Tracking.Award a) {
+        var family = Strings.T("award." + a.Family);
+        var game = a.Game.Length > 0 ? $" ({GameName(a.Game)})" : "";
+        if (a.Kind == Tracking.AwardKind.Feat) return family + game;
+        return $"{family}{game}  ·  {AwardFigure(a, a.Target)}";
+    }
+
+    private string AwardFigure(Tracking.Award a, double value) {
+        var u = Units.For(_settings.Units, a.Game.Length > 0 ? a.Game : null);
+        return a.Unit switch {
+            "km" => u.FormatDistance(value, "0"),
+            "money" => u.FormatMoney(value),
+            "hours" => Units.Duration(value * 60),
+            _ => $"{value:0}",
+        };
+    }
+
+    private void DrawAwards() {
+        _awardsPage.SuspendLayout();
+        _awardsPage.Controls.Clear();
+
+        // Reached first, since what has been done is what a driver comes here to see,
+        // and the rest in the order they were defined: totals, then feats, then the
+        // collections.
+        var rows = _awards.OrderByDescending(s => s.Unlocked).ThenBy(s => s.Award.Kind)
+            .Select(AwardRow).ToList();
+
+        // Docked children stack in reverse, so the list goes in backwards.
+        for (var i = rows.Count - 1; i >= 0; i--) _awardsPage.Controls.Add(rows[i]);
+        _awardsPage.ResumeLayout();
+        UseDarkScrollbars(_awardsPage);
+    }
+
+    private Control AwardRow(Tracking.AwardStanding s) {
+        var row = new Panel {
+            Dock = DockStyle.Top, Height = 60, BackColor = Surface,
+            Padding = new Padding(16, 8, 16, 8), Margin = new Padding(0),
+        };
+
+        var name = new Label {
+            Dock = DockStyle.Top, Height = 22, Text = AwardName(s.Award),
+            ForeColor = s.Unlocked ? Ink : Muted, AutoEllipsis = true,
+            Font = new Font("Segoe UI", 10F, s.Unlocked ? FontStyle.Bold : FontStyle.Regular),
+        };
+
+        var under = new Label {
+            Dock = DockStyle.Top, Height = 18, ForeColor = Muted, AutoEllipsis = true,
+            Font = new Font("Segoe UI", 8.5F),
+            Text = s.Unlocked
+                ? $"{Strings.T("award." + s.Award.Family + ".why")}   ·   {s.At:dd.MM.yyyy}"
+                : Strings.T("award." + s.Award.Family + ".why"),
+        };
+
+        // How far off it is, for the ones still to come. A feat has no halfway.
+        if (!s.Unlocked && s.Award.Kind != Tracking.AwardKind.Feat && s.Award.Target > 0) {
+            var share = Math.Min(1, s.Progress / s.Award.Target);
+            var track = new Panel { Dock = DockStyle.Top, Height = 4, BackColor = Raised, Margin = new Padding(0) };
+            var fill = new Panel { Dock = DockStyle.Left, BackColor = Accent, Width = 0 };
+            track.Controls.Add(fill);
+            track.Resize += (_, _) => fill.Width = (int)(track.ClientSize.Width * share);
+            row.Controls.Add(new Panel { Dock = DockStyle.Top, Height = 4, BackColor = Surface });
+            row.Controls.Add(track);
+            under.Text = $"{AwardFigure(s.Award, s.Progress)} / {AwardFigure(s.Award, s.Award.Target)}"
+                       + $"   ·   {Strings.T("award." + s.Award.Family + ".why")}";
+        }
+
+        row.Controls.Add(under);
+        row.Controls.Add(name);
+        row.Controls.Add(new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = Line });
+
+        // The mark down the left: filled for what has been done, hollow for what has
+        // not, so the two read apart at a glance rather than by their type weight.
+        var mark = new Panel { Dock = DockStyle.Left, Width = 22, BackColor = Surface };
+        mark.Paint += (_, e) => {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            var box = new RectangleF(2, mark.Height / 2f - 6, 12, 12);
+            if (s.Unlocked) {
+                using var full = new SolidBrush(Accent);
+                e.Graphics.FillEllipse(full, box);
+            } else {
+                using var edge = new Pen(Line, 1.6f);
+                e.Graphics.DrawEllipse(edge, box);
+            }
+        };
+        row.Controls.Add(mark);
+        return row;
+    }
+
     // ---------- one truck against another ----------
 
     private readonly DataGridView _truckGrid = new();
@@ -610,6 +759,7 @@ public partial class MainForm : Form {
         bar.Controls.Add(version);
         bar.Controls.Add(NavButton("stats", Strings.T("tab.stats")));
         bar.Controls.Add(NavButton("map", Strings.T("tab.map")));
+        bar.Controls.Add(NavButton("awards", Strings.T("tab.awards")));
         bar.Controls.Add(NavButton("trucks", Strings.T("tab.trucks")));
         bar.Controls.Add(NavButton("sessions", Strings.T("tab.sessions")));
         bar.Controls.Add(NavButton("deliveries", Strings.T("tab.deliveries")));
@@ -701,6 +851,8 @@ public partial class MainForm : Form {
         sessions.Tag = "sessions";
         var trucks = BuildTrucksPage();
         trucks.Tag = "trucks";
+        var awards = BuildAwardsPage();
+        awards.Tag = "awards";
         var map = BuildMapPage();
         map.Tag = "map";
         var stats = BuildStatsPage();
@@ -710,6 +862,7 @@ public partial class MainForm : Form {
         _content.Controls.Add(deliveries);
         _content.Controls.Add(sessions);
         _content.Controls.Add(trucks);
+        _content.Controls.Add(awards);
         _content.Controls.Add(map);
         _content.Controls.Add(stats);
         // Added last of all, so it docks against the foot of the content and the
@@ -1247,6 +1400,10 @@ public partial class MainForm : Form {
             var balance = r.Revenue ?? -(r.Penalty ?? 0);
             Happened($"{Strings.T("feed.delivered")}   {r.SourceCity}  →  {r.DestinationCity}"
                    + $"   ·   {paid.FormatDistance(r.DistanceKm)}   ·   {paid.FormatMoney(balance)}");
+            // Before the reload rather than after it: the reload runs a quiet pass of
+            // its own, and a quiet pass writes an award down without saying anything,
+            // which would leave nothing left to announce.
+            ReloadAwards(announce: true);
             ReloadHistory();
             ReloadStats();
         });
@@ -3448,6 +3605,7 @@ public partial class MainForm : Form {
         ReloadMapPage();
         ReloadSessions();
         ReloadTrucks();
+        ReloadAwards();
     }
 
     /// <summary>

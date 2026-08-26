@@ -405,7 +405,12 @@ driven in it, where a sitting is one run of the app and runs close together are
 the same sitting. One truck against another is built, as a page of its own: a row per tractor over
 the whole history, since a week's window hides the difference between a truck
 that has pulled twenty-six loads and one that has pulled one. Achievements are
-not built.
+built, as a page of their own: forty of them in three kinds, a total that only
+climbs, a single drive that went a particular way, and how much of the map, the
+market and the garage has been seen. They are worked out from the deliveries
+Waybill watched itself, since an imported row carries a distance and a payout and
+nothing else, and they are backfilled quietly, so the history that already exists
+counts without announcing fifteen awards at once.
 
 **Phase 3, mostly.** The map is drawn: a delivery's own route with its events
 marked on it, and a page showing every drive of one game at once, where clicking a
@@ -439,8 +444,9 @@ down, because each of these reads like an oversight and none of them is.
   not report whether the assist is on. What the project promised is kept anyway,
   since keeping every delivery valid needs no such field, but the assist itself
   cannot be shown in the statistics because nothing outside the game knows it.
-- *XP.* Not reported either. It is stored on rows imported from TrucksBook, which
-  had it, and stays empty on everything Waybill tracked itself.
+- *XP.* Reported after all, on the job delivered event, and stored since. This
+  document said otherwise for a while on the strength of a field that reads zero
+  until the job is handed over.
 - *Profile name.* Not reported. A delivery knows its game, its truck and its
   trailer, and nothing about which profile drove it.
 - *Cargo previews.* There is no image in the telemetry, only names and
@@ -451,7 +457,6 @@ down, because each of these reads like an oversight and none of them is.
 
 **Small things still open, in the order they are worth doing.**
 
-- Achievements, which want a rule engine rather than another query
 - Fuel and cargo weight as totals in the logbook: every refuel is stored with what
   it cost and every delivery with what it carried, but neither is summed anywhere
 - GPX and KML, which need the coordinate decision above faced again, since both
