@@ -244,11 +244,18 @@ public partial class MainForm : Form {
     /// panel being cleared and its ground being painted. The property that fixes it is
     /// protected on every one of them, so it is set the only way from outside.
     /// </summary>
+    /// <remarks>
+    /// A table is left out of this on purpose. It already buffers its own painting,
+    /// and made to do it twice it drew a near black hairline down the right edge of
+    /// every cell and along the bottom of every row: a black grid over a dark window,
+    /// worst against the quiet gutter where the verdict dots are. What it looks like
+    /// is cells in black frames.
+    /// </remarks>
     private static void SmoothPainting(Control root) {
         var flag = typeof(Control).GetProperty("DoubleBuffered",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         void Walk(Control c) {
-            if (c is Panel or TableLayoutPanel or DataGridView or FlowLayoutPanel) {
+            if (c is Panel or TableLayoutPanel or FlowLayoutPanel) {
                 try { flag?.SetValue(c, true, null); } catch { /* not worth failing over */ }
             }
             foreach (Control child in c.Controls) Walk(child);
@@ -2295,6 +2302,10 @@ public partial class MainForm : Form {
         g.GridColor = Line;
         g.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
         g.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
+        // And the row headers, which default to a raised 3D box: on a dark ground the
+        // shadow half of that box is black, so every cell in the gutter came out in a
+        // black frame with the verdict dot sitting inside it.
+        g.RowHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
         g.ColumnHeadersHeight = 34;
         g.ColumnHeadersDefaultCellStyle.BackColor = Surface;
         g.ColumnHeadersDefaultCellStyle.ForeColor = Muted;
@@ -2314,6 +2325,15 @@ public partial class MainForm : Form {
         // Row height carries no information, so dragging it about is only a way to
         // make the list worse by accident.
         g.AllowUserToResizeRows = false;
+        // Windows outlines whichever cell the keyboard would type into, and on a dark
+        // row that outline is a black box around one cell of a selected row. It moves
+        // as the driver clicks, disappears when the grid loses the focus and comes
+        // back when it gets it, which is exactly the "black frames that sometimes go
+        // away" it looked like. The whole row is what gets selected here, so the
+        // outline says nothing the highlight has not already said, and it is dropped
+        // from the painting. Idempotent, so styling a grid twice is harmless.
+        g.RowPrePaint += (_, e) => e.PaintParts &= ~DataGridViewPaintParts.Focus;
+
         // The row header is left alone here: on the history list it is the gutter an
         // oversize load is marked in, and this runs after that is set up.
     }
