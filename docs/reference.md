@@ -160,7 +160,7 @@ Imported rows are left out. One from TrucksBook carries a distance and a payout
 and nothing else, no damage, no fines, no route.
 
 Only the pass that runs when a delivery has just finished says anything in the
-event strip. Every other pass is quiet, so a first run or a rebuild does not
+strip at the foot of the sidebar. Every other pass is quiet, so a first run or a rebuild does not
 announce forty awards at once for driving that happened weeks ago. That pass runs
 before the history reloads, because the reload runs a quiet pass of its own and a
 quiet pass writes an award down without saying anything.

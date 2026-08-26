@@ -172,16 +172,22 @@ pointing. Where the truck is going can be worked out from two positions, where
 it is pointing cannot, and the two are different things reversing onto a dock.
 It redraws every second, which is the rate the tracker records at, and it can be
 switched off in *Settings* for anyone who would rather the machine spent those
-milliseconds on the game. It turns the drive to lie along the
-panel, which is far wider than it is tall, so a run from north to south fills the
-width instead of drawing a thread down the middle.
+milliseconds on the game. It turns the drive to whatever angle fills the shape
+of the panel it is in: a wide panel gets the drive lying down, a tall one gets it
+standing up, and either way it fills the room instead of drawing a thread down
+the middle. The angle is chosen by trying half a turn of them and keeping the one
+that draws the route biggest.
 
-It does not turn far, though, and it says how far it turned. North in both games
-is the negative z of their own space, which the cities settle beyond doubt: sort
-the drops by z and Yakima comes first and Tucson last. So the drawing is held
-within sixty degrees either side of it and a compass in the corner carries
-whatever turn was taken. Free to spin, the panel would hand you a map of a place
-you know with south at the top, which is worse than a thread down the middle.
+It says how far it turned. North in both games is the negative z of their own
+space, which the cities settle beyond doubt: sort the drops by z and Yakima comes
+first and Tucson last. The drawing may be turned up to a quarter turn either side
+of it, and a compass in the corner carries whatever turn was taken, so a picture
+with north pointing sideways still says so.
+
+It grows without twitching. A drive being watched is refitted every second and
+almost every second lands well inside the frame already drawn, so a frame near
+enough to the one on screen is left alone, and a frame far enough to matter is
+eased into over a third of a second rather than snapped to.
 
 The bar underneath counts the loaded leg against the game's own planned distance,
 with the run out to the trailer in its own quieter shade at the head of it. It is
@@ -249,7 +255,9 @@ together underneath it.
 ## What the window says without words
 
 A good deal of it is drawn rather than written. The dot in a row's gutter is its
-verdict, the colour of a route is speed, hazard stripes mean an oversize load,
+verdict, the mark in the strip at the foot of the sidebar is what kind of thing
+just happened, the colour of a route is speed, hazard stripes mean an oversize
+load,
 and each thing that happened on a drive gets a sign of its own on the timeline: a burst for an impact, a dial for a speeding fine, a note for any
 other one, a drop, a moon, a hull, a barrier, two chevrons back for a save
 loaded.
@@ -330,8 +338,8 @@ row is not the same as ten clean deliveries.
 They count what Waybill watched. A row imported from TrucksBook carries a distance
 and a payout and nothing else, so most of these could never be true of it and the
 rest would be true for nothing. Everything already in the logbook counts from the
-day the page arrives, and it is backfilled in silence: the strip along the foot
-names an award only when the delivery just finished earned it.
+day the page arrives, and it is backfilled in silence: the strip at the foot of
+the sidebar names an award only when the delivery just finished earned it.
 
 Nothing here is ever lost. A counter only climbs, and an award once earned stays
 earned even if the rule behind it is rewritten afterwards, in a program whose

@@ -182,29 +182,43 @@ public partial class MainForm : Form {
     /// room to be words instead of cramped tab strips.</summary>
     // ---------- what just happened ----------
 
+    /// <summary>What kind of thing a line in the strip is, which is the mark beside
+    /// it.</summary>
+    private enum Noticed {
+        /// <summary>A load taken on: the trailer hitched, or the cargo put aboard.</summary>
+        Started,
+        /// <summary>A delivery handed over.</summary>
+        Delivered,
+        /// <summary>An award earned.</summary>
+        Award,
+    }
+
     private readonly Panel _feed = new();
-    private readonly List<(DateTime At, string Text)> _feedLines = new();
+    private readonly List<(DateTime At, Noticed Kind, string Text, string Detail)> _feedLines = new();
 
     /// <summary>How many of the last things that happened are kept in front of the
     /// driver. Five, because the strip has to be able to hold all of them at once
-    /// without getting in the way of the page it sits under.</summary>
+    /// without pushing the pages out of the sidebar.</summary>
     private const int FeedLines = 5;
 
+    private const int FeedLineHeight = 32;
+
     /// <summary>
-    /// A strip along the foot of the window saying what just happened.
+    /// The foot of the sidebar, saying what just happened.
     ///
     /// The log on the live page answers "is the tracker seeing the game", which is a
-    /// different question and belongs to that page. This answers "did it notice what
-    /// I just did", and it has to be legible from whichever page the driver happens
-    /// to be on, so it lives under all of them.
+    /// different question and belongs to that page. This answers "did it notice what I
+    /// just did", and it has to be legible from whichever page the driver happens to be
+    /// on, so it lives beside all of them rather than on any one.
     ///
-    /// It takes no room until there is something to say and never more than five
-    /// lines of it.
+    /// It takes no room until there is something to say and never more than five lines
+    /// of it. Each line carries a mark for what kind of thing it was, since in a column
+    /// this narrow the words get cut and the mark never does.
     /// </summary>
     private Control BuildFeed() {
         _feed.Dock = DockStyle.Bottom;
         _feed.BackColor = Surface;
-        _feed.Padding = new Padding(16, 4, 16, 4);
+        _feed.Padding = new Padding(0, 6, 0, 6);
         _feed.Height = 0;
         _feed.Controls.Clear();
         DrawFeed();
@@ -227,11 +241,11 @@ public partial class MainForm : Form {
             "cargo_loaded" when owned => Strings.T("feed.loaded"),
             _ => null,
         };
-        if (text is not null) Happened(text);
+        if (text is not null) Happened(Noticed.Started, text);
     }
 
-    private void Happened(string text) {
-        _feedLines.Add((DateTime.Now, text));
+    private void Happened(Noticed kind, string text, string detail = "") {
+        _feedLines.Add((DateTime.Now, kind, text, detail));
         while (_feedLines.Count > FeedLines) _feedLines.RemoveAt(0);
         DrawFeed();
     }
@@ -242,21 +256,87 @@ public partial class MainForm : Form {
 
         // Newest at the top, so a new line always arrives in the same place and the
         // older ones move down and off rather than the whole strip shifting.
-        foreach (var (at, text) in _feedLines) {
-            var line = new Panel { Dock = DockStyle.Top, Height = 19, BackColor = Surface };
-            line.Controls.Add(new Label {
-                Dock = DockStyle.Fill, Text = text, ForeColor = Ink, AutoEllipsis = true,
-                Font = new Font("Segoe UI", 8.5F), TextAlign = ContentAlignment.MiddleLeft,
-            });
-            line.Controls.Add(new Label {
-                Dock = DockStyle.Left, Width = 58, Text = at.ToString("HH:mm:ss"), ForeColor = Muted,
-                Font = new Font("Consolas", 8F), TextAlign = ContentAlignment.MiddleLeft,
-            });
-            _feed.Controls.Add(line);
-        }
+        foreach (var line in _feedLines) _feed.Controls.Add(FeedLine(line));
 
-        _feed.Height = _feedLines.Count == 0 ? 0 : _feedLines.Count * 19 + 8;
+        _feed.Height = _feedLines.Count == 0 ? 0 : _feedLines.Count * FeedLineHeight + 14;
         _feed.ResumeLayout();
+    }
+
+    private Control FeedLine((DateTime At, Noticed Kind, string Text, string Detail) line) {
+        var row = new Panel {
+            Dock = DockStyle.Top, Height = FeedLineHeight, BackColor = Surface,
+            Padding = new Padding(0, 2, 12, 2),
+        };
+
+        var said = new Label {
+            Dock = DockStyle.Top, Height = 15, Text = line.Text, ForeColor = Ink, AutoEllipsis = true,
+            Font = new Font("Segoe UI", 8.5F), TextAlign = ContentAlignment.MiddleLeft,
+        };
+        var when = line.Detail.Length > 0
+            ? $"{line.At:HH:mm}  ·  {line.Detail}"
+            : line.At.ToString("HH:mm");
+        var under = new Label {
+            Dock = DockStyle.Top, Height = 13, Text = when, ForeColor = Muted, AutoEllipsis = true,
+            Font = new Font("Segoe UI", 7.5F), TextAlign = ContentAlignment.MiddleLeft,
+        };
+
+        // The words get cut in a column this narrow, so the whole of it is a breath
+        // away under the pointer.
+        var full = line.Detail.Length > 0 ? $"{line.Text}  ·  {line.Detail}" : line.Text;
+        _tips.SetToolTip(said, full);
+        _tips.SetToolTip(under, full);
+
+        row.Controls.Add(under);
+        row.Controls.Add(said);
+        row.Controls.Add(FeedMark(line.Kind));
+        return row;
+    }
+
+    /// <summary>
+    /// The mark down the left of a line: what kind of thing it was.
+    ///
+    /// A hollow ring for a load taken on, a filled one for a load handed over, and a
+    /// star for an award. Shape rather than colour alone, so the three are told apart
+    /// by somebody who does not see the colours.
+    /// </summary>
+    private Control FeedMark(Noticed kind) {
+        var mark = new Panel { Dock = DockStyle.Left, Width = 22, BackColor = Surface };
+        mark.Paint += (_, e) => {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            var middle = new PointF(11, mark.Height / 2f);
+            switch (kind) {
+                case Noticed.Started: {
+                    using var edge = new Pen(Accent, 1.6f);
+                    e.Graphics.DrawEllipse(edge, middle.X - 4, middle.Y - 4, 8, 8);
+                    break;
+                }
+                case Noticed.Delivered: {
+                    using var full = new SolidBrush(Accent);
+                    e.Graphics.FillEllipse(full, middle.X - 4, middle.Y - 4, 8, 8);
+                    break;
+                }
+                default: {
+                    using var full = new SolidBrush(Accent);
+                    e.Graphics.FillPolygon(full, Star(middle, 6, 2.4f));
+                    break;
+                }
+            }
+        };
+        return mark;
+    }
+
+    /// <summary>A four pointed star, which reads as an award at eight pixels where a
+    /// five pointed one turns to mush.</summary>
+    private static PointF[] Star(PointF middle, float far, float near) {
+        var points = new PointF[8];
+        for (var i = 0; i < 8; i++) {
+            var reach = i % 2 == 0 ? far : near;
+            var turn = Math.PI / 4 * i - Math.PI / 2;
+            points[i] = new PointF(
+                middle.X + (float)(Math.Cos(turn) * reach),
+                middle.Y + (float)(Math.Sin(turn) * reach));
+        }
+        return points;
     }
 
     // ---------- what is worth having done ----------
@@ -328,7 +408,7 @@ public partial class MainForm : Form {
                              s.LastAt ?? DateTime.Now, s.DeliveryId);
             if (announce && newly > 0) {
                 var times = s.TimesEarned > 1 ? $"  {s.TimesEarned}×" : "";
-                Happened($"{Strings.T("award.earned")}   {s.Award.Name}{times}   ·   +{s.Award.Xp} XP");
+                Happened(Noticed.Award, $"{s.Award.Name}{times}", $"+{s.Award.Xp} XP");
             }
         }
 
@@ -839,7 +919,10 @@ public partial class MainForm : Form {
             Font = new Font("Segoe UI", 8F), TextAlign = ContentAlignment.MiddleLeft,
         };
 
-        // Added bottom-up so the first entry ends up on top.
+        // Added bottom-up so the first entry ends up on top. The strip of what just
+        // happened goes in after the version and therefore sits above it, between the
+        // pages and the corner where the build is written.
+        bar.Controls.Add(BuildFeed());
         bar.Controls.Add(version);
         bar.Controls.Add(NavButton("stats", Strings.T("tab.stats")));
         bar.Controls.Add(NavButton("map", Strings.T("tab.map")));
@@ -900,7 +983,6 @@ public partial class MainForm : Form {
         // Every page is hidden but the one asked for. The strip along the foot is not
         // a page and carries no tag, so it is left alone: it belongs to all of them.
         foreach (Control c in _content.Controls) {
-            if (ReferenceEquals(c, _feed)) continue;
             c.Visible = (string?)c.Tag == page;
         }
 
@@ -949,9 +1031,6 @@ public partial class MainForm : Form {
         _content.Controls.Add(awards);
         _content.Controls.Add(map);
         _content.Controls.Add(stats);
-        // Added last of all, so it docks against the foot of the content and the
-        // pages take what is left above it.
-        _content.Controls.Add(BuildFeed());
         return _content;
     }
 
@@ -1482,8 +1561,8 @@ public partial class MainForm : Form {
             // what the delivery actually did to the balance rather than assuming it
             // paid.
             var balance = r.Revenue ?? -(r.Penalty ?? 0);
-            Happened($"{Strings.T("feed.delivered")}   {r.SourceCity}  →  {r.DestinationCity}"
-                   + $"   ·   {paid.FormatDistance(r.DistanceKm)}   ·   {paid.FormatMoney(balance)}");
+            Happened(Noticed.Delivered, $"{r.SourceCity}  →  {r.DestinationCity}",
+                     $"{paid.FormatDistance(r.DistanceKm)}  ·  {paid.FormatMoney(balance)}");
             // Before the reload rather than after it: the reload runs a quiet pass of
             // its own, and a quiet pass writes an award down without saying anything,
             // which would leave nothing left to announce.
