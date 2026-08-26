@@ -3283,6 +3283,11 @@ public partial class MainForm : Form {
             // And the identifiers behind the two city names, which are how the region
             // beside a city is looked up and not something anybody reads.
             nameof(DeliveryRow.OdkialId), nameof(DeliveryRow.KamId), nameof(DeliveryRow.Dokoncene),
+            // And whether the tractor was electric, which is drawn in the gutter. The
+            // grid makes a column out of every property it is given, so anything meant
+            // for the gutter has to be taken back off here or it arrives as a column
+            // headed with the name of the field, in every language at once.
+            nameof(DeliveryRow.Elektricky),
         }) {
             if (_grid.Columns[hidden] is { } col) col.Visible = false;
         }
