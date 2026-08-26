@@ -231,6 +231,16 @@ public class DeliveryStore : IDisposable {
                 speed_kmh    REAL
             );
 
+            -- What each recording covers. Reading one to its end is the only way to
+            -- learn when it ends, so the answer is kept rather than found again every
+            -- time the sittings are listed.
+            CREATE TABLE IF NOT EXISTS session_files (
+                name      TEXT PRIMARY KEY,
+                first_ms  INTEGER,
+                last_ms   INTEGER,
+                ticks     INTEGER
+            );
+
             CREATE TABLE IF NOT EXISTS trip_points (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 delivery_id  INTEGER NOT NULL REFERENCES deliveries(id),
@@ -848,6 +858,104 @@ public class DeliveryStore : IDisposable {
                 TruckDamageStart = Opt(49), TrailerDamageStart = Opt(50), CargoDamageStart = Opt(51),
                 SourceCityId = r.GetString(52), DestinationCityId = r.GetString(53),
             };
+        }
+    }
+
+    /// <summary>The recordings already measured, by file name.</summary>
+    public HashSet<string> KnownRecordings() {
+        lock (_gate) {
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = "SELECT name FROM session_files;";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read()) names.Add(reader.GetString(0));
+            return names;
+        }
+    }
+
+    /// <summary>What one recording covers. Replaces what was known about it, since
+    /// the recording being written right now grows every second.</summary>
+    public void RememberRecording(string name, long firstMs, long lastMs, int ticks) {
+        lock (_gate) {
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO session_files (name, first_ms, last_ms, ticks)
+                VALUES ($name, $first, $last, $ticks)
+                ON CONFLICT(name) DO UPDATE SET first_ms = $first, last_ms = $last, ticks = $ticks;
+                """;
+            cmd.Parameters.AddWithValue("$name", name);
+            cmd.Parameters.AddWithValue("$first", firstMs);
+            cmd.Parameters.AddWithValue("$last", lastMs);
+            cmd.Parameters.AddWithValue("$ticks", ticks);
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>Every measured recording, oldest first.</summary>
+    public List<(string Name, long First, long Last, int Ticks)> Recordings() {
+        lock (_gate) {
+            var all = new List<(string, long, long, int)>();
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = "SELECT name, first_ms, last_ms, ticks FROM session_files ORDER BY first_ms;";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read()) {
+                all.Add((reader.GetString(0), reader.GetInt64(1), reader.GetInt64(2), reader.GetInt32(3)));
+            }
+            return all;
+        }
+    }
+
+    /// <summary>
+    /// What was driven between two moments, for one sitting.
+    ///
+    /// A delivery belongs to the sitting it started in rather than the one it
+    /// finished in: a haul begun at midnight and finished the next evening was that
+    /// evening's work in nobody's telling of it. Driving off the job is counted where
+    /// it happened, since it has no such story to it.
+    /// </summary>
+    public SessionRow SessionTotals(long fromMs, long toMs, int runs) {
+        lock (_gate) {
+            var row = new SessionRow {
+                Od = DateTimeOffset.FromUnixTimeMilliseconds(fromMs).LocalDateTime,
+                Do = DateTimeOffset.FromUnixTimeMilliseconds(toMs).LocalDateTime,
+                FromMs = fromMs,
+                ToMs = toMs,
+                Behy = runs,
+            };
+
+            using (var cmd = _conn.CreateCommand()) {
+                cmd.CommandText = """
+                    SELECT COUNT(*), COALESCE(SUM(actual_distance_km), 0),
+                           COALESCE(SUM(COALESCE(revenue, 0) - COALESCE(penalty, 0)), 0),
+                           COALESCE(SUM(driving_game_min), 0), COALESCE(SUM(rest_minutes), 0),
+                           COALESCE(MAX(game), '')
+                    FROM deliveries
+                    WHERE started_at_ms BETWEEN $from AND $to;
+                    """;
+                cmd.Parameters.AddWithValue("$from", fromMs);
+                cmd.Parameters.AddWithValue("$to", toMs);
+                using var reader = cmd.ExecuteReader();
+                if (reader.Read()) {
+                    row.Zasielky = reader.GetInt32(0);
+                    row.DistanceKm = reader.GetDouble(1);
+                    row.Zarobok = reader.GetDouble(2);
+                    row.GameMinutes = reader.GetDouble(3);
+                    row.RestMinutes = reader.GetDouble(4);
+                    row.Hra = reader.GetString(5);
+                }
+            }
+
+            using (var cmd = _conn.CreateCommand()) {
+                cmd.CommandText = """
+                    SELECT COALESCE(SUM(distance_km), 0) FROM freeroam
+                    WHERE started_at_ms BETWEEN $from AND $to;
+                    """;
+                cmd.Parameters.AddWithValue("$from", fromMs);
+                cmd.Parameters.AddWithValue("$to", toMs);
+                row.FreeroamKm = Convert.ToDouble(cmd.ExecuteScalar() ?? 0.0);
+            }
+
+            return row;
         }
     }
 

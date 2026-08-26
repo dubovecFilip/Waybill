@@ -180,6 +180,188 @@ public partial class MainForm : Form {
     /// <summary>Deliveries and statistics used to be tabs. As a sidebar they read as
     /// two places in the app rather than two folders inside one, and the labels get
     /// room to be words instead of cramped tab strips.</summary>
+    // ---------- sittings at the wheel ----------
+
+    private readonly DataGridView _sessionGrid = new();
+    private readonly Panel _sessionSide = new();
+    private List<SessionRow> _sessions = new();
+
+    /// <summary>
+    /// An evening's driving, rather than a delivery or a month.
+    ///
+    /// The other two pages answer about one drive and about a period. Neither
+    /// answers "what did I get done last night", which is the question a driver
+    /// actually asks getting up from the desk, and which the deliveries can only
+    /// answer if you know which of them belong together.
+    /// </summary>
+    private Panel BuildSessionsPage() {
+        var page = new Panel { Dock = DockStyle.Fill, BackColor = Canvas, Padding = new Padding(16, 12, 16, 16) };
+
+        _sessionSide.Dock = DockStyle.Right;
+        _sessionSide.Width = 320;
+        _sessionSide.BackColor = Surface;
+        _sessionSide.Padding = new Padding(0);
+        _sessionSide.AutoScroll = true;
+        _sessionSide.Controls.Clear();
+
+        _sessionGrid.Dock = DockStyle.Fill;
+        _sessionGrid.AllowUserToAddRows = false;
+        _sessionGrid.AllowUserToDeleteRows = false;
+        _sessionGrid.ReadOnly = true;
+        _sessionGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        _sessionGrid.MultiSelect = false;
+        _sessionGrid.RowHeadersVisible = false;
+        _sessionGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+        _sessionGrid.ScrollBars = ScrollBars.Both;
+        StyleGrid(_sessionGrid);
+        _sessionGrid.DataBindingComplete -= OnSessionsBound;
+        _sessionGrid.DataBindingComplete += OnSessionsBound;
+        _sessionGrid.SelectionChanged -= OnSessionPicked;
+        _sessionGrid.SelectionChanged += OnSessionPicked;
+
+        var gap = new Panel { Dock = DockStyle.Right, Width = 12, BackColor = Canvas };
+        page.Controls.Add(_sessionGrid);
+        page.Controls.Add(gap);
+        page.Controls.Add(_sessionSide);
+        return page;
+    }
+
+    private void ReloadSessions() {
+        // The recording being written right now is measured again every time, since
+        // it is the one that grows. The rest are read once and remembered.
+        try {
+            Tracking.Sessions.Scan(_store, Path.Combine(DeliveryStore.DefaultDir(), "sessions"));
+        } catch {
+            // A folder that cannot be read means no new sittings, not a broken page.
+        }
+
+        _sessions = Tracking.Sessions.List(_store, _settings.SessionGapMinutes);
+        foreach (var s in _sessions) {
+            var u = Units.For(_settings.Units, s.Hra);
+            s.Trvanie = Spell(s.ToMs - s.FromMs);
+            // A sitting with nothing delivered in it has no distance and no earnings,
+            // and no game to read them in either: "0 km" there is a figure about a
+            // game that was never started, and a currency picked out of the air.
+            var drove = s.Zasielky > 0 || s.FreeroamKm > 0.05;
+            s.Vzdialenost = drove ? u.FormatDistance(s.DistanceKm) : "";
+            s.Odmena = drove ? u.FormatMoney(s.Zarobok) : "";
+            s.Zarobok = u.Money(s.Zarobok);
+            // Against the hours the game counted, not the hours the chair was warm:
+            // dividing by real time reports the time compression as speed.
+            var hours = s.GameMinutes / 60.0;
+            s.Priemer = hours > 0.01 ? u.FormatSpeed(s.DistanceKm / hours) : "";
+            s.Oddych = s.RestMinutes > 0.5 ? Units.Duration(s.RestMinutes) : "";
+        }
+
+        _sessionGrid.DataSource = new SortableBindingList<SessionRow>(_sessions.ToList(),
+            new Dictionary<string, string> {
+                [nameof(SessionRow.Vzdialenost)] = nameof(SessionRow.DistanceKm),
+                [nameof(SessionRow.Odmena)] = nameof(SessionRow.Zarobok),
+            });
+        UseDarkScrollbars(_sessionGrid);
+    }
+
+    /// <summary>A stretch of the clock as somebody would say it: hours and minutes
+    /// under a day, and never "0 h" for a sitting that lasted forty minutes.</summary>
+    private static string Spell(long ms) {
+        var minutes = (int)Math.Round(ms / 60000.0);
+        return minutes < 60 ? $"{minutes} min" : $"{minutes / 60} h {minutes % 60:00} min";
+    }
+
+    private void OnSessionsBound(object? sender, DataGridViewBindingCompleteEventArgs e) {
+        var captions = new Dictionary<string, string> {
+            [nameof(SessionRow.Od)] = Strings.T("sess.began"),
+            [nameof(SessionRow.Trvanie)] = Strings.T("sess.lasted"),
+            [nameof(SessionRow.Zasielky)] = Strings.T("stats.deliveries"),
+            [nameof(SessionRow.Vzdialenost)] = Strings.T("stats.distance"),
+            [nameof(SessionRow.Odmena)] = Strings.T("stats.revenue"),
+            [nameof(SessionRow.Priemer)] = Strings.T("stats.avgSpeed"),
+            [nameof(SessionRow.Oddych)] = Strings.T("detail.rest"),
+            [nameof(SessionRow.Behy)] = Strings.T("sess.runs"),
+        };
+        foreach (DataGridViewColumn col in _sessionGrid.Columns) {
+            if (captions.TryGetValue(col.DataPropertyName, out var caption)) col.HeaderText = caption;
+        }
+        if (_sessionGrid.Columns[nameof(SessionRow.Od)] is { } began) {
+            began.DefaultCellStyle.Format = "dd.MM.yy HH:mm";
+        }
+        // Read left to right the way the sitting is asked about: when, how long, and
+        // then what came of it. Bound properties come out in the order they are
+        // declared, which put the number of restarts second.
+        var order = new[] {
+            nameof(SessionRow.Od), nameof(SessionRow.Trvanie), nameof(SessionRow.Zasielky),
+            nameof(SessionRow.Vzdialenost), nameof(SessionRow.Odmena), nameof(SessionRow.Priemer),
+            nameof(SessionRow.Oddych), nameof(SessionRow.Behy),
+        };
+        var widths = new[] { 116, 88, 76, 94, 94, 100, 74, 54 };
+        for (var i = 0; i < order.Length; i++) {
+            if (_sessionGrid.Columns[order[i]] is not { } col) continue;
+            col.DisplayIndex = i;
+            col.Width = widths[i];
+        }
+        foreach (var numeric in new[] {
+            nameof(SessionRow.Zasielky), nameof(SessionRow.Vzdialenost),
+            nameof(SessionRow.Odmena), nameof(SessionRow.Priemer), nameof(SessionRow.Behy),
+        }) {
+            if (_sessionGrid.Columns[numeric] is { } c) c.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+        }
+        foreach (var hidden in new[] {
+            nameof(SessionRow.Do), nameof(SessionRow.FromMs), nameof(SessionRow.ToMs),
+            nameof(SessionRow.DistanceKm), nameof(SessionRow.Zarobok), nameof(SessionRow.Hra),
+            nameof(SessionRow.GameMinutes), nameof(SessionRow.RestMinutes), nameof(SessionRow.FreeroamKm),
+        }) {
+            if (_sessionGrid.Columns[hidden] is { } col) col.Visible = false;
+        }
+        if (_sessionGrid.Rows.Count > 0 && _sessionGrid.SelectedRows.Count == 0) {
+            _sessionGrid.Rows[0].Selected = true;
+        }
+    }
+
+    /// <summary>What was driven in the sitting that is selected, beside the list of
+    /// them. The deliveries are already loaded for the history page, so this is the
+    /// same rows read a second way rather than another trip to the database.</summary>
+    private void OnSessionPicked(object? sender, EventArgs e) {
+        _sessionSide.Controls.Clear();
+        if (_sessionGrid.CurrentRow?.DataBoundItem is not SessionRow picked) return;
+
+        var from = DateTimeOffset.FromUnixTimeMilliseconds(picked.FromMs).LocalDateTime;
+        var to = DateTimeOffset.FromUnixTimeMilliseconds(picked.ToMs).LocalDateTime;
+        var inside = _rows.Where(r => r.Datum >= from && r.Datum <= to).ToList();
+
+        var lines = new List<Control>();
+        foreach (var row in inside) {
+            var id = row.Id;
+            var line = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = Surface, Padding = new Padding(14, 6, 14, 6), Cursor = Cursors.Hand };
+            var where = new Label {
+                Dock = DockStyle.Top, Height = 20, Text = $"{row.Odkial}  →  {row.Kam}",
+                ForeColor = Ink, AutoEllipsis = true,
+            };
+            var what = new Label {
+                Dock = DockStyle.Top, Height = 16, ForeColor = Muted, AutoEllipsis = true,
+                Font = new Font("Segoe UI", 8F),
+                Text = $"{row.Datum:HH:mm}   ·   {row.Naklad}   ·   {row.Vzdialenost}   ·   {row.Odmena}",
+            };
+            line.Controls.Add(what);
+            line.Controls.Add(where);
+            foreach (Control part in new Control[] { line, where, what }) {
+                part.Click += (_, _) => ShowDetail(id);
+            }
+            lines.Add(line);
+        }
+
+        if (lines.Count == 0) {
+            lines.Add(new Label {
+                Dock = DockStyle.Top, Height = 30, Text = Strings.T("sess.nothing"),
+                ForeColor = Muted, BackColor = Surface, Padding = new Padding(14, 6, 0, 0),
+            });
+        }
+
+        // Docked children stack in reverse, so the list goes in backwards.
+        for (var i = lines.Count - 1; i >= 0; i--) _sessionSide.Controls.Add(lines[i]);
+        _sessionSide.Controls.Add(CardHeading(Strings.T("sess.inThisOne")));
+        UseDarkScrollbars(_sessionSide);
+    }
+
     private Panel BuildSidebar() {
         var bar = new Panel { Dock = DockStyle.Left, Width = 176, BackColor = Surface, Padding = new Padding(12, 16, 12, 12) };
         var edge = new Panel { Dock = DockStyle.Right, Width = 1, BackColor = Line };
@@ -198,6 +380,7 @@ public partial class MainForm : Form {
         bar.Controls.Add(version);
         bar.Controls.Add(NavButton("stats", Strings.T("tab.stats")));
         bar.Controls.Add(NavButton("map", Strings.T("tab.map")));
+        bar.Controls.Add(NavButton("sessions", Strings.T("tab.sessions")));
         bar.Controls.Add(NavButton("deliveries", Strings.T("tab.deliveries")));
         bar.Controls.Add(NavButton("live", Strings.T("tab.live")));
         bar.Controls.Add(edge);
@@ -280,6 +463,8 @@ public partial class MainForm : Form {
         _content.Controls.Add(_detailPage);
         var deliveries = BuildHistoryPage();
         deliveries.Tag = "deliveries";
+        var sessions = BuildSessionsPage();
+        sessions.Tag = "sessions";
         var map = BuildMapPage();
         map.Tag = "map";
         var stats = BuildStatsPage();
@@ -287,6 +472,7 @@ public partial class MainForm : Form {
 
         _content.Controls.Add(live);
         _content.Controls.Add(deliveries);
+        _content.Controls.Add(sessions);
         _content.Controls.Add(map);
         _content.Controls.Add(stats);
         return _content;
@@ -2963,6 +3149,7 @@ public partial class MainForm : Form {
         _routes.Clear();
         ApplyFilter();
         ReloadMapPage();
+        ReloadSessions();
     }
 
     /// <summary>

@@ -98,6 +98,20 @@ if (args.Length >= 1 && args[0] == "--list") {
 }
 
 // `Waybill.exe --stats [days]` - all-time by default, or the last N days.
+// `Waybill.exe --sessions` - the sittings at the wheel, newest first.
+if (args.Length >= 1 && args[0] == "--sessions") {
+    using var sessionStore = new DeliveryStore();
+    Waybill.Tracking.Sessions.Scan(sessionStore, Path.Combine(DeliveryStore.DefaultDir(), "sessions"));
+    var units = Units.For(ConsoleFormat.UnitSetting, sessionStore.MostRecentGame());
+    foreach (var s in Waybill.Tracking.Sessions.List(sessionStore)) {
+        var hours = (s.ToMs - s.FromMs) / 3600000.0;
+        Console.WriteLine($"{s.Od:yyyy-MM-dd HH:mm} - {s.Do:HH:mm}  {hours,5:0.0} h  "
+                        + $"{s.Zasielky,2} zasielok  {units.Distance(s.DistanceKm),8:0.0} {units.DistanceUnit}  "
+                        + $"{units.Money(s.Zarobok),8:0} {units.Currency}  ({s.Behy} beh)");
+    }
+    return;
+}
+
 if (args.Length >= 1 && args[0] == "--stats") {
     long? since = args.Length >= 2 && int.TryParse(args[1], out var days)
         ? DateTimeOffset.UtcNow.AddDays(-days).ToUnixTimeMilliseconds()

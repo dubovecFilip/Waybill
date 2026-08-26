@@ -29,6 +29,13 @@ public class Settings {
     /// not a secret: it only tells Discord whose icons and name to show.</summary>
     public string? DiscordAppId { get; set; }
 
+    /// <summary>How long a break between runs of the app still counts as the same
+    /// sitting at the wheel. An hour by default: closing Waybill for a moment, or a
+    /// crash and a restart, is not the end of an evening's driving. Left open, a
+    /// sitting never ends, however long the pause, because what ends one is the
+    /// driver getting up.</summary>
+    public int SessionGapMinutes { get; set; } = Tracking.Sessions.DefaultGapMinutes;
+
     /// <summary>
     /// Draw the route on the page for the drive in progress.
     ///

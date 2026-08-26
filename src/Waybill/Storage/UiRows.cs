@@ -4,6 +4,34 @@ namespace Waybill.Storage;
 
 /// <summary>One row in the deliveries grid. Property names are the column headers,
 /// so they are deliberately short and in Slovak like the rest of the UI.</summary>
+/// <summary>One sitting at the wheel: when it ran, and what was driven in it. See
+/// <see cref="Waybill.Tracking.Sessions"/> for what counts as one.</summary>
+public class SessionRow {
+    public DateTime Od { get; set; }
+    public DateTime Do { get; set; }
+    public long FromMs { get; set; }
+    public long ToMs { get; set; }
+    /// <summary>How many runs of the app it took. More than one means the app was
+    /// closed and opened again inside the hour, which is the same sitting.</summary>
+    public int Behy { get; set; }
+    public string Trvanie { get; set; } = "";
+    public int Zasielky { get; set; }
+    public double DistanceKm { get; set; }
+    public string Vzdialenost { get; set; } = "";
+    public double Zarobok { get; set; }
+    public string Odmena { get; set; } = "";
+    public string Priemer { get; set; } = "";
+    public string Oddych { get; set; } = "";
+    public string Hra { get; set; } = "";
+    /// <summary>Game minutes driven and slept, as stored. The columns above are these
+    /// read out; sorting works on the numbers underneath.</summary>
+    public double GameMinutes { get; set; }
+    public double RestMinutes { get; set; }
+    /// <summary>Kilometres driven with nothing on the hook, counted apart so a sitting
+    /// spent shunting trailers around a yard does not read as a delivery.</summary>
+    public double FreeroamKm { get; set; }
+}
+
 public class DeliveryRow {
     public long Id { get; set; }
     public DateTime Datum { get; set; }
