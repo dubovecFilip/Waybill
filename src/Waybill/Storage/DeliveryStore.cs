@@ -106,7 +106,41 @@ public class DeliveryStore : IDisposable {
             }
         }
 
+        DropAwardsCountedOnce();
         DropPlaceholderStarts();
+    }
+
+    /// <summary>
+    /// Throws away the first shape of the awards table.
+    ///
+    /// It counted an award once and for all; the one that replaced it counts the
+    /// repeats, and none of the old identifiers survived the rewrite anyway. Every
+    /// figure in the table is worked out from the deliveries, so nothing is lost by
+    /// starting it again, and the first pass afterwards fills it back in.
+    /// </summary>
+    private void DropAwardsCountedOnce() {
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var info = _conn.CreateCommand()) {
+            info.CommandText = "PRAGMA table_info(awards);";
+            using var reader = info.ExecuteReader();
+            while (reader.Read()) columns.Add(reader.GetString(1));
+        }
+        if (columns.Count == 0 || columns.Contains("times_earned")) return;
+
+        // Dropped and built again here rather than left to the schema, which has
+        // already run by the time a migration gets a look at the file.
+        using var drop = _conn.CreateCommand();
+        drop.CommandText = """
+            DROP TABLE awards;
+            CREATE TABLE awards (
+                id           TEXT PRIMARY KEY,
+                times_earned INTEGER NOT NULL DEFAULT 1,
+                first_at_ms  INTEGER NOT NULL,
+                last_at_ms   INTEGER NOT NULL,
+                delivery_id  INTEGER
+            );
+            """;
+        drop.ExecuteNonQuery();
     }
 
     /// <summary>
@@ -253,9 +287,13 @@ public class DeliveryStore : IDisposable {
             -- What has been reached, and when. Written once and never rewritten:
             -- an award is a record of something that happened, and this project does
             -- not take back what a driver has done.
+            -- What has been earned, and how many times. Every figure in here is
+            -- worked out from the deliveries, so it can always be built again.
             CREATE TABLE IF NOT EXISTS awards (
                 id           TEXT PRIMARY KEY,
-                at_ms        INTEGER NOT NULL,
+                times_earned INTEGER NOT NULL DEFAULT 1,
+                first_at_ms  INTEGER NOT NULL,
+                last_at_ms   INTEGER NOT NULL,
                 delivery_id  INTEGER
             );
 
@@ -961,63 +999,81 @@ public class DeliveryStore : IDisposable {
     /// Every delivery Waybill watched itself, reduced to what an award needs.
     ///
     /// Imported rows are left out. One from TrucksBook carries a distance and a
-    /// payout and nothing else, so half the awards could never be true of it and the
-    /// other half would be true for nothing.
+    /// payout and nothing else, no damage, no fines, no route, so most of the awards
+    /// could never be true of it and the rest would be true for nothing.
     /// </summary>
     public List<Waybill.Tracking.AwardDelivery> AwardDeliveries() {
         lock (_gate) {
+            // What the timeline knows and the row does not: how many tollgates were
+            // passed, how many of the fines were for speed, and whether a ferry or a
+            // train was taken.
+            var tollgates = CountBy("tollgate");
+            var speeding = CountBy("fine", "%Speeding%");
+            var crossings = CountBy("ferry");
+            foreach (var (id, count) in CountBy("train")) {
+                crossings[id] = crossings.TryGetValue(id, out var had) ? had + count : count;
+            }
+
             var rows = new List<Waybill.Tracking.AwardDelivery>();
             using var cmd = _conn.CreateCommand();
             cmd.CommandText = """
                 SELECT id, COALESCE(finished_at_ms, started_at_ms), COALESCE(game, ''),
-                       COALESCE(actual_distance_km, 0),
+                       COALESCE(actual_distance_km, 0), COALESCE(planned_distance_km, 0),
                        COALESCE(revenue, 0) - COALESCE(penalty, 0),
-                       COALESCE(xp, 0), COALESCE(driving_ms, 0), COALESCE(rest_minutes, 0),
                        COALESCE(fines_count, 0), COALESCE(collisions, 0),
+                       COALESCE(cargo_damage_pct, 0), COALESCE(cargo_mass_kg, 0),
                        COALESCE(special_transport, 0), COALESCE(electric, 0),
-                       COALESCE(truck_damage_pct, 0), COALESCE(trailer_damage_pct, 0),
-                       COALESCE(cargo_damage_pct, 0),
-                       COALESCE(cargo, ''), truck_make || ' ' || truck_model,
-                       COALESCE(trailer_units, ''),
+                       COALESCE(fuel_used_l, 0), minutes_late,
+                       COALESCE(ferries_used, 0), COALESCE(cargo, ''),
                        COALESCE(source_city, ''), COALESCE(destination_city, ''),
                        COALESCE(source_city_id, ''), COALESCE(destination_city_id, ''),
-                       COALESCE(started_at_ms, 0)
+                       COALESCE(source_company, ''), COALESCE(destination_company, '')
                 FROM deliveries
                 WHERE COALESCE(source, '') != 'trucksbook'
                 ORDER BY COALESCE(finished_at_ms, started_at_ms);
                 """;
             using var reader = cmd.ExecuteReader();
             while (reader.Read()) {
+                var id = reader.GetInt64(0);
                 var game = reader.GetString(2);
-                var started = reader.GetInt64(22);
-                var finished = reader.GetInt64(1);
                 var row = new Waybill.Tracking.AwardDelivery {
-                    Id = reader.GetInt64(0),
-                    FinishedAtMs = finished,
+                    Id = id,
+                    FinishedAtMs = reader.GetInt64(1),
                     Game = game,
                     DistanceKm = reader.GetDouble(3),
-                    Paid = reader.GetDouble(4),
-                    Xp = reader.GetInt32(5),
-                    DrivingMs = reader.GetInt64(6),
-                    RestMinutes = reader.GetDouble(7),
-                    Fines = reader.GetInt32(8),
-                    Collisions = reader.GetInt32(9),
+                    PlannedKm = reader.GetDouble(4),
+                    Paid = reader.GetDouble(5),
+                    Fines = reader.GetInt32(6),
+                    Collisions = reader.GetInt32(7),
+                    CargoDamagePct = reader.GetDouble(8),
+                    MassKg = reader.GetDouble(9),
                     Special = reader.GetInt32(10) != 0,
                     Electric = reader.GetInt32(11) != 0,
-                    Spotless = reader.GetDouble(12) + reader.GetDouble(13) + reader.GetDouble(14) < 0.0001,
+                    Fuel = reader.GetDouble(12),
+                    MinutesLate = reader.IsDBNull(13) ? null : reader.GetDouble(13),
+                    Ferries = reader.GetInt32(14),
                     Cargo = reader.GetString(15),
-                    Truck = reader.IsDBNull(16) ? "" : reader.GetString(16),
-                    Units = ReadUnits(reader.GetString(17)).Count,
-                    Overnight = DateTimeOffset.FromUnixTimeMilliseconds(started).LocalDateTime.Date
-                                != DateTimeOffset.FromUnixTimeMilliseconds(finished).LocalDateTime.Date,
+                    DestinationCity = reader.GetString(17),
+                    Tollgates = tollgates.TryGetValue(id, out var gates) ? gates : 0,
+                    SpeedingFines = speeding.TryGetValue(id, out var caught) ? caught : 0,
                 };
-                foreach (var (city, id) in new[] {
-                    (reader.GetString(18), reader.GetString(20)),
-                    (reader.GetString(19), reader.GetString(21)),
-                }) {
-                    if (city.Length == 0) continue;
-                    row.Cities.Add($"{game}:{city}");
-                    if (Places.Code(game, city, id) is { } code) row.Regions.Add($"{game}:{code}");
+
+                row.SourceRegion = Places.Code(game, reader.GetString(16), reader.GetString(18)) ?? "";
+                row.DestinationRegion = Places.Code(game, reader.GetString(17), reader.GetString(19)) ?? "";
+                foreach (var code in new[] { row.SourceRegion, row.DestinationRegion }) {
+                    if (code.Length > 0) row.Regions.Add(code);
+                }
+                row.CrossedRegion = row.SourceRegion.Length > 0 && row.DestinationRegion.Length > 0
+                                    && !row.SourceRegion.Equals(row.DestinationRegion, StringComparison.OrdinalIgnoreCase);
+                // Nothing says which water was crossed, so the Channel is read off the
+                // ends: Britain at one of them, the mainland at the other, and a ferry
+                // or a train on the bill.
+                row.CrossedChannel = crossings.ContainsKey(id)
+                    && row.SourceRegion.Equals("GB", StringComparison.OrdinalIgnoreCase)
+                       != row.DestinationRegion.Equals("GB", StringComparison.OrdinalIgnoreCase);
+
+                foreach (var company in new[] { reader.GetString(20), reader.GetString(21) }) {
+                    if (company.Length > 0) row.Companies.Add($"{game}:{company}");
                 }
                 rows.Add(row);
             }
@@ -1025,32 +1081,61 @@ public class DeliveryStore : IDisposable {
         }
     }
 
-    /// <summary>The awards already reached, by identifier.</summary>
-    public Dictionary<string, (DateTime At, long? DeliveryId)> ReachedAwards() {
+    /// <summary>How many events of one kind each delivery has, optionally only those
+    /// whose detail matches.</summary>
+    private Dictionary<long, int> CountBy(string type, string? detailLike = null) {
+        var counts = new Dictionary<long, int>();
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = detailLike is null
+            ? "SELECT delivery_id, COUNT(*) FROM events WHERE event_type = $type GROUP BY 1;"
+            : "SELECT delivery_id, COUNT(*) FROM events WHERE event_type = $type AND extra_json LIKE $detail GROUP BY 1;";
+        cmd.Parameters.AddWithValue("$type", type);
+        if (detailLike is not null) cmd.Parameters.AddWithValue("$detail", detailLike);
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read()) counts[reader.GetInt64(0)] = reader.GetInt32(1);
+        return counts;
+    }
+
+    /// <summary>What has been earned, and how many times, by award identifier.</summary>
+    public Dictionary<string, (int Times, DateTime First, DateTime Last, long? DeliveryId)> EarnedAwards() {
         lock (_gate) {
-            var reached = new Dictionary<string, (DateTime, long?)>(StringComparer.OrdinalIgnoreCase);
+            var earned = new Dictionary<string, (int, DateTime, DateTime, long?)>(StringComparer.OrdinalIgnoreCase);
             using var cmd = _conn.CreateCommand();
-            cmd.CommandText = "SELECT id, at_ms, delivery_id FROM awards;";
+            cmd.CommandText = "SELECT id, times_earned, first_at_ms, last_at_ms, delivery_id FROM awards;";
             using var reader = cmd.ExecuteReader();
             while (reader.Read()) {
-                reached[reader.GetString(0)] = (
-                    DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(1)).LocalDateTime,
-                    reader.IsDBNull(2) ? null : reader.GetInt64(2));
+                earned[reader.GetString(0)] = (
+                    reader.GetInt32(1),
+                    DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(2)).LocalDateTime,
+                    DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(3)).LocalDateTime,
+                    reader.IsDBNull(4) ? null : reader.GetInt64(4));
             }
-            return reached;
+            return earned;
         }
     }
 
-    /// <summary>Writes down that an award was reached, once and for good.</summary>
-    public void ReachAward(string id, DateTime at, long? deliveryId) {
+    /// <summary>
+    /// Writes down what has been earned.
+    ///
+    /// The count only ever climbs. If the rule behind an award is rewritten later and
+    /// measures fewer, what was written down stands: this project does not take back
+    /// what a driver has already done.
+    /// </summary>
+    public void EarnAward(string id, int times, DateTime first, DateTime last, long? deliveryId) {
         lock (_gate) {
             using var cmd = _conn.CreateCommand();
             cmd.CommandText = """
-                INSERT INTO awards (id, at_ms, delivery_id) VALUES ($id, $at, $delivery)
-                ON CONFLICT(id) DO NOTHING;
+                INSERT INTO awards (id, times_earned, first_at_ms, last_at_ms, delivery_id)
+                VALUES ($id, $times, $first, $last, $delivery)
+                ON CONFLICT(id) DO UPDATE SET
+                    times_earned = MAX(times_earned, $times),
+                    last_at_ms   = MAX(last_at_ms, $last),
+                    delivery_id  = COALESCE($delivery, delivery_id);
                 """;
             cmd.Parameters.AddWithValue("$id", id);
-            cmd.Parameters.AddWithValue("$at", new DateTimeOffset(at).ToUnixTimeMilliseconds());
+            cmd.Parameters.AddWithValue("$times", times);
+            cmd.Parameters.AddWithValue("$first", new DateTimeOffset(first).ToUnixTimeMilliseconds());
+            cmd.Parameters.AddWithValue("$last", new DateTimeOffset(last).ToUnixTimeMilliseconds());
             cmd.Parameters.AddWithValue("$delivery", (object?)deliveryId ?? DBNull.Value);
             cmd.ExecuteNonQuery();
         }

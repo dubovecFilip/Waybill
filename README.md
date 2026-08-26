@@ -91,7 +91,8 @@ Every state, flag and anomaly is listed with its meaning in
 * Signs that sheet in your own hand, drawn once with the mouse and kept
 * Names the state or the country a city is in, in the list, on the card and on the sheet
 * Groups a night's driving into one sitting and says what came of it
-* Keeps forty awards, and says how far off the ones still to come are
+* Keeps seventy-two awards, some of them repeatable, and its own level to show for them
+* Counts kilometres in Europe and miles in America, and never turns one into the other
 * Draws the drive in progress a second at a time, with a needle for which way it points
 * Keeps the driving between jobs too, as distance and as lines on the map
 * Resumes an interrupted job after a crash or after quitting mid drive
@@ -298,28 +299,43 @@ well as on the heading.
 
 ## What is worth having done
 
-*Awards* is forty of them on one page, reached at the top and the rest below with
-a bar for how far off each one is.
+*Awards* is seventy-two of them on one page, under a line saying where the driver
+stands: the level, what it took to get there, how many of the set have been found
+and how many earnings that is in total.
 
-![Reached, and still to come](assets/awards.png)
+![Earned, and still to come](assets/awards.png)
 
-Three kinds, because a driver asks three different things. A milestone is a total
-that only climbs: kilometres, deliveries, money, experience, hours at the wheel,
-hours slept. A feat is one drive that went a particular way: a thousand
-kilometres in one go, a delivery without a scratch, five hundred kilometres with
-no fine and no collision, an oversize load, a road train, a battery, a night that
-ran past midnight. A collection is ground covered: states and countries, kinds of
-cargo, tractors, cities.
+Four shelves. Awards true of either game, the ladder of kilometres driven in
+Europe, the ladder of miles driven in America, and the secret ones, which are not
+named until they are found.
 
-They count what Waybill watched. A row imported from TrucksBook carries a
-distance and a payout and nothing else, so half of these could never be true of
-it and the other half would be true for nothing. Everything already in the
-logbook counts from the day the page arrives, and it is backfilled in silence:
-the strip along the foot names an award only when the delivery just finished is
-the one that carried it over.
+Distance is kept apart by game and never converted. Europe counts in kilometres
+and America in miles, so a thousand miles is its own award and not a rounding of
+a thousand kilometres.
 
-Nothing here is ever lost. An award is a record of something that happened, in a
-program whose first rule is that a delivery is never taken away from the driver.
+An award can be repeatable, and then doing it again counts again and pays again.
+A perfect delivery is worth the same the twenty-first time as the first, which is
+what makes a clean run worth keeping up rather than worth doing once. The counter
+beside the name says how many times over, and never appears at one.
+
+Each award is worth Waybill experience, which is Waybill's own and has nothing to
+do with the experience either game pays for a job. It adds up to a level, and
+each level takes fifty more than the one before it, so the early ones pass while
+a driver is finding out what the awards are and the later ones take a season.
+
+What a run of deliveries was like is asked in the order they happened rather than
+of the pile at the end, so a streak is a real streak: ten clean deliveries in a
+row is not the same as ten clean deliveries.
+
+They count what Waybill watched. A row imported from TrucksBook carries a distance
+and a payout and nothing else, so most of these could never be true of it and the
+rest would be true for nothing. Everything already in the logbook counts from the
+day the page arrives, and it is backfilled in silence: the strip along the foot
+names an award only when the delivery just finished earned it.
+
+Nothing here is ever lost. A counter only climbs, and an award once earned stays
+earned even if the rule behind it is rewritten afterwards, in a program whose
+first rule is that a delivery is never taken away from the driver.
 
 ## A night's driving
 

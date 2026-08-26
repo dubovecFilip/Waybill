@@ -262,132 +262,206 @@ public partial class MainForm : Form {
     // ---------- what is worth having done ----------
 
     private readonly Panel _awardsPage = new();
+    private readonly Panel _awardsList = new();
+    private readonly Panel _awardsHead = new();
     private List<Tracking.AwardStanding> _awards = new();
+    private Tracking.AwardProfile _profile = new();
 
     /// <summary>
-    /// The awards, reached and not.
+    /// The awards, earned and not, under a line saying where the driver stands.
     ///
-    /// A list rather than a grid: what matters about an award is its name, the one
-    /// line saying what it takes, and how far off it is, and none of those is a
-    /// column of figures. The ones still to come carry a bar, because "34 000 of
-    /// 50 000" says more than either number on its own.
+    /// A list rather than a grid: what matters about an award is its name, the one line
+    /// saying what it takes, and how far off it is, and none of those is a column of
+    /// figures. The ones still to come carry a bar, because "34 of 50" says more than
+    /// either number on its own.
     /// </summary>
     private Panel BuildAwardsPage() {
         _awardsPage.Dock = DockStyle.Fill;
         _awardsPage.BackColor = Canvas;
         _awardsPage.Padding = new Padding(16, 12, 16, 16);
-        _awardsPage.AutoScroll = true;
+
+        _awardsList.Dock = DockStyle.Fill;
+        _awardsList.BackColor = Canvas;
+        _awardsList.AutoScroll = true;
+
+        _awardsHead.Dock = DockStyle.Top;
+        _awardsHead.Height = 92;
+        _awardsHead.BackColor = Surface;
+        _awardsHead.Padding = new Padding(18, 14, 18, 14);
+
+        _awardsPage.Controls.Add(_awardsList);
+        _awardsPage.Controls.Add(new Panel { Dock = DockStyle.Top, Height = 12, BackColor = Canvas });
+        _awardsPage.Controls.Add(_awardsHead);
         return _awardsPage;
     }
 
     /// <summary>
-    /// Works out where every award stands and writes down the ones newly reached.
+    /// Works out where every award stands and writes down what has been earned.
     ///
-    /// Run when a delivery has just finished, anything newly reached is said in the
-    /// strip along the foot: it can only have been that drive, or the sitting that
-    /// drive belongs to, that reached it. Run for any other reason it is a catching-up
-    /// pass over the whole history and stays quiet, since a first run would otherwise
-    /// announce fifteen awards at once for driving that happened weeks ago.
+    /// Run when a delivery has just finished, anything newly earned is said in the strip
+    /// along the foot: it can only have been that drive that earned it. Run for any
+    /// other reason it is a catching-up pass over the whole history and stays quiet,
+    /// since a first run would otherwise announce forty awards at once for driving that
+    /// happened weeks ago.
     /// </summary>
     private void ReloadAwards(bool announce = false) {
-        var sittings = Tracking.Sessions.List(_store, _settings.SessionGapMinutes)
-            .Select(s => new Tracking.AwardSitting {
-                EndedAtMs = s.ToMs, Deliveries = s.Zasielky, DistanceKm = s.DistanceKm,
-            }).ToList();
+        var (standings, profile) = Tracking.Awards.Measure(_store.AwardDeliveries());
+        var stored = _store.EarnedAwards();
 
-        _awards = Tracking.Awards.Measure(_store.AwardDeliveries(), sittings);
-        var reached = _store.ReachedAwards();
+        foreach (var s in standings) {
+            stored.TryGetValue(s.Award.Id, out var was);
+            var newly = s.TimesEarned - was.Times;
 
-        foreach (var s in _awards) {
-            if (reached.TryGetValue(s.Award.Id, out var was)) {
-                // What was written down stands, even if the rule behind it changes
-                // later: an award is a record of something that happened.
-                s.Unlocked = true;
-                s.At = was.At;
+            // Never fewer than what was written down. If a rule is rewritten later and
+            // measures less, the record stands: this project does not take back what a
+            // driver has already done.
+            if (was.Times > s.TimesEarned) {
+                s.TimesEarned = was.Times;
+                s.FirstAt ??= was.First;
+                s.LastAt ??= was.Last;
                 s.DeliveryId ??= was.DeliveryId;
-                continue;
             }
-            if (!s.Unlocked) continue;
+            if (s.TimesEarned == 0) continue;
 
-            _store.ReachAward(s.Award.Id, s.At ?? DateTime.Now, s.DeliveryId);
-            if (announce) Happened($"{Strings.T("award.reached")}   {AwardName(s.Award)}");
+            if (was.Times > 0 && was.First < s.FirstAt) s.FirstAt = was.First;
+            _store.EarnAward(s.Award.Id, s.TimesEarned, s.FirstAt ?? DateTime.Now,
+                             s.LastAt ?? DateTime.Now, s.DeliveryId);
+            if (announce && newly > 0) {
+                var times = s.TimesEarned > 1 ? $"  {s.TimesEarned}×" : "";
+                Happened($"{Strings.T("award.earned")}   {s.Award.Name}{times}   ·   +{s.Award.Xp} XP");
+            }
         }
 
+        _awards = standings;
+        _profile = profile;
         DrawAwards();
     }
 
-    /// <summary>A milestone or a collection is named for what it takes, with the
-    /// figure after it rather than inside it: "Deliveries · 100" needs no agreement
-    /// with the number in any of the five languages, and "100 deliveries" needs a
-    /// different ending in three of them.</summary>
-    private string AwardName(Tracking.Award a) {
-        var family = Strings.T("award." + a.Family);
-        var game = a.Game.Length > 0 ? $" ({GameName(a.Game)})" : "";
-        if (a.Kind == Tracking.AwardKind.Feat) return family + game;
-        return $"{family}{game}  ·  {AwardFigure(a, a.Target)}";
-    }
-
-    private string AwardFigure(Tracking.Award a, double value) {
-        var u = Units.For(_settings.Units, a.Game.Length > 0 ? a.Game : null);
-        return a.Unit switch {
-            "km" => u.FormatDistance(value, "0"),
-            "money" => u.FormatMoney(value),
-            "hours" => Units.Duration(value * 60),
-            _ => $"{value:0}",
-        };
-    }
-
+    /// <summary>Where the driver stands: the level, what it took to get there, and how
+    /// much of the set has been found.</summary>
     private void DrawAwards() {
-        _awardsPage.SuspendLayout();
-        _awardsPage.Controls.Clear();
+        _awardsHead.Controls.Clear();
 
-        // Reached first, since what has been done is what a driver comes here to see,
-        // and the rest in the order they were defined: totals, then feats, then the
-        // collections.
-        var rows = _awards.OrderByDescending(s => s.Unlocked).ThenBy(s => s.Award.Kind)
-            .Select(AwardRow).ToList();
+        var toGo = Math.Max(1, _profile.LevelTo - _profile.LevelFrom);
+        var into = Math.Min(1, Math.Max(0, (_profile.Xp - _profile.LevelFrom) / (double)toGo));
+
+        var level = new Label {
+            Dock = DockStyle.Left, Width = 132, ForeColor = Accent, TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Segoe UI", 15F, FontStyle.Bold),
+            Text = $"{Strings.T("award.level")} {_profile.Level}",
+        };
+
+        var right = new Panel { Dock = DockStyle.Fill, BackColor = Surface };
+        var counts = new Label {
+            Dock = DockStyle.Top, Height = 20, ForeColor = Ink, Font = new Font("Segoe UI", 9.5F),
+            Text = $"{_profile.Xp:N0} XP   ·   {Strings.T("award.unique")} {_profile.Unique} / {_profile.Possible}"
+                 + $"   ·   {Strings.T("award.total")} {_profile.Earned}×",
+        };
+        var toNext = new Label {
+            Dock = DockStyle.Bottom, Height = 18, ForeColor = Muted, Font = new Font("Segoe UI", 8.5F),
+            Text = $"{_profile.Xp - _profile.LevelFrom:N0} / {toGo:N0} XP   ·   "
+                 + $"{Strings.T("award.toLevel")} {_profile.Level + 1}",
+        };
+        var track = new Panel { Dock = DockStyle.Fill, BackColor = Surface, Padding = new Padding(0, 8, 0, 8) };
+        var bar = new Panel { Dock = DockStyle.Fill, BackColor = Raised };
+        var fill = new Panel { Dock = DockStyle.Left, BackColor = Accent, Width = 0 };
+        bar.Controls.Add(fill);
+        bar.Resize += (_, _) => fill.Width = (int)(bar.ClientSize.Width * into);
+        track.Controls.Add(bar);
+
+        right.Controls.Add(track);
+        right.Controls.Add(toNext);
+        right.Controls.Add(counts);
+        _awardsHead.Controls.Add(right);
+        _awardsHead.Controls.Add(level);
+
+        DrawAwardList();
+    }
+
+    private void DrawAwardList() {
+        _awardsList.SuspendLayout();
+        _awardsList.Controls.Clear();
+
+        // Earned first inside each shelf, since what has been done is what a driver
+        // comes here to look at, and the shelves in the order they were defined.
+        var rows = new List<Control>();
+        foreach (var shelf in _awards.GroupBy(s => s.Award.Group).OrderBy(g => g.Key)) {
+            rows.Add(AwardShelf(shelf.Key, shelf.Count(s => s.Earned), shelf.Count()));
+            rows.AddRange(shelf.OrderByDescending(s => s.Earned).Select(AwardRow));
+        }
 
         // Docked children stack in reverse, so the list goes in backwards.
-        for (var i = rows.Count - 1; i >= 0; i--) _awardsPage.Controls.Add(rows[i]);
-        _awardsPage.ResumeLayout();
-        UseDarkScrollbars(_awardsPage);
+        for (var i = rows.Count - 1; i >= 0; i--) _awardsList.Controls.Add(rows[i]);
+        _awardsList.ResumeLayout();
+        UseDarkScrollbars(_awardsList);
+    }
+
+    private Control AwardShelf(Tracking.AwardGroup group, int earned, int all) {
+        var head = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = Canvas };
+        head.Controls.Add(new Label {
+            Dock = DockStyle.Fill, ForeColor = Muted, TextAlign = ContentAlignment.BottomLeft,
+            Font = new Font("Segoe UI", 9F, FontStyle.Bold),
+            Text = $"{Strings.T("award.group." + group.ToString().ToLowerInvariant())}   {earned} / {all}",
+        });
+        return head;
     }
 
     private Control AwardRow(Tracking.AwardStanding s) {
+        // A secret is not named until it is found, or there would be nothing to find.
+        var hidden = s.Award.Secret && !s.Earned;
+
         var row = new Panel {
-            Dock = DockStyle.Top, Height = 60, BackColor = Surface,
-            Padding = new Padding(16, 8, 16, 8), Margin = new Padding(0),
+            Dock = DockStyle.Top, Height = 62, BackColor = Surface,
+            Padding = new Padding(16, 9, 16, 9), Margin = new Padding(0),
         };
 
+        var title = new Panel { Dock = DockStyle.Top, Height = 22, BackColor = Surface };
         var name = new Label {
-            Dock = DockStyle.Top, Height = 22, Text = AwardName(s.Award),
-            ForeColor = s.Unlocked ? Ink : Muted, AutoEllipsis = true,
-            Font = new Font("Segoe UI", 10F, s.Unlocked ? FontStyle.Bold : FontStyle.Regular),
+            Dock = DockStyle.Left, AutoSize = true,
+            Text = hidden ? "? ? ?" : s.Award.Name,
+            ForeColor = s.Earned ? Ink : Muted,
+            Font = new Font("Segoe UI", 10F, s.Earned ? FontStyle.Bold : FontStyle.Regular),
         };
+        var worth = new Label {
+            Dock = DockStyle.Right, AutoSize = true, ForeColor = s.Earned ? Accent : Muted,
+            Font = new Font("Segoe UI", 9F, FontStyle.Bold),
+            Text = s.TimesEarned > 1 ? $"{s.TotalXp:N0} XP" : $"{s.Award.Xp:N0} XP",
+        };
+        title.Controls.Add(worth);
+        // How many times over, which is the whole point of a repeatable one. Never
+        // shown at one: the first time is just the award.
+        if (s.TimesEarned > 1) {
+            title.Controls.Add(new Label {
+                Dock = DockStyle.Left, AutoSize = true, ForeColor = Accent,
+                Font = new Font("Segoe UI", 10F, FontStyle.Bold),
+                Padding = new Padding(10, 0, 0, 0), Text = $"{s.TimesEarned}×",
+            });
+        }
+        title.Controls.Add(name);
 
         var under = new Label {
             Dock = DockStyle.Top, Height = 18, ForeColor = Muted, AutoEllipsis = true,
             Font = new Font("Segoe UI", 8.5F),
-            Text = s.Unlocked
-                ? $"{Strings.T("award." + s.Award.Family + ".why")}   ·   {s.At:dd.MM.yyyy}"
-                : Strings.T("award." + s.Award.Family + ".why"),
+            Text = hidden ? Strings.T("award.hidden") : Strings.T("award." + s.Award.Id),
         };
+        if (!hidden && s.Earned) under.Text += $"   ·   {s.LastAt:dd.MM.yyyy}";
 
-        // How far off it is, for the ones still to come. A feat has no halfway.
-        if (!s.Unlocked && s.Award.Kind != Tracking.AwardKind.Feat && s.Award.Target > 0) {
-            var share = Math.Min(1, s.Progress / s.Award.Target);
+        // How far off it is, for the ones still to come. Nothing is given away about a
+        // secret, not even how close it is.
+        if (!s.Earned && !hidden && s.Award.Threshold > 1) {
+            var share = Math.Min(1, s.Progress / s.Award.Threshold);
             var track = new Panel { Dock = DockStyle.Top, Height = 4, BackColor = Raised, Margin = new Padding(0) };
             var fill = new Panel { Dock = DockStyle.Left, BackColor = Accent, Width = 0 };
             track.Controls.Add(fill);
             track.Resize += (_, _) => fill.Width = (int)(track.ClientSize.Width * share);
             row.Controls.Add(new Panel { Dock = DockStyle.Top, Height = 4, BackColor = Surface });
             row.Controls.Add(track);
-            under.Text = $"{AwardFigure(s.Award, s.Progress)} / {AwardFigure(s.Award, s.Award.Target)}"
-                       + $"   ·   {Strings.T("award." + s.Award.Family + ".why")}";
+            under.Text = $"{AwardFigure(s.Award, s.Progress)} / {AwardFigure(s.Award, s.Award.Threshold)}"
+                       + $"   ·   {Strings.T("award." + s.Award.Id)}";
         }
 
         row.Controls.Add(under);
-        row.Controls.Add(name);
+        row.Controls.Add(title);
         row.Controls.Add(new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = Line });
 
         // The mark down the left: filled for what has been done, hollow for what has
@@ -396,7 +470,7 @@ public partial class MainForm : Form {
         mark.Paint += (_, e) => {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             var box = new RectangleF(2, mark.Height / 2f - 6, 12, 12);
-            if (s.Unlocked) {
+            if (s.Earned) {
                 using var full = new SolidBrush(Accent);
                 e.Graphics.FillEllipse(full, box);
             } else {
@@ -407,6 +481,16 @@ public partial class MainForm : Form {
         row.Controls.Add(mark);
         return row;
     }
+
+    /// <summary>A threshold written the way the driver reads it. Distance is the one
+    /// that matters: Europe counts in kilometres and America in miles, and neither is
+    /// ever turned into the other.</summary>
+    private string AwardFigure(Tracking.Award a, double value) => a.Unit switch {
+        "km" => $"{value:N0} km",
+        "miles" => $"{value:N0} mi",
+        "money" => Units.For(_settings.Units, a.Game.Length > 0 ? a.Game : null).FormatMoney(value),
+        _ => $"{value:N0}",
+    };
 
     // ---------- one truck against another ----------
 

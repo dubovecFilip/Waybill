@@ -405,12 +405,13 @@ driven in it, where a sitting is one run of the app and runs close together are
 the same sitting. One truck against another is built, as a page of its own: a row per tractor over
 the whole history, since a week's window hides the difference between a truck
 that has pulled twenty-six loads and one that has pulled one. Achievements are
-built, as a page of their own: forty of them in three kinds, a total that only
-climbs, a single drive that went a particular way, and how much of the map, the
-market and the garage has been seen. They are worked out from the deliveries
-Waybill watched itself, since an imported row carries a distance and a payout and
-nothing else, and they are backfilled quietly, so the history that already exists
-counts without announcing fifteen awards at once.
+built, as a page of their own: seventy-two of them on four shelves, worth
+Waybill's own experience and a level to show for it. Some repeat, and then doing
+the thing again counts again. Distance is kept apart by game and never converted,
+so Europe counts in kilometres and America in miles. They are worked out from the
+deliveries Waybill watched itself, since an imported row carries a distance and a
+payout and nothing else, and they are backfilled quietly, so the history that
+already exists counts without announcing forty awards at once.
 
 **Phase 3, mostly.** The map is drawn: a delivery's own route with its events
 marked on it, and a page showing every drive of one game at once, where clicking a
