@@ -29,6 +29,11 @@ public partial class MainForm : Form {
     private static readonly Color Muted = Color.FromArgb(138, 148, 163);
     // Amber rather than blue: it is the colour of a truck's indicators and warning
     // boards, and it stays legible on a dark ground where blue goes muddy.
+    /// <summary>What a cell says when there is nothing to say. A dash rather than an
+    /// empty cell: a column of figures with holes in it reads as a column that failed
+    /// to load, and a dash reads as an answer.</summary>
+    private const string Nothing = "\u2014";
+
     private static readonly Color Accent = Color.FromArgb(232, 168, 74);
     private static readonly Color AccentSoft = Color.FromArgb(52, 45, 33);
 
@@ -97,6 +102,7 @@ public partial class MainForm : Form {
         MinimumSize = new Size(900, 560);
         Font = new Font("Segoe UI", 9F);
         StartPosition = FormStartPosition.CenterScreen;
+        DoubleBuffered = true;
 
         // The window icon comes from the same .ico the exe is built with, so the
         // taskbar, alt-tab and the title bar all match.
@@ -150,7 +156,7 @@ public partial class MainForm : Form {
     /// creation time, so rebuilding is far less error prone than hunting down each
     /// piece of text to reassign.
     /// </summary>
-    private void BuildLayout() {
+    private void BuildLayout() => Quiet(this, () => {
         Controls.Clear();
         BackColor = Canvas;
 
@@ -165,6 +171,10 @@ public partial class MainForm : Form {
         Controls.Add(menu);
         MainMenuStrip = menu;
 
+        // Every panel, table and grid in the window paints into a buffer from here
+        // on, which is what keeps a redraw from showing its working.
+        SmoothPainting(this);
+
         ReloadHistory();
         ReloadStats();
         // The card is drawn once when a delivery is opened rather than by ShowPage,
@@ -173,13 +183,79 @@ public partial class MainForm : Form {
         if (_page == "detail" && _detailId is { } open) ShowDetail(open);
         ShowPage(_page);
         UseDarkScrollbars(this);
-    }
+    });
 
     // ---------- sidebar ----------
 
     /// <summary>Deliveries and statistics used to be tabs. As a sidebar they read as
     /// two places in the app rather than two folders inside one, and the labels get
     /// room to be words instead of cramped tab strips.</summary>
+    // ---------- redrawing without showing the working ----------
+
+    private const int WmSetRedraw = 0x000B;
+    private const int RdwInvalidate = 0x0001;
+    private const int RdwErase = 0x0004;
+    private const int RdwFrame = 0x0400;
+    private const int RdwAllChildren = 0x0080;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hwnd, int message, IntPtr wparam, IntPtr lparam);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool RedrawWindow(IntPtr hwnd, IntPtr rect, IntPtr region, int flags);
+
+    /// <summary>
+    /// Rebuilds the contents of a panel without the rebuilding being visible.
+    ///
+    /// Half of this window is panels that are emptied and filled again: the strip of
+    /// what just happened, the awards, the figures, a delivery's card. Emptied, a
+    /// panel paints itself bare, and each control added afterwards paints itself as it
+    /// arrives, so a rebuild that takes twenty milliseconds is twenty milliseconds of
+    /// the page flashing and half drawn rows appearing in it.
+    ///
+    /// Painting is switched off at the window itself for the length of the rebuild and
+    /// switched back on with one redraw of the lot, so what the driver sees is the old
+    /// contents and then the new ones.
+    /// </summary>
+    private static void Quiet(Control host, Action rebuild) {
+        if (!host.IsHandleCreated) {
+            host.SuspendLayout();
+            rebuild();
+            host.ResumeLayout(true);
+            return;
+        }
+        SendMessage(host.Handle, WmSetRedraw, IntPtr.Zero, IntPtr.Zero);
+        try {
+            host.SuspendLayout();
+            rebuild();
+            host.ResumeLayout(true);
+        } finally {
+            SendMessage(host.Handle, WmSetRedraw, new IntPtr(1), IntPtr.Zero);
+            RedrawWindow(host.Handle, IntPtr.Zero, IntPtr.Zero,
+                         RdwInvalidate | RdwErase | RdwFrame | RdwAllChildren);
+        }
+    }
+
+    /// <summary>
+    /// Turns on double buffering for a control and everything inside it.
+    ///
+    /// A plain panel, a table layout and a grid all paint straight to the screen,
+    /// which is what leaves the torn edges and the flash of the background between a
+    /// panel being cleared and its ground being painted. The property that fixes it is
+    /// protected on every one of them, so it is set the only way from outside.
+    /// </summary>
+    private static void SmoothPainting(Control root) {
+        var flag = typeof(Control).GetProperty("DoubleBuffered",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        void Walk(Control c) {
+            if (c is Panel or TableLayoutPanel or DataGridView or FlowLayoutPanel) {
+                try { flag?.SetValue(c, true, null); } catch { /* not worth failing over */ }
+            }
+            foreach (Control child in c.Controls) Walk(child);
+        }
+        Walk(root);
+    }
+
     // ---------- what just happened ----------
 
     /// <summary>What kind of thing a line in the strip is, which is the mark beside
@@ -250,8 +326,7 @@ public partial class MainForm : Form {
         DrawFeed();
     }
 
-    private void DrawFeed() {
-        _feed.SuspendLayout();
+    private void DrawFeed() => Quiet(_feed, () => {
         _feed.Controls.Clear();
 
         // Newest at the top, so a new line always arrives in the same place and the
@@ -259,8 +334,7 @@ public partial class MainForm : Form {
         foreach (var line in _feedLines) _feed.Controls.Add(FeedLine(line));
 
         _feed.Height = _feedLines.Count == 0 ? 0 : _feedLines.Count * FeedLineHeight + 14;
-        _feed.ResumeLayout();
-    }
+    });
 
     private Control FeedLine((DateTime At, Noticed Kind, string Text, string Detail) line) {
         var row = new Panel {
@@ -419,7 +493,7 @@ public partial class MainForm : Form {
 
     /// <summary>Where the driver stands: the level, what it took to get there, and how
     /// much of the set has been found.</summary>
-    private void DrawAwards() {
+    private void DrawAwards() => Quiet(_awardsPage, () => {
         _awardsHead.Controls.Clear();
 
         var toGo = Math.Max(1, _profile.LevelTo - _profile.LevelFrom);
@@ -456,10 +530,9 @@ public partial class MainForm : Form {
         _awardsHead.Controls.Add(level);
 
         DrawAwardList();
-    }
+    });
 
     private void DrawAwardList() {
-        _awardsList.SuspendLayout();
         _awardsList.Controls.Clear();
 
         // Earned first inside each shelf, since what has been done is what a driver
@@ -472,8 +545,8 @@ public partial class MainForm : Form {
 
         // Docked children stack in reverse, so the list goes in backwards.
         for (var i = rows.Count - 1; i >= 0; i--) _awardsList.Controls.Add(rows[i]);
-        _awardsList.ResumeLayout();
         UseDarkScrollbars(_awardsList);
+        SmoothPainting(_awardsList);
     }
 
     private Control AwardShelf(Tracking.AwardGroup group, int earned, int all) {
@@ -615,7 +688,7 @@ public partial class MainForm : Form {
             // kilowatt hours and a tank with litres, and a column that converted one
             // into the other would be inventing a fuel neither of them uses.
             t.Palivo = t.Elektricky ? Units.FormatEnergy(t.PalivoRaw) : u.FormatVolume(t.PalivoRaw);
-            t.Priemer = t.SpeedKmh > 0 ? u.FormatSpeed(t.SpeedKmh) : "";
+            t.Priemer = t.SpeedKmh > 0 ? u.FormatSpeed(t.SpeedKmh) : Nothing;
             t.Pokuty = u.FormatMoney(t.PokutyRaw);
             t.PokutyRaw = u.Money(t.PokutyRaw);
             // Per delivery, not in total: what the truck takes on a run, rather than
@@ -645,6 +718,26 @@ public partial class MainForm : Form {
     /// sentence under the pointer, on the cells as well as on the heading, since
     /// somebody who wonders about a figure points at the figure.
     /// </summary>
+    /// <summary>
+    /// Hands one column whatever width is left over.
+    ///
+    /// Every column keeps the width it was given, and none of them redistributes when
+    /// the window is resized, which is the whole point of setting them by hand. What
+    /// was left over was a band of empty panel down the right of every table, which
+    /// read as a table that had failed to finish.
+    ///
+    /// The one named here takes it. Always a column of words rather than the last one
+    /// along, since the slack is only worth having where something is being cut short:
+    /// three hundred pixels handed to "Delivered" is the same empty band moved inside
+    /// the table. It never shrinks below the width it was given, so a narrow window
+    /// still scrolls sideways rather than squeezing.
+    /// </summary>
+    private static void FillToEdge(DataGridView grid, string column) {
+        if (grid.Columns[column] is not { Visible: true } wide) return;
+        wide.MinimumWidth = wide.Width;
+        wide.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+    }
+
     private static void Explain(DataGridView grid, string column, string key) {
         if (grid.Columns[column] is not { } col) return;
         col.ToolTipText = Strings.T(key);
@@ -681,9 +774,11 @@ public partial class MainForm : Form {
         for (var i = 0; i < order.Length; i++) {
             if (_truckGrid.Columns[order[i]] is not { } col) continue;
             col.DisplayIndex = i;
+            col.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
             col.Width = widths[i];
             if (i > 0) col.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
         }
+        FillToEdge(_truckGrid, nameof(TruckRow.Kamion));
         Explain(_truckGrid, nameof(TruckRow.Poskodenie), "why.truckDamage");
         Explain(_truckGrid, nameof(TruckRow.Palivo), "why.truckFuel");
         Explain(_truckGrid, nameof(TruckRow.Priemer), "why.speed");
@@ -763,15 +858,15 @@ public partial class MainForm : Form {
             // and no game to read them in either: "0 km" there is a figure about a
             // game that was never started, and a currency picked out of the air.
             var drove = s.DistanceKm > 0.05 || s.FreeroamKm > 0.05;
-            s.Vzdialenost = drove ? u.FormatDistance(s.DistanceKm) : "";
-            s.Odmena = drove ? u.FormatMoney(s.Zarobok) : "";
+            s.Vzdialenost = drove ? u.FormatDistance(s.DistanceKm) : Nothing;
+            s.Odmena = drove ? u.FormatMoney(s.Zarobok) : Nothing;
             s.Zarobok = u.Money(s.Zarobok);
             // Against the hours the game counted, not the hours the chair was warm:
             // dividing by real time reports the time compression as speed.
             var hours = s.GameMinutes / 60.0;
             s.SpeedKmh = hours > 0.01 ? s.DistanceKm / hours : 0;
-            s.Priemer = s.SpeedKmh > 0 ? u.FormatSpeed(s.SpeedKmh) : "";
-            s.Oddych = s.RestMinutes > 0.5 ? Units.Duration(s.RestMinutes) : "";
+            s.Priemer = s.SpeedKmh > 0 ? u.FormatSpeed(s.SpeedKmh) : Nothing;
+            s.Oddych = s.RestMinutes > 0.5 ? Units.Duration(s.RestMinutes) : Nothing;
         }
 
         // Every column written as words sorts on the figure behind it. Clicking
@@ -824,6 +919,7 @@ public partial class MainForm : Form {
         for (var i = 0; i < order.Length; i++) {
             if (_sessionGrid.Columns[order[i]] is not { } col) continue;
             col.DisplayIndex = i;
+            col.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
             col.Width = widths[i];
         }
         foreach (var numeric in new[] {
@@ -832,6 +928,8 @@ public partial class MainForm : Form {
         }) {
             if (_sessionGrid.Columns[numeric] is { } c) c.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
         }
+        FillToEdge(_sessionGrid, nameof(SessionRow.Od));
+
         // The two that mean something particular on this page, and the three that
         // mean what they do everywhere else.
         Explain(_sessionGrid, nameof(SessionRow.Zasielky), "why.sessDeliveries");
@@ -856,7 +954,10 @@ public partial class MainForm : Form {
     /// <summary>What was driven in the sitting that is selected, beside the list of
     /// them. The deliveries are already loaded for the history page, so this is the
     /// same rows read a second way rather than another trip to the database.</summary>
-    private void OnSessionPicked(object? sender, EventArgs e) {
+    private void OnSessionPicked(object? sender, EventArgs e) =>
+        Quiet(_sessionSide, FillSessionSide);
+
+    private void FillSessionSide() {
         _sessionSide.Controls.Clear();
         if (_sessionGrid.CurrentRow?.DataBoundItem is not SessionRow picked) return;
 
@@ -903,6 +1004,7 @@ public partial class MainForm : Form {
         for (var i = lines.Count - 1; i >= 0; i--) _sessionSide.Controls.Add(lines[i]);
         _sessionSide.Controls.Add(CardHeading(Strings.T("sess.inThisOne")));
         UseDarkScrollbars(_sessionSide);
+        SmoothPainting(_sessionSide);
     }
 
     private Panel BuildSidebar() {
@@ -2137,6 +2239,10 @@ public partial class MainForm : Form {
                 [nameof(DeliveryRow.Poznamky)] = 160,
             };
             foreach (DataGridViewColumn col in _grid.Columns) {
+                // Cleared first: the last column was left filling the leftover width by
+                // the previous binding, and a width cannot be set on a column while it
+                // is doing that.
+                col.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
                 if (weights.TryGetValue(col.DataPropertyName, out var w)) col.Width = (int)w;
                 else col.Width = 90;
             }
@@ -2175,6 +2281,7 @@ public partial class MainForm : Form {
             foreach (var place in new[] { nameof(DeliveryRow.Odkial), nameof(DeliveryRow.Kam) }) {
                 if (_grid.Columns[place] is { } c) c.Width = 132;
             }
+            FillToEdge(_grid, nameof(DeliveryRow.Naklad));
             SetGutterTips();
         }
     }
@@ -2321,19 +2428,25 @@ public partial class MainForm : Form {
         // the next heading out of its cell and shifted every tile below it along by
         // one. A section now owns its own width and can hold as many as it likes.
         _statsGrid.ColumnCount = 1;
-        _statsGrid.RowCount = 8;
+        // Eight for the four sections, and a ninth that exists only to take whatever
+        // height is left: without it the last row of tiles inherits the slack and ends
+        // up three times the height of the ones above it.
+        _statsGrid.RowCount = 9;
         _statsGrid.Padding = new Padding(0);
 
         _statsGrid.ColumnStyles.Clear();
         _statsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 
-        // Four sections, each a heading of its own height above a row of tiles that
-        // takes an equal quarter of what is left.
+        // Four sections, each a heading of its own height above a row of tiles as tall
+        // as the three lines inside it. Sharing the height out instead left every tile
+        // with an inch of empty floor under its figure, which on a tall window made
+        // the page look like four half filled boxes.
         _statsGrid.RowStyles.Clear();
         for (var i = 0; i < 4; i++) {
             _statsGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
-            _statsGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
+            _statsGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, TileHeight));
         }
+        _statsGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
         page.Controls.Add(_statsGrid);
         page.Controls.Add(bar);
@@ -2485,6 +2598,10 @@ public partial class MainForm : Form {
     /// <summary>One section's figures, sharing the width equally however many there
     /// are. Equal shares rather than a fixed four, so a section can grow a figure
     /// without the ones beside it being squeezed out of the page.</summary>
+    /// <summary>How tall a tile is: a caption, a figure and a note, and the padding
+    /// around them.</summary>
+    private const float TileHeight = 112F;
+
     private static Control TileRow(Control[] tiles) {
         var row = new TableLayoutPanel {
             Dock = DockStyle.Fill, BackColor = Canvas,
@@ -2517,18 +2634,19 @@ public partial class MainForm : Form {
         _detailId = id;
         var u = Units.For(_settings.Units, d.Game);
 
-        _detailPage.SuspendLayout();
-        _detailPage.Controls.Clear();
+        Quiet(_detailPage, () => {
+            _detailPage.Controls.Clear();
 
-        // Added bottom-up, since docked children stack in reverse.
-        _detailPage.Controls.Add(DetailBody(d, u));
-        _detailPage.Controls.Add(DetailHeader(d, u));
-
-        _detailPage.ResumeLayout();
+            // Added bottom-up, since docked children stack in reverse.
+            _detailPage.Controls.Add(DetailBody(d, u));
+            _detailPage.Controls.Add(DetailHeader(d, u));
+        });
         ShowPage("detail");
         // Built just now, so its scrolling parts have not been asked for the dark
-        // theme yet and would come up as bright white bars.
+        // theme yet and would come up as bright white bars, and none of them has been
+        // told to paint into a buffer either.
         UseDarkScrollbars(_detailPage);
+        SmoothPainting(_detailPage);
     }
 
     /// <summary>A city as this driver has asked to see it: with the state or the
@@ -3086,7 +3204,10 @@ public partial class MainForm : Form {
 
         Heading(Strings.T("legend.marks"));
         Mark("collision", "", Strings.T("event.collision"), Strings.T("legend.collision"));
-        Mark("fine", Strings.T("value.Speeding"), Strings.T("event.fine") + " · " + Strings.T("value.Speeding"), Strings.T("legend.speeding"));
+        // The identifier the game files the offence under, not the word it is shown
+        // as. Handing the word over is what put a banknote against "speeding fine" in
+        // every language but English.
+        Mark("fine", "Speeding", Strings.T("event.fine") + " · " + Strings.T("value.Speeding"), Strings.T("legend.speeding"));
         Mark("fine", "", Strings.T("event.fine"), Strings.T("legend.fine"));
         Mark("refuel", "", Strings.T("event.refuel"), Strings.T("legend.refuel"));
         Mark("rest", "", Strings.T("event.rest"), Strings.T("legend.rest"));
@@ -3864,7 +3985,11 @@ public partial class MainForm : Form {
         // hours would report the time-compression factor as speed (~770 km/h).
         var avg = gameHours > 0.01 ? s.TimedDistanceKm / gameHours : 0;
 
-        _statsGrid.SuspendLayout();
+        Quiet(_statsGrid, () => Fill(s, before, roam, u, gameHours, realHours, avg));
+    }
+
+    private void Fill(StatsSummary s, StatsSummary? before, (double DistanceKm, int Stretches) roam, Units u,
+                      double gameHours, double realHours, double avg) {
         _statsGrid.Controls.Clear();
 
         void Section(int row, string heading, params Control[] tiles) {
@@ -3927,8 +4052,8 @@ public partial class MainForm : Form {
                 Change(s.TotalGameMinutes, x => x.TotalGameMinutes)
                     ?? $"{realHours:0.0} {Strings.T("stats.realTime")}"),
             StatTile(Strings.T("stats.avgSpeed"), u.FormatSpeed(avg)),
-            StatTile(Strings.T("stats.style"), $"{s.Clean} / {s.Spirited}",
-                $"{Strings.T("stats.styleClean")} / {Strings.T("stats.styleSpirited")}"));
+            // No note under it: it used to repeat its own caption back, word for word.
+            StatTile(Strings.T("stats.style"), $"{s.Clean} / {s.Spirited}"));
 
         Section(4, Strings.T("stats.headingIncidents"),
             StatTile(Strings.T("stats.collisions"), s.TotalCollisions.ToString(),
@@ -3942,7 +4067,7 @@ public partial class MainForm : Form {
             StatTile(Strings.T("stats.favRoute"), s.FavoriteRoute ?? "?"),
             StatTile(Strings.T("stats.favCargo"), s.FavoriteCargo ?? "?"));
 
-        _statsGrid.ResumeLayout();
+        SmoothPainting(_statsGrid);
     }
 
     // ---------- actions ----------
