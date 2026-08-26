@@ -75,16 +75,21 @@ them, and forgives a long haul its third knock.
 
 ## Sittings at the wheel
 
-Table `session_files`, one row per recording: its name, the first and last
-timestamp in it, and how many ticks it holds. Reading a recording to its end is
-the only way to learn when it ends, so the answer is kept; a file already
-measured is never opened again, except the one still being written, which grows.
+Table `session_spans`, one row per stretch of driving inside a recording: the
+file name, the position in it, the first and last timestamp, and how many ticks.
+Reading a recording to its end is the only way to learn when it ends, so the
+answer is kept; a file already measured is never opened again, except the one
+still being written, which grows.
 
-Sittings themselves are not stored. They are the recordings grouped by the gap
-between them, `SessionGapMinutes` in the preferences, an hour by default, and
-their totals are read from the deliveries and the free roaming that started
-inside each window. Nothing about a sitting is written down, so the rule can be
-changed at any time and the whole history regroups itself.
+Stretches rather than files, because telemetry can stop in the middle of a
+recording: the app stays open and the game is closed for an hour. A recording is
+cut wherever it goes quiet for more than three minutes, which is far more than
+any stutter and far less than any real break.
+
+Sittings themselves are not stored. They are the stretches put back together
+against `SessionGapMinutes` in the preferences, an hour by default. Nothing
+about a sitting is written down, so the rule can be changed at any time and the
+whole history regroups itself without a file being read again.
 
 A delivery does not have to fit inside one sitting, so the two questions a
 sitting answers are answered separately.

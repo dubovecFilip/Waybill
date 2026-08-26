@@ -9,25 +9,42 @@ namespace Waybill.Tracking;
 /// <summary>
 /// A sitting at the wheel, rather than a delivery or a day.
 ///
-/// Waybill already writes one recording per run of the app, which is very nearly
-/// the right unit: it starts when the driver sits down and ends when they get up.
-/// Very nearly, because the app gets closed and reopened for reasons that have
-/// nothing to do with stopping, a crash, a restart, a quick look at something else,
-/// and counting each of those as a fresh sitting would cut an evening into thirds.
+/// Waybill writes one recording per run of the app, which is very nearly the right
+/// unit: it starts when the driver sits down and ends when they get up. Very nearly,
+/// because the app gets closed and reopened for reasons that have nothing to do with
+/// stopping, a crash, a restart, a quick look at something else, and counting each of
+/// those as a fresh sitting would cut an evening into thirds.
 ///
-/// So runs that follow one another closely are the same session. An hour is the
-/// default gap, and it is a preference rather than a constant: it is the one number
-/// here that somebody made up. A run that is still open has no gap after it at all,
-/// which is why leaving the app running through a long break keeps the session
-/// going: what ends a session is the driver leaving, not the driving stopping.
+/// So the rule is about the driving rather than about the app: a sitting breaks
+/// wherever the telemetry goes quiet for longer than the chosen gap, an hour by
+/// default. That covers both ways of stopping with one rule. Closing Waybill leaves a
+/// gap between two recordings; closing the game leaves a gap inside one, because the
+/// recording only advances while the game is running. Neither is special.
 ///
-/// The recordings stay one file per run. A session spanning three of them is a fact
+/// The gap is a preference rather than a constant, since it is the one number here
+/// that somebody made up. Recordings are cut into stretches at a much smaller gap
+/// when they are measured, and the stretches are put back together against the
+/// preference when the list is asked for, so changing it regroups the whole history
+/// without reading a file again.
+///
+/// The recordings stay one file per run. A sitting spanning three of them is a fact
 /// about when somebody drove, not about how the tape was cut, and forcing the two to
 /// agree would mean unpacking a finished recording to append to it.
 /// </summary>
 public static class Sessions {
-    /// <summary>How long a break between runs still counts as the same sitting.</summary>
+    /// <summary>How long the telemetry can go quiet and still be the same sitting.</summary>
     public const int DefaultGapMinutes = 60;
+
+    /// <summary>
+    /// The gap a recording is cut at when it is measured.
+    ///
+    /// Small enough that no real break hides under it and large enough that nothing
+    /// ordinary reaches it: the tracker writes a line a second while the game runs,
+    /// so three minutes of silence means the game was shut, not that something
+    /// stuttered. Cutting here rather than at the driver's own gap is what lets that
+    /// gap be changed later without reading every recording again.
+    /// </summary>
+    private const long SegmentGapMs = 3 * 60_000;
 
     /// <summary>
     /// Brings the record of what each recording covers up to date.
@@ -46,16 +63,20 @@ public static class Sessions {
             var live = name.EndsWith(SessionFiles.Extension, StringComparison.OrdinalIgnoreCase);
             if (!live && known.Contains(name)) continue;
 
-            var (first, last, ticks) = Span(path);
-            if (ticks == 0) continue;
-            store.RememberRecording(name, first, last, ticks);
+            var spans = Spans(path);
+            if (spans.Count == 0) continue;
+            store.RememberRecording(name, spans);
         }
     }
 
-    /// <summary>When a recording starts and ends, and how much is in it. A line that
-    /// will not parse is skipped rather than fatal: a recording cut off by a crash is
-    /// still worth what is readable in it.</summary>
-    private static (long First, long Last, int Ticks) Span(string path) {
+    /// <summary>
+    /// The stretches of driving inside one recording, and how much is in each.
+    ///
+    /// A line that will not parse is skipped rather than fatal: a recording cut off by
+    /// a crash is still worth whatever is readable in it.
+    /// </summary>
+    private static List<(long First, long Last, int Ticks)> Spans(string path) {
+        var spans = new List<(long, long, int)>();
         long first = 0, last = 0;
         var ticks = 0;
         try {
@@ -66,24 +87,32 @@ public static class Sessions {
                 var to = from;
                 while (to < line.Length && (char.IsDigit(line[to]) || line[to] == '-')) to++;
                 if (to == from || !long.TryParse(line[from..to], out var t)) continue;
-                if (first == 0) first = t;
+
+                if (first == 0) {
+                    first = t;
+                } else if (t - last > SegmentGapMs) {
+                    spans.Add((first, last, ticks));
+                    first = t;
+                    ticks = 0;
+                }
                 last = t;
                 ticks++;
             }
         } catch {
-            // A recording that cannot be read at all simply has no session in it.
+            // A recording that cannot be read at all simply has no sitting in it.
         }
-        return (first, last, ticks);
+        if (first != 0) spans.Add((first, last, ticks));
+        return spans;
     }
 
     /// <summary>The sittings themselves, newest first, with what was driven in each.</summary>
     public static List<SessionRow> List(DeliveryStore store, int gapMinutes = DefaultGapMinutes) {
-        var files = store.Recordings();
-        if (files.Count == 0) return new List<SessionRow>();
+        var stretches = store.Recordings();
+        if (stretches.Count == 0) return new List<SessionRow>();
 
         var gap = gapMinutes * 60_000L;
         var windows = new List<(long From, long To, int Runs)>();
-        foreach (var f in files.OrderBy(f => f.First)) {
+        foreach (var f in stretches.OrderBy(f => f.First)) {
             if (windows.Count > 0 && f.First - windows[^1].To <= gap) {
                 var last = windows[^1];
                 windows[^1] = (last.From, Math.Max(last.To, f.Last), last.Runs + 1);

@@ -252,7 +252,7 @@ public static partial class Strings {
         ["tab.sessions"] = "Sezení",
         ["sess.began"] = "Začátek",
         ["sess.lasted"] = "Trvání",
-        ["sess.runs"] = "Spuštění",
+        ["sess.runs"] = "Úseky",
         ["sess.inThisOne"] = "Odjeto v tomto sezení",
         ["sess.nothing"] = "V tomto sezení nebyla doručena žádná zakázka.",
         ["detail.legs"] = "S nákladem + pro náklad",

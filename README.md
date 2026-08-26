@@ -278,13 +278,15 @@ statistics about a week or a month; neither of those is an evening.
 
 ![Sittings at the wheel](assets/sessions.png)
 
-A sitting is one run of the app, and runs that follow one another closely are
-the same sitting. An hour is the gap, and it is a preference rather than a
-constant because it is the one number here that somebody made up: closing
-Waybill for a moment, or a crash and a restart, is not the end of an evening's
-driving. Left open, a sitting never ends however long the pause, since what ends
-one is the driver getting up rather than the driving stopping. The column
-counting the runs says how many times that happened.
+A sitting breaks wherever the telemetry goes quiet for longer than an hour, and
+that one rule covers both ways of stopping: closing Waybill leaves a gap between
+two recordings, closing the game leaves a gap inside one, since a recording only
+advances while the game is running. Neither is special, and a crash and a
+restart in the middle of an evening is neither.
+
+The hour is a preference rather than a constant, because it is the one number
+here that somebody made up. The column counting the stints says how many
+separate stretches of driving a sitting holds.
 
 A delivery does not have to fit inside one sitting, and the page does not
 pretend otherwise. What was finished in a sitting is counted there, with what it

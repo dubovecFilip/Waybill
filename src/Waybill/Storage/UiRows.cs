@@ -11,8 +11,9 @@ public class SessionRow {
     public DateTime Do { get; set; }
     public long FromMs { get; set; }
     public long ToMs { get; set; }
-    /// <summary>How many runs of the app it took. More than one means the app was
-    /// closed and opened again inside the hour, which is the same sitting.</summary>
+    /// <summary>How many separate stretches of driving it holds. More than one means
+    /// the telemetry stopped and started again inside the hour, whether that was the
+    /// app being closed and reopened or the game being.</summary>
     public int Behy { get; set; }
     public string Trvanie { get; set; } = "";
     public int Zasielky { get; set; }

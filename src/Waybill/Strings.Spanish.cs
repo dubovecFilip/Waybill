@@ -252,7 +252,7 @@ public static partial class Strings {
         ["tab.sessions"] = "Sesiones",
         ["sess.began"] = "Inicio",
         ["sess.lasted"] = "Duración",
-        ["sess.runs"] = "Arranques",
+        ["sess.runs"] = "Tramos",
         ["sess.inThisOne"] = "Conducido en esta sesión",
         ["sess.nothing"] = "En esta sesión no se entregó nada.",
         ["detail.legs"] = "Con carga + hasta la carga",

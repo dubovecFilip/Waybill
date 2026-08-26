@@ -231,14 +231,28 @@ public class DeliveryStore : IDisposable {
                 speed_kmh    REAL
             );
 
-            -- What each recording covers. Reading one to its end is the only way to
-            -- learn when it ends, so the answer is kept rather than found again every
-            -- time the sittings are listed.
-            CREATE TABLE IF NOT EXISTS session_files (
-                name      TEXT PRIMARY KEY,
+            -- The same thing was kept per file before stretches existed. It is a
+            -- cache and nothing reads it now, so it goes rather than sitting in every
+            -- database forever.
+            DROP TABLE IF EXISTS session_files;
+
+            -- What each recording covers, stretch by stretch. Reading one to its end
+            -- is the only way to learn when it ends, so the answer is kept rather than
+            -- found again every time the sittings are listed.
+            --
+            -- Stretch by stretch because telemetry can stop in the middle of a
+            -- recording: the app stays open and the game is closed for an hour. A
+            -- recording is cut wherever it goes quiet for more than a few minutes, and
+            -- the pieces are put back together against whatever gap the driver has
+            -- chosen, so changing that preference regroups the history without
+            -- reading a single file again.
+            CREATE TABLE IF NOT EXISTS session_spans (
+                name      TEXT NOT NULL,
+                seq       INTEGER NOT NULL,
                 first_ms  INTEGER,
                 last_ms   INTEGER,
-                ticks     INTEGER
+                ticks     INTEGER,
+                PRIMARY KEY (name, seq)
             );
 
             CREATE TABLE IF NOT EXISTS trip_points (
@@ -868,37 +882,53 @@ public class DeliveryStore : IDisposable {
         lock (_gate) {
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             using var cmd = _conn.CreateCommand();
-            cmd.CommandText = "SELECT name FROM session_files;";
+            cmd.CommandText = "SELECT DISTINCT name FROM session_spans;";
             using var reader = cmd.ExecuteReader();
             while (reader.Read()) names.Add(reader.GetString(0));
             return names;
         }
     }
 
-    /// <summary>What one recording covers. Replaces what was known about it, since
-    /// the recording being written right now grows every second.</summary>
-    public void RememberRecording(string name, long firstMs, long lastMs, int ticks) {
+    /// <summary>
+    /// What one recording covers, stretch by stretch.
+    ///
+    /// Replaces everything known about that recording, since the one being written
+    /// right now grows every second and gains stretches as it goes.
+    /// </summary>
+    public void RememberRecording(string name, IEnumerable<(long First, long Last, int Ticks)> spans) {
         lock (_gate) {
-            using var cmd = _conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO session_files (name, first_ms, last_ms, ticks)
-                VALUES ($name, $first, $last, $ticks)
-                ON CONFLICT(name) DO UPDATE SET first_ms = $first, last_ms = $last, ticks = $ticks;
-                """;
-            cmd.Parameters.AddWithValue("$name", name);
-            cmd.Parameters.AddWithValue("$first", firstMs);
-            cmd.Parameters.AddWithValue("$last", lastMs);
-            cmd.Parameters.AddWithValue("$ticks", ticks);
-            cmd.ExecuteNonQuery();
+            using var tx = _conn.BeginTransaction();
+            using (var clear = _conn.CreateCommand()) {
+                clear.Transaction = tx;
+                clear.CommandText = "DELETE FROM session_spans WHERE name = $name;";
+                clear.Parameters.AddWithValue("$name", name);
+                clear.ExecuteNonQuery();
+            }
+            var seq = 0;
+            foreach (var span in spans) {
+                using var cmd = _conn.CreateCommand();
+                cmd.Transaction = tx;
+                cmd.CommandText = """
+                    INSERT INTO session_spans (name, seq, first_ms, last_ms, ticks)
+                    VALUES ($name, $seq, $first, $last, $ticks);
+                    """;
+                cmd.Parameters.AddWithValue("$name", name);
+                cmd.Parameters.AddWithValue("$seq", seq++);
+                cmd.Parameters.AddWithValue("$first", span.First);
+                cmd.Parameters.AddWithValue("$last", span.Last);
+                cmd.Parameters.AddWithValue("$ticks", span.Ticks);
+                cmd.ExecuteNonQuery();
+            }
+            tx.Commit();
         }
     }
 
-    /// <summary>Every measured recording, oldest first.</summary>
+    /// <summary>Every measured stretch of every recording, oldest first.</summary>
     public List<(string Name, long First, long Last, int Ticks)> Recordings() {
         lock (_gate) {
             var all = new List<(string, long, long, int)>();
             using var cmd = _conn.CreateCommand();
-            cmd.CommandText = "SELECT name, first_ms, last_ms, ticks FROM session_files ORDER BY first_ms;";
+            cmd.CommandText = "SELECT name, first_ms, last_ms, ticks FROM session_spans ORDER BY first_ms;";
             using var reader = cmd.ExecuteReader();
             while (reader.Read()) {
                 all.Add((reader.GetString(0), reader.GetInt64(1), reader.GetInt64(2), reader.GetInt32(3)));
