@@ -29,6 +29,16 @@ public class Settings {
     /// not a secret: it only tells Discord whose icons and name to show.</summary>
     public string? DiscordAppId { get; set; }
 
+    /// <summary>
+    /// Draw the route on the page for the drive in progress.
+    ///
+    /// On by default, and worth a switch because it is the one drawing in the app
+    /// that is redrawn while something else is running: the line grows every second
+    /// the truck moves, and the game is what the machine is really busy with. Off,
+    /// the page keeps the figures and the log and costs nothing at all.
+    /// </summary>
+    public bool LiveMap { get; set; } = true;
+
     /// <summary>Name the state or the country beside a city: "Yakima, WA". Off shows
     /// the city as the game names it. Only the delivery list, the card and the sheet
     /// ask: the maps have the names in them already and a code on every one of them

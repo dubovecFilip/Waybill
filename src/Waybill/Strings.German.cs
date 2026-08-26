@@ -285,6 +285,7 @@ public static partial class Strings {
         ["sheet.notes"] = "Eigene Notiz des Fahrers",
         ["menu.signature"] = "Unterschrift...",
         ["menu.cityRegions"] = "Bundesland oder Land nennen",
+        ["menu.liveMap"] = "Karte während der Fahrt zeichnen",
         ["sign.title"] = "Deine Unterschrift",
         ["sign.hint"] = "Unterschreibe über der Linie, wie auf Papier. Sie steht am Fuß jedes gespeicherten Blattes.",
         ["sign.clear"] = "Löschen",

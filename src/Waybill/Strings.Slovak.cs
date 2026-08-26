@@ -291,6 +291,7 @@ public static partial class Strings {
         ["sheet.notes"] = "Vlastný záznam vodiča",
         ["menu.signature"] = "Podpis...",
         ["menu.cityRegions"] = "Písať štát ku mestu",
+        ["menu.liveMap"] = "Kresliť mapu počas jazdy",
         ["sign.title"] = "Tvoj podpis",
         ["sign.hint"] = "Podpíš sa nad čiaru, tak ako na papieri. Bude na spodku každého uloženého listu.",
         ["sign.clear"] = "Vymazať",

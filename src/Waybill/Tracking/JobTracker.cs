@@ -142,6 +142,11 @@ public class JobState {
     public double StartTrailerWear;
     /// <summary>How knocked about the load was when it went on. Null until it does.</summary>
     public double? StartCargoDamage;
+    /// <summary>Which way the truck was pointing when it was last seen, nought to
+    /// one counterclockwise from north. For the live map and nothing else, so it
+    /// never reaches a delivery: a facing is a fact about now.</summary>
+    public double? Heading;
+
     public double StartFuelL;
     /// <summary>Fuel added since the last pump receipt, which is what the next
     /// one is for. Reset when it is claimed.</summary>
@@ -993,6 +998,8 @@ public class JobTracker {
         }
 
         TrackTrailerChain(j, snap);
+
+        j.Heading = snap.HeadingTurns;
 
         // Fuel. An increase means a refuel, not negative consumption; the rise is
         // kept rather than ignored, because it is the only measure of how much went in.

@@ -284,6 +284,7 @@ public static partial class Strings {
         ["sheet.notes"] = "Driver's own note",
         ["menu.signature"] = "Signature...",
         ["menu.cityRegions"] = "Name the state or country",
+        ["menu.liveMap"] = "Draw the map while driving",
         ["sign.title"] = "Your signature",
         ["sign.hint"] = "Sign above the line, the way you would on paper. It goes at the foot of every sheet you save.",
         ["sign.clear"] = "Clear",

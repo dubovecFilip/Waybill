@@ -124,6 +124,19 @@ public class RouteView : Control {
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool ShowCities { get; set; } = true;
 
+    /// <summary>
+    /// Which way the truck is pointing, nought to one counterclockwise from north,
+    /// or null when nobody knows.
+    ///
+    /// Only the head of a route being drawn live has one. It is drawn as a needle
+    /// rather than left to the shape of the line, because the line says where the
+    /// truck has been and this says where it is facing, and on a dock approach or at
+    /// a standstill those are not the same answer.
+    /// </summary>
+    [System.ComponentModel.DesignerSerializationVisibility(
+        System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public double? Facing { get; set; }
+
     /// <summary>Whether the deliveries are drawn. A hidden route is also not there to
     /// be pointed at or opened: leaving it hit-testable meant the map named and
     /// offered a line that was not on the screen.</summary>
@@ -751,6 +764,7 @@ public class RouteView : Control {
         if (reached >= route.All.Count) {
             var end = ToScreen(route.Runs[^1][^1].X, route.Runs[^1][^1].Z);
             g.FillEllipse(fill, end.X - 5.5f, end.Y - 5.5f, 11, 11);
+            Needle(g, fill, end);
             return;
         }
 
@@ -762,6 +776,28 @@ public class RouteView : Control {
         using var glow = new SolidBrush(Color.FromArgb(70, Accent));
         g.FillEllipse(glow, at.X - 9, at.Y - 9, 18, 18);
         g.FillEllipse(fill, at.X - 4.5f, at.Y - 4.5f, 9, 9);
+        Needle(g, fill, at);
+    }
+
+    /// <summary>
+    /// Which way the truck is pointing, at the marker for where it is.
+    ///
+    /// Drawn on both markers, since a drive being watched live has reached the end of
+    /// its own line at every moment: the end of the line is where the truck is. The
+    /// game measures counterclockwise from north and the drawing carries whatever
+    /// turn was taken to fit the panel, so the needle is set against both at once.
+    /// North unturned is straight up the screen, which is why the y term is negative.
+    /// </summary>
+    private void Needle(Graphics g, Brush fill, PointF at) {
+        if (Facing is not { } facing) return;
+        var a = _spin - (float)(facing * Math.PI * 2);
+        var fx = MathF.Sin(a);
+        var fy = -MathF.Cos(a);
+        g.FillPolygon(fill, new[] {
+            new PointF(at.X + fx * 14, at.Y + fy * 14),
+            new PointF(at.X - fy * 5f - fx * 3, at.Y + fx * 5f - fy * 3),
+            new PointF(at.X + fy * 5f - fx * 3, at.Y - fx * 5f - fy * 3),
+        });
     }
 
     /// <summary>Colour and shape for an event, by its stored identifier. Shape as

@@ -30,7 +30,10 @@ public partial class MainForm {
 
     /// <summary>How many new points are worth a redraw. Each one re-fits the view
     /// and, on this page, works out which way to turn the drive.</summary>
-    private const int JobRouteStep = 10;
+    /// <summary>How many new readings it takes to draw the live map again. One, so
+    /// the line keeps up with the truck: the tracker records a point a second, and at
+    /// ten the map sat ten seconds behind the drive it was showing.</summary>
+    private const int JobRouteStep = 1;
 
     private Panel BuildJobPage() {
         _jobPage.Dock = DockStyle.Fill;
@@ -39,7 +42,8 @@ public partial class MainForm {
         _jobPage.Controls.Clear();
 
         // Added innermost first: the map takes what the card above it leaves.
-        _jobPage.Controls.Add(BuildJobMap());
+        if (_settings.LiveMap) _jobPage.Controls.Add(BuildJobMap());
+        else _jobMap = null;
         _jobPage.Controls.Add(new Panel { Dock = DockStyle.Top, Height = 12, BackColor = Canvas });
         _jobPage.Controls.Add(BuildJobCard());
         _jobPage.Controls.Add(new Label {
@@ -218,6 +222,17 @@ public partial class MainForm {
                 .ToList(),
         };
 
+        // A recording keeps no facing, so the demonstration takes the direction of the
+        // last two readings instead: where the truck was going, which is where it was
+        // pointing on any stretch of road that is not a dock. North is the game's
+        // negative z, and the game measures counterclockwise from it.
+        if (state.TripPoints.Count >= 2) {
+            var a = state.TripPoints[^2];
+            var b = state.TripPoints[^1];
+            var turns = Math.Atan2(-(b.X - a.X), -(b.Z - a.Z)) / (Math.PI * 2);
+            state.Heading = turns < 0 ? turns + 1 : turns;
+        }
+
         _engine.ShowDemo(job, state);
         return true;
     }
@@ -320,6 +335,7 @@ public partial class MainForm {
     private void ShowJobRoute(JobState? state, string game) {
         if (_jobMap is null) return;
 
+        _jobMap.Facing = state?.Heading;
         var points = state?.TripPoints ?? new List<TripPoint>();
         var key = state is null ? "" : state.JobUid;
         var same = key == _jobShowing;

@@ -285,6 +285,7 @@ public static partial class Strings {
         ["sheet.notes"] = "Nota del conductor",
         ["menu.signature"] = "Firma...",
         ["menu.cityRegions"] = "Indicar el estado o país",
+        ["menu.liveMap"] = "Dibujar el mapa al conducir",
         ["sign.title"] = "Tu firma",
         ["sign.hint"] = "Firma sobre la línea, como en papel. Irá al pie de cada hoja que guardes.",
         ["sign.clear"] = "Borrar",

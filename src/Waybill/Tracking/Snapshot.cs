@@ -22,6 +22,17 @@ public class Snapshot {
     public double PosY;
     public double PosZ;
 
+    /// <summary>
+    /// Which way the truck is pointing, nought to one counterclockwise from north,
+    /// exactly as the game gives it.
+    ///
+    /// Where it is going can be worked out from two positions; where it is pointing
+    /// cannot, and the two are different things when reversing onto a dock or sitting
+    /// still. Null when it is not known, which is every replayed drive: the field it
+    /// comes from is internal to the SDK and never written into a recording.
+    /// </summary>
+    public double? HeadingTurns;
+
     public double SpeedLimitKmh;
 
     /// <summary>How much faster the game clock runs than real time, as the game

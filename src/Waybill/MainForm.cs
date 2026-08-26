@@ -452,6 +452,15 @@ public partial class MainForm : Form {
         settings.DropDownItems.Add(BuildDiscordMenu());
         settings.DropDownItems.Add(MenuAction(Strings.T("menu.signature"), SignHere));
 
+        var liveMap = new ToolStripMenuItem(Strings.T("menu.liveMap")) { Checked = _settings.LiveMap };
+        liveMap.Click += (_, _) => {
+            _settings.LiveMap = !_settings.LiveMap;
+            _settings.Save();
+            liveMap.Checked = _settings.LiveMap;
+            AfterMenuCloses(BuildLayout);
+        };
+        settings.DropDownItems.Add(liveMap);
+
         var regions = new ToolStripMenuItem(Strings.T("menu.cityRegions")) { Checked = _settings.CityRegions };
         regions.Click += (_, _) => {
             _settings.CityRegions = !_settings.CityRegions;

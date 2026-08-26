@@ -104,6 +104,12 @@ public static class Adapter {
                     .ToList(),
             },
 
+            // Which way the truck is pointing, as the game gives it: nought to one
+            // counterclockwise from north. Live only. It lives on an internal field of
+            // the SDK, which is reachable from here because the SDK is compiled into
+            // this assembly, but is not written into a recording, so a replayed drive
+            // has no facing and says so by leaving this null.
+            HeadingTurns = truck?.Positioning?.TruckPosition?.Orientation?.Heading,
             PosX = pos?.X ?? 0,
             PosY = pos?.Y ?? 0,
             PosZ = pos?.Z ?? 0,
