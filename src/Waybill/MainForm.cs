@@ -180,6 +180,109 @@ public partial class MainForm : Form {
     /// <summary>Deliveries and statistics used to be tabs. As a sidebar they read as
     /// two places in the app rather than two folders inside one, and the labels get
     /// room to be words instead of cramped tab strips.</summary>
+    // ---------- one truck against another ----------
+
+    private readonly DataGridView _truckGrid = new();
+
+    /// <summary>
+    /// What each tractor has done, side by side.
+    ///
+    /// The statistics answer for a period and the card answers for one drive.
+    /// Neither answers "is the Volvo actually cheaper to run than the Peterbilt",
+    /// which is a question about the trucks rather than about the time or the job,
+    /// and needs them on lines under one another to be answered at all.
+    /// </summary>
+    private Panel BuildTrucksPage() {
+        var page = new Panel { Dock = DockStyle.Fill, BackColor = Canvas, Padding = new Padding(16, 12, 16, 16) };
+
+        _truckGrid.Dock = DockStyle.Fill;
+        _truckGrid.AllowUserToAddRows = false;
+        _truckGrid.AllowUserToDeleteRows = false;
+        _truckGrid.ReadOnly = true;
+        _truckGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        _truckGrid.MultiSelect = false;
+        _truckGrid.RowHeadersVisible = false;
+        _truckGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+        _truckGrid.ScrollBars = ScrollBars.Both;
+        StyleGrid(_truckGrid);
+        _truckGrid.DataBindingComplete -= OnTrucksBound;
+        _truckGrid.DataBindingComplete += OnTrucksBound;
+
+        page.Controls.Add(_truckGrid);
+        return page;
+    }
+
+    private void ReloadTrucks() {
+        var trucks = _store.TruckTotals();
+        foreach (var t in trucks) {
+            var u = Units.For(_settings.Units, t.Hra);
+            t.Vzdialenost = u.FormatDistance(t.DistanceKm);
+            t.Odmena = u.FormatMoney(t.Zarobok);
+            t.Zarobok = u.Money(t.Zarobok);
+            // Each row in the unit its own truck drinks: a battery is filled with
+            // kilowatt hours and a tank with litres, and a column that converted one
+            // into the other would be inventing a fuel neither of them uses.
+            t.Palivo = t.Elektricky ? Units.FormatEnergy(t.PalivoRaw) : u.FormatVolume(t.PalivoRaw);
+            t.Priemer = t.SpeedKmh > 0 ? u.FormatSpeed(t.SpeedKmh) : "";
+            t.Pokuty = u.FormatMoney(t.PokutyRaw);
+            t.PokutyRaw = u.Money(t.PokutyRaw);
+            // Added up across the deliveries, which is what the truck has taken in its
+            // life rather than what it took on the worst day of it.
+            t.Poskodenie = $"{t.DamageShare * 100:0.0} %";
+            t.Styl = $"{t.Zasielky - t.Ostro} / {t.Ostro}";
+        }
+
+        _truckGrid.DataSource = new SortableBindingList<TruckRow>(trucks.ToList(),
+            new Dictionary<string, string> {
+                [nameof(TruckRow.Vzdialenost)] = nameof(TruckRow.DistanceKm),
+                [nameof(TruckRow.Odmena)] = nameof(TruckRow.Zarobok),
+                [nameof(TruckRow.Palivo)] = nameof(TruckRow.PalivoRaw),
+                [nameof(TruckRow.Priemer)] = nameof(TruckRow.SpeedKmh),
+                [nameof(TruckRow.Pokuty)] = nameof(TruckRow.PokutyRaw),
+                [nameof(TruckRow.Poskodenie)] = nameof(TruckRow.DamageShare),
+            });
+        UseDarkScrollbars(_truckGrid);
+    }
+
+    private void OnTrucksBound(object? sender, DataGridViewBindingCompleteEventArgs e) {
+        var captions = new Dictionary<string, string> {
+            [nameof(TruckRow.Kamion)] = Strings.T("col.truck"),
+            [nameof(TruckRow.Zasielky)] = Strings.T("sess.deliveries"),
+            [nameof(TruckRow.Vzdialenost)] = Strings.T("col.distance"),
+            [nameof(TruckRow.Odmena)] = Strings.T("sess.earned"),
+            [nameof(TruckRow.Palivo)] = Strings.T("truck.fuel"),
+            [nameof(TruckRow.Priemer)] = Strings.T("sess.speed"),
+            [nameof(TruckRow.Pokuty)] = Strings.T("col.fines"),
+            [nameof(TruckRow.Kolizie)] = Strings.T("col.collisions"),
+            [nameof(TruckRow.Poskodenie)] = Strings.T("detail.damage"),
+            [nameof(TruckRow.Styl)] = Strings.T("col.style"),
+        };
+        foreach (DataGridViewColumn col in _truckGrid.Columns) {
+            if (captions.TryGetValue(col.DataPropertyName, out var caption)) col.HeaderText = caption;
+        }
+
+        var order = new[] {
+            nameof(TruckRow.Kamion), nameof(TruckRow.Zasielky), nameof(TruckRow.Vzdialenost),
+            nameof(TruckRow.Odmena), nameof(TruckRow.Palivo), nameof(TruckRow.Priemer),
+            nameof(TruckRow.Pokuty), nameof(TruckRow.Kolizie), nameof(TruckRow.Poskodenie),
+            nameof(TruckRow.Styl),
+        };
+        var widths = new[] { 168, 82, 96, 96, 104, 74, 88, 82, 82, 78 };
+        for (var i = 0; i < order.Length; i++) {
+            if (_truckGrid.Columns[order[i]] is not { } col) continue;
+            col.DisplayIndex = i;
+            col.Width = widths[i];
+            if (i > 0) col.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+        }
+        foreach (var hidden in new[] {
+            nameof(TruckRow.DistanceKm), nameof(TruckRow.Zarobok), nameof(TruckRow.PalivoRaw),
+            nameof(TruckRow.SpeedKmh), nameof(TruckRow.PokutyRaw), nameof(TruckRow.DamageShare),
+            nameof(TruckRow.Elektricky), nameof(TruckRow.Hra), nameof(TruckRow.Ostro),
+        }) {
+            if (_truckGrid.Columns[hidden] is { } col) col.Visible = false;
+        }
+    }
+
     // ---------- sittings at the wheel ----------
 
     private readonly DataGridView _sessionGrid = new();
@@ -404,6 +507,7 @@ public partial class MainForm : Form {
         bar.Controls.Add(version);
         bar.Controls.Add(NavButton("stats", Strings.T("tab.stats")));
         bar.Controls.Add(NavButton("map", Strings.T("tab.map")));
+        bar.Controls.Add(NavButton("trucks", Strings.T("tab.trucks")));
         bar.Controls.Add(NavButton("sessions", Strings.T("tab.sessions")));
         bar.Controls.Add(NavButton("deliveries", Strings.T("tab.deliveries")));
         bar.Controls.Add(NavButton("live", Strings.T("tab.live")));
@@ -489,6 +593,8 @@ public partial class MainForm : Form {
         deliveries.Tag = "deliveries";
         var sessions = BuildSessionsPage();
         sessions.Tag = "sessions";
+        var trucks = BuildTrucksPage();
+        trucks.Tag = "trucks";
         var map = BuildMapPage();
         map.Tag = "map";
         var stats = BuildStatsPage();
@@ -497,6 +603,7 @@ public partial class MainForm : Form {
         _content.Controls.Add(live);
         _content.Controls.Add(deliveries);
         _content.Controls.Add(sessions);
+        _content.Controls.Add(trucks);
         _content.Controls.Add(map);
         _content.Controls.Add(stats);
         return _content;
@@ -3224,6 +3331,7 @@ public partial class MainForm : Form {
         ApplyFilter();
         ReloadMapPage();
         ReloadSessions();
+        ReloadTrucks();
     }
 
     /// <summary>

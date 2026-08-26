@@ -250,6 +250,8 @@ public static partial class Strings {
         ["event.cargo_loaded"] = "Ladung geladen",
         ["tab.map"] = "Karte",
         ["tab.sessions"] = "Sitzungen",
+        ["tab.trucks"] = "Fahrzeuge",
+        ["truck.fuel"] = "Kraftstoff",
         ["sess.began"] = "Beginn",
         ["sess.lasted"] = "Dauer",
         ["sess.deliveries"] = "Lieferungen",

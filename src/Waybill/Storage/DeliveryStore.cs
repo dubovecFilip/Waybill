@@ -891,6 +891,63 @@ public class DeliveryStore : IDisposable {
         }
     }
 
+    /// <summary>
+    /// Every tractor that has pulled a delivery, with what it has done.
+    ///
+    /// Grouped by what the truck is rather than by which one it was: two Peterbilt
+    /// 389s in a garage are the same answer to "how does a 389 do for me", and
+    /// telemetry gives no way to tell one from the other anyway.
+    ///
+    /// Over the whole history, not a period. A truck's life is the comparison worth
+    /// having: this one has pulled twenty-six loads and that one has pulled a single
+    /// one, and a week's window would hide exactly that.
+    /// </summary>
+    public List<TruckRow> TruckTotals() {
+        lock (_gate) {
+            var rows = new List<TruckRow>();
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT truck_make || ' ' || truck_model,
+                       COUNT(*),
+                       COALESCE(SUM(actual_distance_km), 0),
+                       COALESCE(SUM(COALESCE(revenue, 0) - COALESCE(penalty, 0)), 0),
+                       COALESCE(SUM(fuel_used_l), 0),
+                       COALESCE(SUM(driving_game_min), 0),
+                       COALESCE(SUM(CASE WHEN driving_game_min > 0 THEN actual_distance_km ELSE 0 END), 0),
+                       COALESCE(SUM(fines_total), 0),
+                       COALESCE(SUM(collisions), 0),
+                       COALESCE(SUM(truck_damage_pct), 0),
+                       COALESCE(MAX(electric), 0),
+                       COALESCE(MAX(game), ''),
+                       SUM(CASE WHEN driving_style = 'spirited' THEN 1 ELSE 0 END)
+                FROM deliveries
+                WHERE truck_make IS NOT NULL AND truck_make != ''
+                GROUP BY truck_make || ' ' || truck_model
+                ORDER BY COUNT(*) DESC;
+                """;
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read()) {
+                var gameMinutes = reader.GetDouble(5);
+                var timed = reader.GetDouble(6);
+                rows.Add(new TruckRow {
+                    Kamion = reader.GetString(0),
+                    Zasielky = reader.GetInt32(1),
+                    DistanceKm = reader.GetDouble(2),
+                    Zarobok = reader.GetDouble(3),
+                    PalivoRaw = reader.GetDouble(4),
+                    SpeedKmh = gameMinutes > 0.6 ? timed / (gameMinutes / 60.0) : 0,
+                    PokutyRaw = reader.GetDouble(7),
+                    Kolizie = reader.GetInt32(8),
+                    DamageShare = reader.GetDouble(9),
+                    Elektricky = reader.GetInt32(10) != 0,
+                    Hra = reader.GetString(11),
+                    Ostro = reader.GetInt32(12),
+                });
+            }
+            return rows;
+        }
+    }
+
     /// <summary>The recordings already measured, by file name.</summary>
     public HashSet<string> KnownRecordings() {
         lock (_gate) {

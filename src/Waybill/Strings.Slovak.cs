@@ -256,6 +256,8 @@ public static partial class Strings {
         ["event.cargo_loaded"] = "Naložený náklad",
         ["tab.map"] = "Mapa",
         ["tab.sessions"] = "Sedenia",
+        ["tab.trucks"] = "Kamióny",
+        ["truck.fuel"] = "Palivo",
         ["sess.began"] = "Začiatok",
         ["sess.lasted"] = "Trvanie",
         ["sess.deliveries"] = "Zákazky",

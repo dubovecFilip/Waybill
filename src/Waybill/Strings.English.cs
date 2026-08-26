@@ -249,6 +249,8 @@ public static partial class Strings {
         ["event.cargo_loaded"] = "Cargo loaded",
         ["tab.map"] = "Map",
         ["tab.sessions"] = "Sessions",
+        ["tab.trucks"] = "Trucks",
+        ["truck.fuel"] = "Fuel",
         ["sess.began"] = "Began",
         ["sess.lasted"] = "Lasted",
         ["sess.deliveries"] = "Deliveries",

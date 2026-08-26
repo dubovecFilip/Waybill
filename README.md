@@ -272,6 +272,20 @@ take either number out of. So they are two lines, and the collision names what
 took the hit, the truck or the trailer, with the load beside it when that was
 shaken as well.
 
+## One truck against another
+
+*Trucks* puts every tractor that has pulled a delivery on a line of its own:
+what it has carried, how far, what it earned, what it drank, how fast it
+averaged, what it cost in fines, and how much damage it has taken in its life.
+
+![Every tractor, side by side](assets/trucks.png)
+
+Over the whole history rather than a period, because a truck's life is the
+comparison worth having: one of them has pulled twenty-six loads and another a
+single one, and a week's window would hide exactly that. Each row is in the unit
+its own truck drinks, so a battery reads in kilowatt hours on the same page as a
+tank reading in gallons.
+
 ## A night's driving
 
 *Sessions* is the page for the question a driver asks getting up from the desk:

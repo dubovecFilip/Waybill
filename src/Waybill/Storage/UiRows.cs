@@ -4,6 +4,32 @@ namespace Waybill.Storage;
 
 /// <summary>One row in the deliveries grid. Property names are the column headers,
 /// so they are deliberately short and in Slovak like the rest of the UI.</summary>
+/// <summary>One tractor's whole life, for holding two of them side by side.</summary>
+public class TruckRow {
+    public string Kamion { get; set; } = "";
+    public int Zasielky { get; set; }
+    public double DistanceKm { get; set; }
+    public string Vzdialenost { get; set; } = "";
+    public double Zarobok { get; set; }
+    public string Odmena { get; set; } = "";
+    /// <summary>Litres for a tank and kilowatt hours for a battery, which is why the
+    /// figure is kept raw beside the words: the words differ per row.</summary>
+    public double PalivoRaw { get; set; }
+    public string Palivo { get; set; } = "";
+    public double SpeedKmh { get; set; }
+    public string Priemer { get; set; } = "";
+    public double PokutyRaw { get; set; }
+    public string Pokuty { get; set; } = "";
+    public int Kolizie { get; set; }
+    /// <summary>Damage the tractor took across every delivery it pulled, as a share.</summary>
+    public double DamageShare { get; set; }
+    public string Poskodenie { get; set; } = "";
+    public string Styl { get; set; } = "";
+    public int Ostro { get; set; }
+    public bool Elektricky { get; set; }
+    public string Hra { get; set; } = "";
+}
+
 /// <summary>One sitting at the wheel: when it ran, and what was driven in it. See
 /// <see cref="Waybill.Tracking.Sessions"/> for what counts as one.</summary>
 public class SessionRow {
