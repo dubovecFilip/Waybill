@@ -406,9 +406,10 @@ public static class WaybillSheet {
 
         // Named where the game names it, and described from the first unit where it
         // does not. The count is only worth saying once there is more than one thing
-        // to count: "single · 1 ×" is a figure explaining itself.
+        // to count: "single · 1×" is a figure explaining itself. Written the way the
+        // window writes it, tight against the figure.
         var set = d.TrailerChainType.Length > 0 ? Label(d.TrailerChainType) : Describe(d);
-        if (d.TrailerUnits.Count > 1) set += $" · {d.TrailerUnits.Count} ×";
+        if (d.TrailerUnits.Count > 1) set += $" · {d.TrailerUnits.Count}×";
 
         pieces.Add(Break(Boxes(new[] {
             (Strings.T("sheet.unit"), d.Truck, true),
@@ -416,7 +417,7 @@ public static class WaybillSheet {
             (Strings.T("sheet.owner"), Strings.T(d.TrailerOwned ? "detail.owned" : "value.hired"), false),
             (Strings.T("detail.timeReal"), Units.Duration(d.RealDurationMs / 60000.0), false),
             (Strings.T("detail.timeGame"), Units.Duration(d.DrivingGameMin), false),
-            (Strings.T("detail.rest"), $"{d.RestStops} · {Units.Duration(d.RestMinutes)}", false),
+            (Strings.T("detail.rest"), $"{d.RestStops}× · {Units.Duration(d.RestMinutes)}", false),
         }, 3, 15f)));
 
         pieces.Add(Gap(3.5f));

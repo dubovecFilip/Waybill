@@ -134,7 +134,13 @@ public class Units {
     /// translation table entry for "h".
     /// </summary>
     public static string Duration(double gameMinutes) {
-        var minutes = Math.Abs(gameMinutes);
-        return minutes < 60 ? $"{minutes:0} min" : $"{minutes / 60:0} h";
+        var minutes = (int)Math.Round(Math.Abs(gameMinutes));
+        if (minutes < 60) return $"{minutes} min";
+        var hours = minutes / 60;
+        var rest = minutes % 60;
+        // The minutes are dropped when there are none, so a ten hour sleep reads as
+        // "10 h" rather than "10 h 00 min", and an hour and a quarter at the wheel
+        // still reads as an hour and a quarter.
+        return rest == 0 ? $"{hours} h" : $"{hours} h {rest:00} min";
     }
 }

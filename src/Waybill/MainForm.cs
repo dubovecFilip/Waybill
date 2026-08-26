@@ -239,7 +239,7 @@ public partial class MainForm : Form {
         foreach (var s in _sessions) {
             var u = Units.For(_settings.Units, s.Hra);
             s.DurationMs = s.ToMs - s.FromMs;
-            s.Trvanie = Spell(s.DurationMs);
+            s.Trvanie = Units.Duration(s.DurationMs / 60000.0);
             // A sitting with nothing delivered in it has no distance and no earnings,
             // and no game to read them in either: "0 km" there is a figure about a
             // game that was never started, and a currency picked out of the air.
@@ -269,22 +269,20 @@ public partial class MainForm : Form {
         UseDarkScrollbars(_sessionGrid);
     }
 
-    /// <summary>A stretch of the clock as somebody would say it: hours and minutes
-    /// under a day, and never "0 h" for a sitting that lasted forty minutes.</summary>
-    private static string Spell(long ms) {
-        var minutes = (int)Math.Round(ms / 60000.0);
-        return minutes < 60 ? $"{minutes} min" : $"{minutes / 60} h {minutes % 60:00} min";
-    }
-
     private void OnSessionsBound(object? sender, DataGridViewBindingCompleteEventArgs e) {
+        // A column heading of this grid, not a caption borrowed from somewhere else.
+        // The statistics tiles are drawn in capitals, so their words are stored in
+        // lower case, and read straight into a grid they came out as "deliveries"
+        // beside "Lasted". One word each where a word will do, so nothing wraps onto
+        // a second line and no heading is wider than its column.
         var captions = new Dictionary<string, string> {
             [nameof(SessionRow.Od)] = Strings.T("sess.began"),
             [nameof(SessionRow.Trvanie)] = Strings.T("sess.lasted"),
-            [nameof(SessionRow.Zasielky)] = Strings.T("stats.deliveries"),
-            [nameof(SessionRow.Vzdialenost)] = Strings.T("stats.distance"),
-            [nameof(SessionRow.Odmena)] = Strings.T("stats.revenue"),
-            [nameof(SessionRow.Priemer)] = Strings.T("stats.avgSpeed"),
-            [nameof(SessionRow.Oddych)] = Strings.T("detail.rest"),
+            [nameof(SessionRow.Zasielky)] = Strings.T("sess.deliveries"),
+            [nameof(SessionRow.Vzdialenost)] = Strings.T("col.distance"),
+            [nameof(SessionRow.Odmena)] = Strings.T("sess.earned"),
+            [nameof(SessionRow.Priemer)] = Strings.T("sess.speed"),
+            [nameof(SessionRow.Oddych)] = Strings.T("sess.rest"),
             [nameof(SessionRow.Behy)] = Strings.T("sess.runs"),
         };
         foreach (DataGridViewColumn col in _sessionGrid.Columns) {
@@ -301,7 +299,10 @@ public partial class MainForm : Form {
             nameof(SessionRow.Vzdialenost), nameof(SessionRow.Odmena), nameof(SessionRow.Priemer),
             nameof(SessionRow.Oddych), nameof(SessionRow.Behy),
         };
-        var widths = new[] { 116, 88, 76, 94, 94, 100, 74, 54 };
+        // Wide enough for the longest thing each holds, not for its heading: rest
+        // reads "10 h 05 min" on a sitting with two sleeps in it, and cut to "10 h 0"
+        // it says nothing at all.
+        var widths = new[] { 112, 80, 82, 92, 92, 74, 84, 84 };
         for (var i = 0; i < order.Length; i++) {
             if (_sessionGrid.Columns[order[i]] is not { } col) continue;
             col.DisplayIndex = i;
@@ -1161,8 +1162,8 @@ public partial class MainForm : Form {
         var dollies = d.TrailerUnits.Count(x => x.Kind == "dolly");
         var parts = new List<string>();
         if (d.TrailerChainType.Length > 0) parts.Add(Label(d.TrailerChainType));
-        parts.Add($"{trailers}x {Strings.T("value.trailer")}");
-        if (dollies > 0) parts.Add($"{dollies}x {Strings.T("value.dolly")}");
+        parts.Add($"{trailers}× {Strings.T("value.trailer")}");
+        if (dollies > 0) parts.Add($"{dollies}× {Strings.T("value.dolly")}");
         if (d.TrailerOwned) parts.Add(Strings.T("detail.owned"));
         return string.Join("  ·  ", parts);
     }
@@ -2962,14 +2963,18 @@ public partial class MainForm : Form {
             Row(Strings.T("detail.legs"),
                 $"{u.Distance(d.DistanceKm - d.DistanceToLoadKm):0.0}  +  {u.Distance(d.DistanceToLoadKm):0.0} {u.DistanceUnit}");
         }
-        Row(Strings.T("detail.timeGame"), $"{d.DrivingGameMin / 60:0.0} {Strings.T("stats.gameTime")}");
-        Row(Strings.T("detail.timeReal"), $"{d.RealDurationMs / 60000.0:0} min");
-        Row(Strings.T("detail.rest"), $"{d.RestStops}x  ·  {Units.Duration(d.RestMinutes)}");
+        // Both times on this card are read the same way, and neither repeats its own
+        // label: the rows are already called "in game" and "at the wheel". The
+        // statistics keep the hours with a decimal, since a figure covering a month
+        // has no business being said to the minute.
+        Row(Strings.T("detail.timeGame"), Units.Duration(d.DrivingGameMin));
+        Row(Strings.T("detail.timeReal"), Units.Duration(d.RealDurationMs / 60000.0));
+        Row(Strings.T("detail.rest"), $"{d.RestStops}×  ·  {Units.Duration(d.RestMinutes)}");
 
         Group(Strings.T("detail.groupMoney"));
         var paid = d.Outcome == "delivered" ? d.Revenue : -d.Penalty;
         Row(Strings.T("detail.paidOffered"), $"{u.FormatMoney(paid)}  /  {u.FormatMoney(d.OfferedIncome)}");
-        Row(Strings.T("detail.fines"), $"{u.FormatMoney(d.FinesTotal)}  ({d.FinesCount}x)");
+        Row(Strings.T("detail.fines"), $"{u.FormatMoney(d.FinesTotal)}  ({d.FinesCount}×)");
         Row(Strings.T("detail.tolls"), u.FormatMoney(d.TollsPaid));
         Row(Strings.T("detail.fuel"), u.FormatVolume(d.FuelUsedL));
         if (u.Consumption(d.AvgConsumption) is { } c) Row(Strings.T("detail.consumption"), $"{c:0.0} {u.ConsumptionUnit}");
@@ -3306,7 +3311,7 @@ public partial class MainForm : Form {
             // folded into them: it is real distance, but it earned nothing and was
             // never judged, so adding it to the delivery figure would flatter both.
             StatTile(Strings.T("stats.freeroam"), u.FormatDistance(roam.DistanceKm),
-                roam.Stretches > 0 ? $"{roam.Stretches}x" : null));
+                roam.Stretches > 0 ? $"{roam.Stretches}×" : null));
 
         Section(2, Strings.T("stats.headingDriving"),
             StatTile(Strings.T("stats.time"), $"{gameHours:0.0} {Strings.T("stats.gameTime")}",
