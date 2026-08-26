@@ -254,7 +254,8 @@ public partial class MainForm {
         // Named the way the history names them, with the state or the country after
         // the city when the driver has asked for that.
         _jobLine.Text = _settings.CityRegions
-            ? $"{Places.Say(state.Game, job.SourceCity)}  →  {Places.Say(state.Game, job.DestinationCity)}"
+            ? $"{Places.Say(state.Game, job.SourceCity, job.SourceCityId)}"
+              + $"  →  {Places.Say(state.Game, job.DestinationCity, job.DestinationCityId)}"
             : $"{job.SourceCity}  →  {job.DestinationCity}";
         _jobLine.ForeColor = Ink;
         _jobDetail.Text = $"{job.Cargo} · {u.MassTonnes(job.CargoMassKg):0.0} {u.MassUnit}"

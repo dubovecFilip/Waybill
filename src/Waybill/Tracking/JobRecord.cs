@@ -195,6 +195,10 @@ public class JobRecord {
     public double GameDurationMin;
 
     public string SourceCity = "";
+    /// <summary>What the game calls the two ends when it is talking to itself. Two
+    /// cities can share a name inside one game and never an identifier, which is the
+    /// only thing that tells the Salina in Utah from the one in Kansas.</summary>
+    public string SourceCityId = "", DestinationCityId = "";
     public string SourceCompany = "";
     public string DestinationCity = "";
     public string DestinationCompany = "";

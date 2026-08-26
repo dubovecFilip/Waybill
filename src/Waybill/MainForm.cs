@@ -1741,8 +1741,8 @@ public partial class MainForm : Form {
 
     /// <summary>A city as this driver has asked to see it: with the state or the
     /// country it is in, or as the game names it.</summary>
-    private string Where(DeliveryDetail d, string city) =>
-        _settings.CityRegions ? Places.Say(d.Game, city) : city;
+    private string Where(DeliveryDetail d, string city, string cityId) =>
+        _settings.CityRegions ? Places.Say(d.Game, city, cityId) : city;
 
     private Control DetailHeader(DeliveryDetail d, Units u) {
         var head = new Panel { Dock = DockStyle.Top, Height = 108, BackColor = Surface, Padding = new Padding(24, 16, 24, 12) };
@@ -1782,7 +1782,8 @@ public partial class MainForm : Form {
         actions.Controls.Add(timelineButton);
 
         var route = new Label {
-            Dock = DockStyle.Top, Height = 36, Text = $"{Where(d, d.SourceCity)}  →  {Where(d, d.DestinationCity)}",
+            Dock = DockStyle.Top, Height = 36,
+            Text = $"{Where(d, d.SourceCity, d.SourceCityId)}  →  {Where(d, d.DestinationCity, d.DestinationCityId)}",
             ForeColor = Ink, Font = new Font("Segoe UI", 16F, FontStyle.Bold),
         };
         var sub = new Label {
@@ -2669,7 +2670,7 @@ public partial class MainForm : Form {
     /// for room.</summary>
     private void BigMap(DeliveryDetail d, Units u) {
         using var window = new Form {
-            Text = $"{Where(d, d.SourceCity)}  →  {Where(d, d.DestinationCity)}",
+            Text = $"{Where(d, d.SourceCity, d.SourceCityId)}  →  {Where(d, d.DestinationCity, d.DestinationCityId)}",
             StartPosition = FormStartPosition.CenterScreen,
             WindowState = FormWindowState.Maximized,
             BackColor = Canvas, ForeColor = Ink, KeyPreview = true,
@@ -2946,8 +2947,8 @@ public partial class MainForm : Form {
         // it too, so "Yakima, WA" can also be searched for by its state.
         if (_settings.CityRegions) {
             foreach (var row in _rows) {
-                row.Odkial = Places.Say(row.Hra, row.Odkial);
-                row.Kam = Places.Say(row.Hra, row.Kam);
+                row.Odkial = Places.Say(row.Hra, row.Odkial, row.OdkialId);
+                row.Kam = Places.Say(row.Hra, row.Kam, row.KamId);
             }
         }
         _routes.Clear();
@@ -3011,6 +3012,9 @@ public partial class MainForm : Form {
             nameof(DeliveryRow.Hra), nameof(DeliveryRow.Tahac), nameof(DeliveryRow.Pokuty),
             nameof(DeliveryRow.Kolizie), nameof(DeliveryRow.Styl), nameof(DeliveryRow.Poznamky),
             nameof(DeliveryRow.Flags), nameof(DeliveryRow.Special), nameof(DeliveryRow.Stav),
+            // And the identifiers behind the two city names, which are how the region
+            // beside a city is looked up and not something anybody reads.
+            nameof(DeliveryRow.OdkialId), nameof(DeliveryRow.KamId),
         }) {
             if (_grid.Columns[hidden] is { } col) col.Visible = false;
         }

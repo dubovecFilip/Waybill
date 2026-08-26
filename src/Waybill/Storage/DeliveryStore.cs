@@ -75,6 +75,11 @@ public class DeliveryStore : IDisposable {
             // depending on whether it left at nothing or at seventeen. Null on every
             // row recorded before this, which is why they are nullable and not zero:
             // zero would be a claim that the set left the yard undamaged.
+            // What the game calls a city when it is talking to itself. Two cities can
+            // share a name inside one game and never an identifier, so this is what
+            // tells the Salina in Utah from the one in Kansas.
+            ("deliveries", "source_city_id", "TEXT"),
+            ("deliveries", "destination_city_id", "TEXT"),
             ("deliveries", "truck_damage_start_pct", "REAL"),
             ("deliveries", "trailer_damage_start_pct", "REAL"),
             ("deliveries", "cargo_damage_start_pct", "REAL"),
@@ -286,7 +291,8 @@ public class DeliveryStore : IDisposable {
                     started_at_ms, finished_at_ms, real_duration_ms, game_duration_min,
                     job_type, trailer_chain_type, trailer_owned, trailer_units,
                     distance_to_load_km, special_transport,
-                    truck_damage_start_pct, trailer_damage_start_pct, cargo_damage_start_pct
+                    truck_damage_start_pct, trailer_damage_start_pct, cargo_damage_start_pct,
+                    source_city_id, destination_city_id
                 ) VALUES (
                     $job_uid, $game, $game_version, $outcome, $validation_status, $validation_flags,
                     $truck_make, $truck_model, $truck_id, $trailer_name, $trailer_id,
@@ -304,7 +310,8 @@ public class DeliveryStore : IDisposable {
                     $started_at_ms, $finished_at_ms, $real_duration_ms, $game_duration_min,
                     $job_type, $trailer_chain_type, $trailer_owned, $trailer_units,
                     $distance_to_load_km, $special_transport,
-                    $truck_damage_start_pct, $trailer_damage_start_pct, $cargo_damage_start_pct
+                    $truck_damage_start_pct, $trailer_damage_start_pct, $cargo_damage_start_pct,
+                    $source_city_id, $destination_city_id
                 );
                 """;
 
@@ -351,6 +358,8 @@ public class DeliveryStore : IDisposable {
             cmd.Parameters.AddWithValue("$speeding_share", r.SpeedingShare);
             cmd.Parameters.AddWithValue("$hard_speeding_share", r.HardSpeedingShare);
             cmd.Parameters.AddWithValue("$driving_style", r.DrivingStyle);
+            cmd.Parameters.AddWithValue("$source_city_id", r.SourceCityId);
+            cmd.Parameters.AddWithValue("$destination_city_id", r.DestinationCityId);
             cmd.Parameters.AddWithValue("$truck_damage_start_pct", (object?)r.StartTruckDamage ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$trailer_damage_start_pct", (object?)r.StartTrailerDamage ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$cargo_damage_start_pct", (object?)r.StartCargoDamage ?? DBNull.Value);
@@ -562,7 +571,8 @@ public class DeliveryStore : IDisposable {
                        fines_count, collisions,
                        validation_status, COALESCE(notes, ''), COALESCE(game, ''),
                        COALESCE(outcome, ''), COALESCE(driving_style, ''),
-                       COALESCE(validation_flags, ''), COALESCE(special_transport, 0)
+                       COALESCE(validation_flags, ''), COALESCE(special_transport, 0),
+                       COALESCE(source_city_id, ''), COALESCE(destination_city_id, '')
                 FROM deliveries
                 ORDER BY started_at_ms DESC
                 LIMIT $limit;
@@ -597,6 +607,8 @@ public class DeliveryStore : IDisposable {
                     Flags = reader.GetString(15),
                     Poznamky = reader.GetString(11),
                     Special = reader.GetInt32(16) != 0,
+                    OdkialId = reader.GetString(17),
+                    KamId = reader.GetString(18),
                 });
             }
             return rows;
@@ -790,7 +802,8 @@ public class DeliveryStore : IDisposable {
                        COALESCE(trailer_chain_type, ''), COALESCE(trailer_owned, 0),
                        COALESCE(trailer_units, ''), COALESCE(distance_to_load_km, 0),
                        COALESCE(special_transport, 0),
-                       truck_damage_start_pct, trailer_damage_start_pct, cargo_damage_start_pct
+                       truck_damage_start_pct, trailer_damage_start_pct, cargo_damage_start_pct,
+                       COALESCE(source_city_id, ''), COALESCE(destination_city_id, '')
                 FROM deliveries WHERE id = $id;
                 """;
             cmd.Parameters.AddWithValue("$id", id);
@@ -833,6 +846,7 @@ public class DeliveryStore : IDisposable {
                 DistanceToLoadKm = Num(47),
                 SpecialTransport = Num(48) != 0,
                 TruckDamageStart = Opt(49), TrailerDamageStart = Opt(50), CargoDamageStart = Opt(51),
+                SourceCityId = r.GetString(52), DestinationCityId = r.GetString(53),
             };
         }
     }

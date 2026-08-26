@@ -10,6 +10,10 @@ public class DeliveryRow {
     public string Hra { get; set; } = "";
     public string Odkial { get; set; } = "";
     public string Kam { get; set; } = "";
+    /// <summary>The identifiers behind those two names. Not shown in any column and
+    /// not meant to be: they are what the region beside a city is looked up by.</summary>
+    public string OdkialId { get; set; } = "";
+    public string KamId { get; set; } = "";
     public string Naklad { get; set; } = "";
     public string Tahac { get; set; } = "";
     /// <summary>Always metric, as stored. The grid shows <see cref="Vzdialenost"/>,
@@ -42,6 +46,9 @@ public class DeliveryDetail {
     public long Id;
     public DateTime StartedAt, FinishedAt;
     public string Game = "", SourceCity = "", SourceCompany = "", DestinationCity = "", DestinationCompany = "";
+    /// <summary>What the game calls the two ends when it is talking to itself. Empty
+    /// on rows recorded before they were kept, where the name is all there is.</summary>
+    public string SourceCityId = "", DestinationCityId = "";
     public string Cargo = "", Truck = "", Trailer = "";
     public double CargoMassKg, PlannedDistanceKm, DistanceKm;
     /// <summary>The part of <see cref="DistanceKm"/> driven before the trailer was

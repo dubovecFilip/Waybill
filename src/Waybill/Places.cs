@@ -12,25 +12,50 @@ namespace Waybill;
 ///
 /// It is deliberately incomplete. A city that is not in it is shown as the game
 /// named it, with nothing added, which is what happens for every map mod ever
-/// written and for a handful of names the table refuses to guess at: American Truck
-/// Simulator has a Salina in Utah and another in Kansas, and the name on its own
-/// cannot tell them apart. A missing code says "not known"; a wrong one would say
-/// something false about a delivery, which is worse than saying nothing.
+/// written. A missing code says "not known"; a wrong one would say something false
+/// about a delivery, which is worse than saying nothing.
+///
+/// Two names can be the same inside one game and two identifiers never can, so
+/// where a name is ambiguous the identifier settles it. American Truck Simulator
+/// has a Salina in Utah and another in Kansas; the Utah one is `salina`, which is
+/// what deliveries through it report, so that one is answered by identifier and the
+/// name is left out of the table below. The identifier is also what the game calls
+/// a city in every language, so nothing here depends on the game being in English.
 /// </summary>
 public static class Places {
     /// <summary>The city with its region, when the region is known: "Yakima, WA".
     /// The city on its own otherwise.</summary>
-    public static string Say(string game, string city) =>
-        Code(game, city) is { } code ? $"{city}, {code}" : city;
+    public static string Say(string game, string city, string cityId = "") =>
+        Code(game, city, cityId) is { } code ? $"{city}, {code}" : city;
 
-    /// <summary>Just the code, for the places that lay it out themselves.</summary>
-    public static string? Code(string game, string city) {
+    /// <summary>
+    /// Just the code, for the places that lay it out themselves.
+    ///
+    /// The identifier is asked first where there is one, since it is the answer that
+    /// cannot be ambiguous. Rows recorded before identifiers were kept have only the
+    /// name, and are answered as well as a name can be answered.
+    /// </summary>
+    public static string? Code(string game, string city, string cityId = "") {
+        if (!string.IsNullOrWhiteSpace(cityId)
+            && ByIdentifier.TryGetValue($"{game}:{cityId.Trim()}", out var known)) {
+            return known;
+        }
         if (string.IsNullOrWhiteSpace(city)) return null;
         var table = game.Equals("Ats", StringComparison.OrdinalIgnoreCase) ? Ats
                   : game.Equals("Ets2", StringComparison.OrdinalIgnoreCase) ? Ets2
                   : null;
         return table != null && table.TryGetValue(city.Trim(), out var code) ? code : null;
     }
+
+    /// <summary>The cities a name cannot settle, keyed by the game and the game's own
+    /// identifier for them. Everything else is answered by name below, since knowing
+    /// an identifier means having seen it reported.</summary>
+    private static readonly Dictionary<string, string> ByIdentifier = new(StringComparer.OrdinalIgnoreCase) {
+        // Utah's, on US-50 between Richfield and Green River. Kansas has a Salina too,
+        // under an identifier of its own, and it is not in this table because nobody
+        // here has seen what the game calls it.
+        ["Ats:salina"] = "UT",
+    };
 
     // ---------- American Truck Simulator: the state ----------
 

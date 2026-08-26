@@ -500,6 +500,11 @@ public class JobTracker {
             SourceCompany = j.Job.SourceCompany,
             DestinationCity = j.Job.DestinationCity,
             DestinationCompany = j.Job.DestinationCompany,
+            // The game names a city twice, once for reading and once for itself. The
+            // identifier is the unambiguous one, so it is kept beside the name rather
+            // than dropped at the door.
+            SourceCityId = j.Job.SourceCityId,
+            DestinationCityId = j.Job.DestinationCityId,
             Cargo = j.Job.Cargo,
             CargoId = j.Job.CargoId,
             CargoMassKg = j.Job.CargoMassKg,
@@ -1161,6 +1166,11 @@ public class JobTracker {
             SourceCompany = j.Job.SourceCompany,
             DestinationCity = j.Job.DestinationCity,
             DestinationCompany = j.Job.DestinationCompany,
+            // The game names a city twice, once for reading and once for itself. The
+            // identifier is the unambiguous one, so it is kept beside the name rather
+            // than dropped at the door.
+            SourceCityId = j.Job.SourceCityId,
+            DestinationCityId = j.Job.DestinationCityId,
             Cargo = j.Job.Cargo,
             CargoId = j.Job.CargoId,
             CargoMassKg = j.Job.CargoMassKg,
