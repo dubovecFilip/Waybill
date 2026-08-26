@@ -238,7 +238,10 @@ public partial class MainForm {
     }
 
     private void RefreshJob() {
-        if (_engine is null || _jobMap is null) return;
+        // Not "and a map": the map is a drawing on this page, not the page itself.
+        // Switched off, the figures, the log and the presence all still have to keep
+        // up, and asking for a map first stopped the whole page dead.
+        if (_engine is null) return;
 
         var job = _engine.ActiveJob;
         var state = _engine.ActiveState;
