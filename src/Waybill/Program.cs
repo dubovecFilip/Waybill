@@ -107,8 +107,7 @@ if (args.Length >= 1 && args[0] == "--sessions") {
         var hours = (s.ToMs - s.FromMs) / 3600000.0;
         Console.WriteLine($"{s.Od:yyyy-MM-dd HH:mm} - {s.Do:HH:mm}  {hours,5:0.0} h  "
                         + $"{s.Zasielky,2} zasielok  {units.Distance(s.DistanceKm),8:0.0} {units.DistanceUnit}  "
-                        + $"{units.Money(s.Zarobok),8:0} {units.Currency}"
-                        + (s.Restarty > 0 ? $"  (restartov: {s.Restarty})" : ""));
+                        + $"{units.Money(s.Zarobok),8:0} {units.Currency}");
     }
     return;
 }

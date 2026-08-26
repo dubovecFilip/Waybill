@@ -916,7 +916,7 @@ public class DeliveryStore : IDisposable {
                        COALESCE(SUM(CASE WHEN driving_game_min > 0 THEN actual_distance_km ELSE 0 END), 0),
                        COALESCE(SUM(fines_total), 0),
                        COALESCE(SUM(collisions), 0),
-                       COALESCE(SUM(truck_damage_pct), 0),
+                       COALESCE(AVG(truck_damage_pct), 0),
                        COALESCE(MAX(electric), 0),
                        COALESCE(MAX(game), ''),
                        SUM(CASE WHEN driving_style = 'spirited' THEN 1 ELSE 0 END)
@@ -938,7 +938,7 @@ public class DeliveryStore : IDisposable {
                     SpeedKmh = gameMinutes > 0.6 ? timed / (gameMinutes / 60.0) : 0,
                     PokutyRaw = reader.GetDouble(7),
                     Kolizie = reader.GetInt32(8),
-                    DamageShare = reader.GetDouble(9),
+                    DamagePerJob = reader.GetDouble(9),
                     Elektricky = reader.GetInt32(10) != 0,
                     Hra = reader.GetString(11),
                     Ostro = reader.GetInt32(12),
@@ -1024,14 +1024,13 @@ public class DeliveryStore : IDisposable {
     /// delivery that spans three sittings puts its kilometres where they happened
     /// rather than all in the first.
     /// </summary>
-    public SessionRow SessionTotals(long fromMs, long toMs, int runs) {
+    public SessionRow SessionTotals(long fromMs, long toMs) {
         lock (_gate) {
             var row = new SessionRow {
                 Od = DateTimeOffset.FromUnixTimeMilliseconds(fromMs).LocalDateTime,
                 Do = DateTimeOffset.FromUnixTimeMilliseconds(toMs).LocalDateTime,
                 FromMs = fromMs,
                 ToMs = toMs,
-                Restarty = Math.Max(0, runs - 1),
             };
 
             // Finished here: the count and the pay.

@@ -21,8 +21,10 @@ public class TruckRow {
     public double PokutyRaw { get; set; }
     public string Pokuty { get; set; } = "";
     public int Kolizie { get; set; }
-    /// <summary>Damage the tractor took across every delivery it pulled, as a share.</summary>
-    public double DamageShare { get; set; }
+    /// <summary>Damage the tractor took on an average delivery, as a share. Averaged
+    /// rather than totalled: a total grows with how much a truck was driven, so it
+    /// compares the driver's history rather than the trucks.</summary>
+    public double DamagePerJob { get; set; }
     public string Poskodenie { get; set; } = "";
     public string Styl { get; set; } = "";
     public int Ostro { get; set; }
@@ -37,16 +39,6 @@ public class SessionRow {
     public DateTime Do { get; set; }
     public long FromMs { get; set; }
     public long ToMs { get; set; }
-    /// <summary>
-    /// How many times the driving stopped and started again inside this sitting.
-    ///
-    /// Counted as breaks rather than as the stretches between them, because that is
-    /// the number a person has in their head: nought means you sat down and drove,
-    /// three means something interrupted you three times. Whether it was the game
-    /// that was restarted or Waybill makes no difference to the driver and none to
-    /// this figure.
-    /// </summary>
-    public int Restarty { get; set; }
     public string Trvanie { get; set; } = "";
     public int Zasielky { get; set; }
     public double DistanceKm { get; set; }

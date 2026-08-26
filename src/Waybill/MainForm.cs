@@ -305,9 +305,9 @@ public partial class MainForm : Form {
             t.Priemer = t.SpeedKmh > 0 ? u.FormatSpeed(t.SpeedKmh) : "";
             t.Pokuty = u.FormatMoney(t.PokutyRaw);
             t.PokutyRaw = u.Money(t.PokutyRaw);
-            // Added up across the deliveries, which is what the truck has taken in its
-            // life rather than what it took on the worst day of it.
-            t.Poskodenie = $"{t.DamageShare * 100:0.0} %";
+            // Per delivery, not in total: what the truck takes on a run, rather than
+            // what has happened to it since it was bought.
+            t.Poskodenie = $"{t.DamagePerJob * 100:0.00} %";
             t.Styl = $"{t.Zasielky - t.Ostro} / {t.Ostro}";
         }
 
@@ -318,7 +318,7 @@ public partial class MainForm : Form {
                 [nameof(TruckRow.Palivo)] = nameof(TruckRow.PalivoRaw),
                 [nameof(TruckRow.Priemer)] = nameof(TruckRow.SpeedKmh),
                 [nameof(TruckRow.Pokuty)] = nameof(TruckRow.PokutyRaw),
-                [nameof(TruckRow.Poskodenie)] = nameof(TruckRow.DamageShare),
+                [nameof(TruckRow.Poskodenie)] = nameof(TruckRow.DamagePerJob),
             });
         UseDarkScrollbars(_truckGrid);
     }
@@ -333,7 +333,7 @@ public partial class MainForm : Form {
             [nameof(TruckRow.Priemer)] = Strings.T("sess.speed"),
             [nameof(TruckRow.Pokuty)] = Strings.T("col.fines"),
             [nameof(TruckRow.Kolizie)] = Strings.T("col.collisions"),
-            [nameof(TruckRow.Poskodenie)] = Strings.T("detail.damage"),
+            [nameof(TruckRow.Poskodenie)] = Strings.T("truck.damagePerJob"),
             [nameof(TruckRow.Styl)] = Strings.T("col.style"),
         };
         foreach (DataGridViewColumn col in _truckGrid.Columns) {
@@ -346,7 +346,10 @@ public partial class MainForm : Form {
             nameof(TruckRow.Pokuty), nameof(TruckRow.Kolizie), nameof(TruckRow.Poskodenie),
             nameof(TruckRow.Styl),
         };
-        var widths = new[] { 168, 82, 96, 96, 104, 74, 88, 82, 82, 78 };
+        // The damage column is wide enough for its own heading in every language it
+        // has one in: "Damage / job" and "Poškodenie / zák." both wrapped onto a
+        // second line at the width the figure alone would have needed.
+        var widths = new[] { 150, 84, 96, 96, 104, 76, 88, 84, 118, 78 };
         for (var i = 0; i < order.Length; i++) {
             if (_truckGrid.Columns[order[i]] is not { } col) continue;
             col.DisplayIndex = i;
@@ -355,7 +358,7 @@ public partial class MainForm : Form {
         }
         foreach (var hidden in new[] {
             nameof(TruckRow.DistanceKm), nameof(TruckRow.Zarobok), nameof(TruckRow.PalivoRaw),
-            nameof(TruckRow.SpeedKmh), nameof(TruckRow.PokutyRaw), nameof(TruckRow.DamageShare),
+            nameof(TruckRow.SpeedKmh), nameof(TruckRow.PokutyRaw), nameof(TruckRow.DamagePerJob),
             nameof(TruckRow.Elektricky), nameof(TruckRow.Hra), nameof(TruckRow.Ostro),
         }) {
             if (_truckGrid.Columns[hidden] is { } col) col.Visible = false;
@@ -465,7 +468,6 @@ public partial class MainForm : Form {
             [nameof(SessionRow.Odmena)] = Strings.T("sess.earned"),
             [nameof(SessionRow.Priemer)] = Strings.T("sess.speed"),
             [nameof(SessionRow.Oddych)] = Strings.T("sess.rest"),
-            [nameof(SessionRow.Restarty)] = Strings.T("sess.restarts"),
         };
         foreach (DataGridViewColumn col in _sessionGrid.Columns) {
             if (captions.TryGetValue(col.DataPropertyName, out var caption)) col.HeaderText = caption;
@@ -479,12 +481,12 @@ public partial class MainForm : Form {
         var order = new[] {
             nameof(SessionRow.Od), nameof(SessionRow.Trvanie), nameof(SessionRow.Zasielky),
             nameof(SessionRow.Vzdialenost), nameof(SessionRow.Odmena), nameof(SessionRow.Priemer),
-            nameof(SessionRow.Oddych), nameof(SessionRow.Restarty),
+            nameof(SessionRow.Oddych),
         };
         // Wide enough for the longest thing each holds, not for its heading: rest
         // reads "10 h 05 min" on a sitting with two sleeps in it, and cut to "10 h 0"
         // it says nothing at all.
-        var widths = new[] { 112, 80, 82, 92, 92, 74, 84, 84 };
+        var widths = new[] { 124, 92, 92, 104, 104, 84, 92 };
         for (var i = 0; i < order.Length; i++) {
             if (_sessionGrid.Columns[order[i]] is not { } col) continue;
             col.DisplayIndex = i;
@@ -492,7 +494,7 @@ public partial class MainForm : Form {
         }
         foreach (var numeric in new[] {
             nameof(SessionRow.Zasielky), nameof(SessionRow.Vzdialenost),
-            nameof(SessionRow.Odmena), nameof(SessionRow.Priemer), nameof(SessionRow.Restarty),
+            nameof(SessionRow.Odmena), nameof(SessionRow.Priemer),
         }) {
             if (_sessionGrid.Columns[numeric] is { } c) c.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
         }
@@ -504,13 +506,6 @@ public partial class MainForm : Form {
         }) {
             if (_sessionGrid.Columns[hidden] is { } col) col.Visible = false;
         }
-        // The one column here that cannot be read off its own heading, so it says
-        // what it means on hover rather than leaving anybody to work it out.
-        if (_sessionGrid.Columns[nameof(SessionRow.Restarty)] is { } restarts) {
-            restarts.ToolTipText = Strings.T("sess.restartsWhy");
-            restarts.HeaderCell.ToolTipText = Strings.T("sess.restartsWhy");
-        }
-
         if (_sessionGrid.Rows.Count > 0 && _sessionGrid.SelectedRows.Count == 0) {
             _sessionGrid.Rows[0].Selected = true;
         }

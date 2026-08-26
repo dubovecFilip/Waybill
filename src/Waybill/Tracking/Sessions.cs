@@ -122,17 +122,16 @@ public static class Sessions {
         if (stretches.Count == 0) return new List<SessionRow>();
 
         var gap = gapMinutes * 60_000L;
-        var windows = new List<(long From, long To, int Runs)>();
+        var windows = new List<(long From, long To)>();
         foreach (var f in stretches.Where(f => f.Ticks >= LeastTicks).OrderBy(f => f.First)) {
             if (windows.Count > 0 && f.First - windows[^1].To <= gap) {
-                var last = windows[^1];
-                windows[^1] = (last.From, Math.Max(last.To, f.Last), last.Runs + 1);
+                windows[^1] = (windows[^1].From, Math.Max(windows[^1].To, f.Last));
             } else {
-                windows.Add((f.First, f.Last, 1));
+                windows.Add((f.First, f.Last));
             }
         }
 
-        var rows = windows.Select(w => store.SessionTotals(w.From, w.To, w.Runs)).ToList();
+        var rows = windows.Select(w => store.SessionTotals(w.From, w.To)).ToList();
         rows.Reverse();
         return rows;
     }
