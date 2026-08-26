@@ -47,6 +47,17 @@ public static class Sessions {
     private const long SegmentGapMs = 3 * 60_000;
 
     /// <summary>
+    /// How much driving a stretch needs before it is one at all.
+    ///
+    /// Starting Waybill while the game is running writes a recording whether or not
+    /// anybody drives, so a look at yesterday's figures leaves a stretch one second
+    /// long. Six of those inside one evening turned two interruptions into eight, and
+    /// none of them held a metre of road. Half a minute is longer than any accident
+    /// of starting and stopping and shorter than anything worth calling a drive.
+    /// </summary>
+    private const int LeastTicks = 30;
+
+    /// <summary>
     /// Brings the record of what each recording covers up to date.
     ///
     /// Reading a recording to its end is the only way to learn when it ends, so what
@@ -112,7 +123,7 @@ public static class Sessions {
 
         var gap = gapMinutes * 60_000L;
         var windows = new List<(long From, long To, int Runs)>();
-        foreach (var f in stretches.OrderBy(f => f.First)) {
+        foreach (var f in stretches.Where(f => f.Ticks >= LeastTicks).OrderBy(f => f.First)) {
             if (windows.Count > 0 && f.First - windows[^1].To <= gap) {
                 var last = windows[^1];
                 windows[^1] = (last.From, Math.Max(last.To, f.Last), last.Runs + 1);

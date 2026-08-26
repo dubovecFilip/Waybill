@@ -86,6 +86,12 @@ recording: the app stays open and the game is closed for an hour. A recording is
 cut wherever it goes quiet for more than three minutes, which is far more than
 any stutter and far less than any real break.
 
+A stretch holding less than half a minute of ticks is not counted at all.
+Starting Waybill while the game is running writes a recording whether or not
+anybody drives, so a look at yesterday's figures leaves a stretch one second
+long: six of those inside one evening turned two interruptions into eight, and
+none of them held a metre of road.
+
 Sittings themselves are not stored. They are the stretches put back together
 against `SessionGapMinutes` in the preferences, an hour by default. Nothing
 about a sitting is written down, so the rule can be changed at any time and the
