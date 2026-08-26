@@ -285,8 +285,9 @@ advances while the game is running. Neither is special, and a crash and a
 restart in the middle of an evening is neither.
 
 The hour is a preference rather than a constant, because it is the one number
-here that somebody made up. The column counting the stints says how many
-separate stretches of driving a sitting holds.
+here that somebody made up. The last column counts the restarts: how many times
+the driving stopped and started again inside the sitting, whether that was the
+game or Waybill being restarted. Nought means it ran straight through.
 
 A delivery does not have to fit inside one sitting, and the page does not
 pretend otherwise. What was finished in a sitting is counted there, with what it

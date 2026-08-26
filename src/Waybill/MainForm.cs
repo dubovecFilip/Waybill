@@ -283,7 +283,7 @@ public partial class MainForm : Form {
             [nameof(SessionRow.Odmena)] = Strings.T("sess.earned"),
             [nameof(SessionRow.Priemer)] = Strings.T("sess.speed"),
             [nameof(SessionRow.Oddych)] = Strings.T("sess.rest"),
-            [nameof(SessionRow.Behy)] = Strings.T("sess.runs"),
+            [nameof(SessionRow.Restarty)] = Strings.T("sess.restarts"),
         };
         foreach (DataGridViewColumn col in _sessionGrid.Columns) {
             if (captions.TryGetValue(col.DataPropertyName, out var caption)) col.HeaderText = caption;
@@ -297,7 +297,7 @@ public partial class MainForm : Form {
         var order = new[] {
             nameof(SessionRow.Od), nameof(SessionRow.Trvanie), nameof(SessionRow.Zasielky),
             nameof(SessionRow.Vzdialenost), nameof(SessionRow.Odmena), nameof(SessionRow.Priemer),
-            nameof(SessionRow.Oddych), nameof(SessionRow.Behy),
+            nameof(SessionRow.Oddych), nameof(SessionRow.Restarty),
         };
         // Wide enough for the longest thing each holds, not for its heading: rest
         // reads "10 h 05 min" on a sitting with two sleeps in it, and cut to "10 h 0"
@@ -310,7 +310,7 @@ public partial class MainForm : Form {
         }
         foreach (var numeric in new[] {
             nameof(SessionRow.Zasielky), nameof(SessionRow.Vzdialenost),
-            nameof(SessionRow.Odmena), nameof(SessionRow.Priemer), nameof(SessionRow.Behy),
+            nameof(SessionRow.Odmena), nameof(SessionRow.Priemer), nameof(SessionRow.Restarty),
         }) {
             if (_sessionGrid.Columns[numeric] is { } c) c.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
         }
@@ -322,6 +322,13 @@ public partial class MainForm : Form {
         }) {
             if (_sessionGrid.Columns[hidden] is { } col) col.Visible = false;
         }
+        // The one column here that cannot be read off its own heading, so it says
+        // what it means on hover rather than leaving anybody to work it out.
+        if (_sessionGrid.Columns[nameof(SessionRow.Restarty)] is { } restarts) {
+            restarts.ToolTipText = Strings.T("sess.restartsWhy");
+            restarts.HeaderCell.ToolTipText = Strings.T("sess.restartsWhy");
+        }
+
         if (_sessionGrid.Rows.Count > 0 && _sessionGrid.SelectedRows.Count == 0) {
             _sessionGrid.Rows[0].Selected = true;
         }

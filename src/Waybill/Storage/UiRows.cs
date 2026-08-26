@@ -11,10 +11,16 @@ public class SessionRow {
     public DateTime Do { get; set; }
     public long FromMs { get; set; }
     public long ToMs { get; set; }
-    /// <summary>How many separate stretches of driving it holds. More than one means
-    /// the telemetry stopped and started again inside the hour, whether that was the
-    /// app being closed and reopened or the game being.</summary>
-    public int Behy { get; set; }
+    /// <summary>
+    /// How many times the driving stopped and started again inside this sitting.
+    ///
+    /// Counted as breaks rather than as the stretches between them, because that is
+    /// the number a person has in their head: nought means you sat down and drove,
+    /// three means something interrupted you three times. Whether it was the game
+    /// that was restarted or Waybill makes no difference to the driver and none to
+    /// this figure.
+    /// </summary>
+    public int Restarty { get; set; }
     public string Trvanie { get; set; } = "";
     public int Zasielky { get; set; }
     public double DistanceKm { get; set; }

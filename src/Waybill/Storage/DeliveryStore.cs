@@ -960,7 +960,7 @@ public class DeliveryStore : IDisposable {
                 Do = DateTimeOffset.FromUnixTimeMilliseconds(toMs).LocalDateTime,
                 FromMs = fromMs,
                 ToMs = toMs,
-                Behy = runs,
+                Restarty = Math.Max(0, runs - 1),
             };
 
             // Finished here: the count and the pay.
