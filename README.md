@@ -83,6 +83,8 @@ Every state, flag and anomaly is listed with its meaning in
 * Marks each thing that happened with a sign of its own, and explains every sign
 * Names a trailer for what it is instead of for the file it came out of
 * Marks an oversize load as one, on its card and in the list
+* Marks an electric tractor the same way, and counts its battery in kilowatt hours
+* Tells a sleep from a charging stop, a repair or a job taken from a menu
 * Draws the whole history as one map, built entirely from your own drives
 * Writes a delivery out as a three sheet A4 waybill, as pictures or as one PDF
 * Draws the route on that sheet over every road already driven, with the towns named

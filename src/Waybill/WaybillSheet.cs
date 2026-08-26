@@ -374,6 +374,8 @@ public static class WaybillSheet {
         var pieces = new List<Piece>();
 
         var reported = d.ReportedDistanceKm is > 0 ? $"{u.Distance(d.ReportedDistanceKm.Value):0}" : "?";
+        // A battery, not a tank: see Units.FormatEnergy.
+        var battery = Waybill.Tracking.Trucks.IsElectric(d.TruckId, d.Truck);
         var paid = d.Outcome == "delivered" ? d.Revenue : -d.Penalty;
 
         // ---------------------------------------------------------- sheet one
@@ -395,7 +397,7 @@ public static class WaybillSheet {
         pieces.Add(Boxes(new[] {
             (Strings.T("detail.distances"), $"{u.Distance(d.PlannedDistanceKm):0} / {u.Distance(d.DistanceKm):0.0} / {reported} {u.DistanceUnit}", false),
             (Strings.T("sheet.linehaul"), u.FormatMoney(paid), false),
-            (Strings.T("detail.fuel"), u.FormatVolume(d.FuelUsedL), false),
+            (Strings.T("detail.fuel"), battery ? Units.FormatEnergy(d.FuelUsedL) : u.FormatVolume(d.FuelUsedL), false),
             (Strings.T("detail.fines"), $"{u.FormatMoney(d.FinesTotal)} ({d.FinesCount})", false),
         }, 4, 13f));
 
@@ -423,8 +425,10 @@ public static class WaybillSheet {
         pieces.Add(Gap(3.5f));
 
         pieces.Add(Boxes(new[] {
-            (Strings.T("detail.fuel"), u.FormatVolume(d.FuelUsedL), false),
-            (Strings.T("detail.consumption"), u.Consumption(d.AvgConsumption) is { } c ? $"{c:0.0} {u.ConsumptionUnit}" : "—", false),
+            (Strings.T("detail.fuel"), battery ? Units.FormatEnergy(d.FuelUsedL) : u.FormatVolume(d.FuelUsedL), false),
+            (Strings.T("detail.consumption"), battery
+                ? (d.AvgConsumption is { } kwh ? u.FormatEnergyPer100(kwh) : "—")
+                : (u.Consumption(d.AvgConsumption) is { } c ? $"{c:0.0} {u.ConsumptionUnit}" : "—"), false),
             (Strings.T("detail.refuels"), d.Refuels.ToString(), false),
             (Strings.T("detail.tolls"), u.FormatMoney(d.TollsPaid), false),
         }, 4, 13f));

@@ -59,6 +59,10 @@ public class DeliveryRow {
     /// not meant to be: they are what the region beside a city is looked up by.</summary>
     public string OdkialId { get; set; } = "";
     public string KamId { get; set; } = "";
+    /// <summary>Whether the tractor ran on a battery. Marked in the gutter the way an
+    /// oversize load is, and not a column: it is one fact about the truck and reads at
+    /// a glance or not at all.</summary>
+    public bool Elektricky { get; set; }
     public string Naklad { get; set; } = "";
     public string Tahac { get; set; } = "";
     /// <summary>Always metric, as stored. The grid shows <see cref="Vzdialenost"/>,
@@ -95,6 +99,9 @@ public class DeliveryDetail {
     /// on rows recorded before they were kept, where the name is all there is.</summary>
     public string SourceCityId = "", DestinationCityId = "";
     public string Cargo = "", Truck = "", Trailer = "";
+    /// <summary>The identifier of the tractor, which is the only thing that says
+    /// whether it runs on a battery. See <see cref="Waybill.Tracking.Trucks"/>.</summary>
+    public string TruckId = "";
     public double CargoMassKg, PlannedDistanceKm, DistanceKm;
     /// <summary>The part of <see cref="DistanceKm"/> driven before the trailer was
     /// hitched, which the plan does not describe. Zero on most jobs.</summary>

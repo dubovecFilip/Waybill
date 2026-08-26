@@ -1428,7 +1428,11 @@ public partial class MainForm : Form {
     private void OnFilterChanged(object? sender, EventArgs e) => ApplyFilter();
 
     /// <summary>How wide the gutter is: a verdict dot, then the oversize band.</summary>
-    private const int GutterWidth = 28;
+    // Room for three marks side by side: the bolt of an electric tractor, the
+    // verdict, and the band of an oversize load down the edge. Each keeps its own
+    // place whether or not the row has it, so the verdicts still read as one column
+    // down the list rather than shuffling left and right by row.
+    private const int GutterWidth = 36;
     private const int StripeWidth = 9;
 
     /// <summary>
@@ -1448,6 +1452,24 @@ public partial class MainForm : Form {
     /// paints itself after the row does, so anything put there first was covered up
     /// by the header's own background a moment later.
     /// </summary>
+    /// <summary>The mark for a tractor that runs on a battery: the same lightning
+    /// bolt it wears on its own cab, drawn rather than taken from a font, since the
+    /// glyph for it is missing from half the fonts Windows ships with.</summary>
+    private static void Bolt(Graphics g, RectangleF box) {
+        var was = g.SmoothingMode;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        using var brush = new SolidBrush(Color.FromArgb(126, 196, 140));
+        g.FillPolygon(brush, new[] {
+            new PointF(box.Left + box.Width * 0.62f, box.Top),
+            new PointF(box.Left, box.Top + box.Height * 0.58f),
+            new PointF(box.Left + box.Width * 0.42f, box.Top + box.Height * 0.58f),
+            new PointF(box.Left + box.Width * 0.34f, box.Bottom),
+            new PointF(box.Right, box.Top + box.Height * 0.40f),
+            new PointF(box.Left + box.Width * 0.56f, box.Top + box.Height * 0.40f),
+        });
+        g.SmoothingMode = was;
+    }
+
     private void OnRowMarker(object? sender, DataGridViewCellPaintingEventArgs e) {
         if (e.ColumnIndex != -1 || e.RowIndex < 0 || e.RowIndex >= _grid.Rows.Count) return;
         // The surface is declared as one that may not be there, so it is taken once
@@ -1458,7 +1480,7 @@ public partial class MainForm : Form {
         if (_grid.Rows[e.RowIndex].DataBoundItem is DeliveryRow row) {
             g.SmoothingMode = SmoothingMode.AntiAlias;
             var dot = new RectangleF(
-                e.CellBounds.Left + (GutterWidth - StripeWidth - 9) / 2f,
+                e.CellBounds.Left + 14,
                 e.CellBounds.Top + (e.CellBounds.Height - 9) / 2f, 9, 9);
             using (var brush = new SolidBrush(VerdictColour(row.Stav))) g.FillEllipse(brush, dot);
 
@@ -1466,6 +1488,14 @@ public partial class MainForm : Form {
                 HazardStripes(g, new RectangleF(
                     e.CellBounds.Right - StripeWidth, e.CellBounds.Top,
                     StripeWidth, Math.Max(e.CellBounds.Height, 1)), 210);
+            }
+
+            // A battery instead of a tank, marked where the load's own markings are.
+            // Drawn rather than written for the same reason as everything else in this
+            // gutter: it is read at a glance or not at all.
+            if (row.Elektricky) {
+                Bolt(g, new RectangleF(
+                    e.CellBounds.Left + 3, e.CellBounds.Top + (e.CellBounds.Height - 13) / 2f, 8, 13));
             }
         }
         e.Handled = true;
@@ -2040,6 +2070,14 @@ public partial class MainForm : Form {
         // actually carries rather than in another word among the figures. Added last
         // so it docks outermost and owns the whole left edge; added earlier it would
         // have been squeezed inside whatever the rest left over.
+        if (Tracking.Trucks.IsElectric(d.TruckId, d.Truck)) {
+            var mark = new Panel { Dock = DockStyle.Left, Width = 22, BackColor = Surface };
+            mark.Paint += (_, e) => Bolt(e.Graphics, new RectangleF(6, mark.Height / 2f - 9, 11, 18));
+            _tips.SetToolTip(mark, Strings.T("detail.electric"));
+            head.Controls.Add(mark);
+            head.Padding = new Padding(14, 16, 24, 12);
+        }
+
         if (d.SpecialTransport) {
             var stripe = new Panel { Dock = DockStyle.Left, Width = 10, BackColor = Surface };
             stripe.Paint += (_, e) => HazardStripes(e.Graphics, new RectangleF(0, 0, stripe.Width, stripe.Height), 210);
@@ -2572,6 +2610,8 @@ public partial class MainForm : Form {
         }, Strings.T("legend.gutter"), Strings.T("legend.gutterWhy"));
         Entry((g, r) => HazardStripes(g, new RectangleF(16, 4, 14, r.Height - 8), 210),
             Strings.T("detail.special"), Strings.T("legend.specialWhy"));
+        Entry((g, r) => Bolt(g, new RectangleF(18, r.Height / 2f - 8, 10, 16)),
+            Strings.T("legend.electric"), Strings.T("legend.electricWhy"));
         Entry((g, r) => {
             using var lead = new SolidBrush(Muted);
             using var done = new SolidBrush(Accent);
@@ -2983,8 +3023,12 @@ public partial class MainForm : Form {
         Row(Strings.T("detail.paidOffered"), $"{u.FormatMoney(paid)}  /  {u.FormatMoney(d.OfferedIncome)}");
         Row(Strings.T("detail.fines"), $"{u.FormatMoney(d.FinesTotal)}  ({d.FinesCount}×)");
         Row(Strings.T("detail.tolls"), u.FormatMoney(d.TollsPaid));
-        Row(Strings.T("detail.fuel"), u.FormatVolume(d.FuelUsedL));
-        if (u.Consumption(d.AvgConsumption) is { } c) Row(Strings.T("detail.consumption"), $"{c:0.0} {u.ConsumptionUnit}");
+        // A battery is not a tank. The figure comes out of the same telemetry field,
+        // and on an electric tractor the game puts kilowatt hours in it.
+        var battery = Tracking.Trucks.IsElectric(d.TruckId, d.Truck);
+        Row(Strings.T("detail.fuel"), battery ? Units.FormatEnergy(d.FuelUsedL) : u.FormatVolume(d.FuelUsedL));
+        if (battery && d.AvgConsumption is { } kwh) Row(Strings.T("detail.consumption"), u.FormatEnergyPer100(kwh));
+        else if (!battery && u.Consumption(d.AvgConsumption) is { } c) Row(Strings.T("detail.consumption"), $"{c:0.0} {u.ConsumptionUnit}");
         Row(Strings.T("detail.refuels"), d.Refuels.ToString());
 
         Group(Strings.T("detail.groupDriving"));

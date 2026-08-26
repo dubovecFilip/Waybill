@@ -123,6 +123,21 @@ public class Units {
     public string FormatMoney(double amount) => $"{Money(amount):0} {Currency}";
 
     /// <summary>
+    /// What a battery holds, which is never litres and never gallons.
+    ///
+    /// The telemetry field is the same one a diesel tank uses, and on an electric
+    /// tractor the game fills it with kilowatt hours: the 565 in a VNR Electric is
+    /// 565 kWh, not 565 of anything pourable. Converting it produced a delivery that
+    /// claimed 228.8 gal and 1.4 mpg. Nothing is converted here, in either system,
+    /// because a kilowatt hour is a kilowatt hour on both sides of the Atlantic.
+    /// </summary>
+    public static string FormatEnergy(double kwh) => $"{kwh:0.0} kWh";
+
+    /// <summary>The same, per hundred of whatever distance is being counted in.</summary>
+    public string FormatEnergyPer100(double kwhPer100Km) =>
+        $"{(Imp ? kwhPer100Km / KmToMiles : kwhPer100Km):0.0} kWh/100 {DistanceUnit}";
+
+    /// <summary>
     /// A stretch of game time as a driver would say it.
     ///
     /// Sleep is measured in hours, not in the 601 minutes the game happens to have

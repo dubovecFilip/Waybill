@@ -35,6 +35,7 @@ public static class Adapter {
             GameVersion = $"{d.GameVersion?.Major ?? 0}.{d.GameVersion?.Minor ?? 0}",
             GameTimeMin = d.CommonValues?.GameTime?.Value ?? 0,
             GameTimeScale = d.CommonValues?.Scale ?? 0,
+            NextRestMin = d.CommonValues?.NextRestStop?.Value ?? 0,
 
             OnJob = hasJob,
             Job = hasJob
@@ -249,6 +250,7 @@ public static class Adapter {
             GameVersion = $"{N(d["GameVersion"]?["Major"])}.{N(d["GameVersion"]?["Minor"])}",
             GameTimeMin = N(d["CommonValues"]?["GameTime"]?["Value"]),
             GameTimeScale = N(d["CommonValues"]?["Scale"]),
+            NextRestMin = N(d["CommonValues"]?["NextRestStop"]?["Value"]),
 
             OnJob = hasJob,
             Job = hasJob

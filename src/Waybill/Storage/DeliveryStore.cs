@@ -597,7 +597,8 @@ public class DeliveryStore : IDisposable {
                        COALESCE(outcome, ''), COALESCE(driving_style, ''),
                        COALESCE(validation_flags, ''), COALESCE(special_transport, 0),
                        COALESCE(source_city_id, ''), COALESCE(destination_city_id, ''),
-                       COALESCE(finished_at_ms, started_at_ms)
+                       COALESCE(finished_at_ms, started_at_ms),
+                       COALESCE(truck_id, '')
                 FROM deliveries
                 ORDER BY started_at_ms DESC
                 LIMIT $limit;
@@ -635,6 +636,7 @@ public class DeliveryStore : IDisposable {
                     OdkialId = reader.GetString(17),
                     KamId = reader.GetString(18),
                     Dokoncene = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(19)).LocalDateTime,
+                    Elektricky = Waybill.Tracking.Trucks.IsElectric(reader.GetString(20), reader.GetString(5)),
                 });
             }
             return rows;
@@ -829,7 +831,8 @@ public class DeliveryStore : IDisposable {
                        COALESCE(trailer_units, ''), COALESCE(distance_to_load_km, 0),
                        COALESCE(special_transport, 0),
                        truck_damage_start_pct, trailer_damage_start_pct, cargo_damage_start_pct,
-                       COALESCE(source_city_id, ''), COALESCE(destination_city_id, '')
+                       COALESCE(source_city_id, ''), COALESCE(destination_city_id, ''),
+                       COALESCE(truck_id, '')
                 FROM deliveries WHERE id = $id;
                 """;
             cmd.Parameters.AddWithValue("$id", id);
@@ -873,6 +876,7 @@ public class DeliveryStore : IDisposable {
                 SpecialTransport = Num(48) != 0,
                 TruckDamageStart = Opt(49), TrailerDamageStart = Opt(50), CargoDamageStart = Opt(51),
                 SourceCityId = r.GetString(52), DestinationCityId = r.GetString(53),
+                TruckId = r.GetString(54),
             };
         }
     }

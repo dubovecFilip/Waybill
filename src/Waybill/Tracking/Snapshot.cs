@@ -41,6 +41,16 @@ public class Snapshot {
     /// during a real stall it keeps running at this rate.</summary>
     public double GameTimeScale;
 
+    /// <summary>
+    /// How many game minutes the driver has left before the game makes them sleep.
+    ///
+    /// The one thing that tells a sleep from every other way of losing two hours.
+    /// Sleeping puts this back up to its maximum; a charging stop, a repair or a job
+    /// taken from a menu all move the clock forward while this counts down by exactly
+    /// as much, because the driver was awake for every minute of it.
+    /// </summary>
+    public double NextRestMin;
+
     public bool CruiseControlOn;
     public double CruiseControlSpeedKmh;
 

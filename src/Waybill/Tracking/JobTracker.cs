@@ -953,10 +953,17 @@ public class JobTracker {
             var cargoMoved = CargoChangedHands(snap, prev);
             if (cargoMoved) found.Add(new Anomaly { AtMs = nowMs, Code = "cargo_handling", DtMs = dtMs, Delta = jumpedMin });
             if (!isTransport && !cargoMoved && j.LoadOnAtMs != 0) {
-                var slept = Slept(jumpedMin);
-                j.RestStops += 1;
-                j.RestMinutes += slept;
-                j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = slept });
+                if (WasAsleep(snap, prev)) {
+                    var slept = Slept(jumpedMin);
+                    j.RestStops += 1;
+                    j.RestMinutes += slept;
+                    j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = slept });
+                } else {
+                    // Time went by with the driver awake: a charge, a repair, a job
+                    // taken from a menu. Noted as what it is, which is a stop, rather
+                    // than written down as sleep nobody had.
+                    found.Add(new Anomaly { AtMs = nowMs, Code = "awake_gap", DtMs = dtMs, Delta = jumpedMin });
+                }
             }
         }
 
@@ -1069,10 +1076,14 @@ public class JobTracker {
                     found.Add(new Anomaly { AtMs = nowMs, Code = "cargo_handling", DtMs = dtMs, Delta = gameMinutesPassed });
                 }
                 if (!isTransport && !cargoMoved && j.LoadOnAtMs != 0) {
-                    var slept = Slept(gameMinutesPassed);
-                    j.RestStops += 1;
-                    j.RestMinutes += slept;
-                    j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = slept });
+                    if (WasAsleep(snap, prev)) {
+                        var slept = Slept(gameMinutesPassed);
+                        j.RestStops += 1;
+                        j.RestMinutes += slept;
+                        j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = slept });
+                    } else {
+                        found.Add(new Anomaly { AtMs = nowMs, Code = "awake_gap", DtMs = dtMs, Delta = gameMinutesPassed });
+                    }
                 }
             } else {
                 found.Add(new Anomaly { Code = wasPaused ? "paused_gap" : "client_gap", DtMs = dtMs });
@@ -1145,6 +1156,38 @@ public class JobTracker {
         var parts = new List<string> { truck >= trailer ? "truck" : "trailer" };
         if (cargo > threshold) parts.Add("cargo");
         return string.Join(",", parts);
+    }
+
+    /// <summary>
+    /// Whether a jump of the clock was the driver sleeping.
+    ///
+    /// The clock leaping forward means only that something took time. Sleeping does,
+    /// and so does charging a battery at the roadside, having the truck repaired, and
+    /// taking a job out of a menu, all of which used to be written down as rest: one
+    /// delivery in an electric truck came back claiming four sleeps of two hours, when
+    /// three of them were the battery going from nothing to full and the fourth was a
+    /// quick job being taken.
+    ///
+    /// The game tells them apart itself. It counts down the minutes the driver has
+    /// left before they must sleep, and a sleep is the only thing that puts that
+    /// number back up. Everything else leaves it falling by exactly as much as the
+    /// clock advanced, because the driver was awake for every minute of it.
+    ///
+    /// A recording made before that field was read has nothing to go on and keeps the
+    /// old behaviour, which is to believe the jump.
+    /// </summary>
+    private static bool WasAsleep(Snapshot snap, Snapshot prev) {
+        // A sleeping truck does not move an inch. A quick job taken from a menu also
+        // puts the rest timer up, because the game hands over a fresh driver with it,
+        // but it hands over a different truck too and the odometer lands on that
+        // truck's own reading: 393 639 km became 7 387 in one tick. The swap check
+        // further up catches most of that, and misses this one, because the make and
+        // model change a tick before the odometer and the clock do.
+        if (Math.Abs(snap.Truck.OdometerKm - prev.Truck.OdometerKm) > 0.05) return false;
+        // Nothing to go on in a recording made before the timer was read, so the jump
+        // is believed, which is what it always was.
+        if (snap.NextRestMin <= 0 && prev.NextRestMin <= 0) return true;
+        return snap.NextRestMin > prev.NextRestMin;
     }
 
     /// <summary>

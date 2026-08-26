@@ -114,6 +114,23 @@ The case this exists for: Yakima to Camp Verde took an afternoon, an evening and
 the next morning, 15.6 %, 38.5 % and 45.9 % of the driving. Counted where it
 began, two of those three sittings read as though nobody had driven at all.
 
+## Electric tractors
+
+Telemetry has no field for it. What it has is the identifier and the name, and
+both games are consistent: an electric variant is the diesel one with `_e` on the
+end of its identifier, and its name says so, "VNR Electric", "eActros 600",
+"E-Tech T". `Trucks.IsElectric` reads those, so nothing is stored and every past
+delivery is answered by the same test.
+
+It matters beyond the marking. The tank capacity of an electric truck is reported
+in kilowatt hours rather than litres, so the fuel figure is kilowatt hours too,
+and converting it to gallons produced a delivery claiming 228.8 gal and 1.4 mpg
+where the truth was 866.1 kWh and 268.8 kWh/100 mi. The delivery card and the
+sheet both read it as energy now.
+
+The statistics page does not yet: its fuel tile sums the raw figure across every
+delivery, so a battery and a tank are added together there.
+
 ## The region a city is in
 
 Not stored and not reported by either game. `Places` holds a table of city names
@@ -134,6 +151,23 @@ on it, so it can be corrected or extended at any time without touching stored
 data.
 
 ## Rest
+
+Not every jump of the clock is a sleep. Charging a battery at the roadside,
+having the truck repaired and taking a job out of a menu all move the clock
+forward by hours, and all three used to be written down as rest: one delivery in
+an electric truck came back claiming four sleeps of two hours, when three of them
+were the battery going from nothing to full and the fourth was a quick job.
+
+The game tells them apart itself. `NextRestStop` counts the minutes the driver
+has left before they must sleep, and a sleep is the only thing that puts that
+number back up; everything else leaves it falling by exactly as much as the clock
+advanced, because the driver was awake for every minute of it. A jump that is not
+a sleep is recorded as the anomaly `awake_gap` and counted as nothing.
+
+One more guard sits in front of that: a sleeping truck does not move. A quick job
+puts the rest timer up as well, since the game hands over a fresh driver with it,
+but it hands over a different truck too and the odometer lands on that truck's own
+reading, 393 639 km becoming 7 387 in a single tick.
 
 A sleep in these games is a whole number of hours. The measurement is not: a rest
 is read as the distance the game's clock moved between two samples taken a second
