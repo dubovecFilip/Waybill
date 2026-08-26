@@ -28,6 +28,12 @@ public class SessionRow {
     /// read out; sorting works on the numbers underneath.</summary>
     public double GameMinutes { get; set; }
     public double RestMinutes { get; set; }
+    /// <summary>How long the sitting ran, and how fast it averaged, as numbers.
+    /// "1 h 08 min" and "55 min" are words, and sorted as words the shorter sitting
+    /// comes first because "5" is after "1". Every column written as words keeps the
+    /// figure it was written from, and the grid sorts on that.</summary>
+    public long DurationMs { get; set; }
+    public double SpeedKmh { get; set; }
     /// <summary>Kilometres driven with nothing on the hook, counted apart so a sitting
     /// spent shunting trailers around a yard does not read as a delivery.</summary>
     public double FreeroamKm { get; set; }

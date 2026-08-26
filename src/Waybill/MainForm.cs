@@ -238,7 +238,8 @@ public partial class MainForm : Form {
         _sessions = Tracking.Sessions.List(_store, _settings.SessionGapMinutes);
         foreach (var s in _sessions) {
             var u = Units.For(_settings.Units, s.Hra);
-            s.Trvanie = Spell(s.ToMs - s.FromMs);
+            s.DurationMs = s.ToMs - s.FromMs;
+            s.Trvanie = Spell(s.DurationMs);
             // A sitting with nothing delivered in it has no distance and no earnings,
             // and no game to read them in either: "0 km" there is a figure about a
             // game that was never started, and a currency picked out of the air.
@@ -249,14 +250,21 @@ public partial class MainForm : Form {
             // Against the hours the game counted, not the hours the chair was warm:
             // dividing by real time reports the time compression as speed.
             var hours = s.GameMinutes / 60.0;
-            s.Priemer = hours > 0.01 ? u.FormatSpeed(s.DistanceKm / hours) : "";
+            s.SpeedKmh = hours > 0.01 ? s.DistanceKm / hours : 0;
+            s.Priemer = s.SpeedKmh > 0 ? u.FormatSpeed(s.SpeedKmh) : "";
             s.Oddych = s.RestMinutes > 0.5 ? Units.Duration(s.RestMinutes) : "";
         }
 
+        // Every column written as words sorts on the figure behind it. Clicking
+        // "lasted" has to put an hour and a half above fifty minutes, and it cannot do
+        // that by comparing the words they are written as.
         _sessionGrid.DataSource = new SortableBindingList<SessionRow>(_sessions.ToList(),
             new Dictionary<string, string> {
+                [nameof(SessionRow.Trvanie)] = nameof(SessionRow.DurationMs),
                 [nameof(SessionRow.Vzdialenost)] = nameof(SessionRow.DistanceKm),
                 [nameof(SessionRow.Odmena)] = nameof(SessionRow.Zarobok),
+                [nameof(SessionRow.Priemer)] = nameof(SessionRow.SpeedKmh),
+                [nameof(SessionRow.Oddych)] = nameof(SessionRow.RestMinutes),
             });
         UseDarkScrollbars(_sessionGrid);
     }
@@ -309,6 +317,7 @@ public partial class MainForm : Form {
             nameof(SessionRow.Do), nameof(SessionRow.FromMs), nameof(SessionRow.ToMs),
             nameof(SessionRow.DistanceKm), nameof(SessionRow.Zarobok), nameof(SessionRow.Hra),
             nameof(SessionRow.GameMinutes), nameof(SessionRow.RestMinutes), nameof(SessionRow.FreeroamKm),
+            nameof(SessionRow.DurationMs), nameof(SessionRow.SpeedKmh),
         }) {
             if (_sessionGrid.Columns[hidden] is { } col) col.Visible = false;
         }

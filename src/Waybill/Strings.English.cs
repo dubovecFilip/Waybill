@@ -251,7 +251,7 @@ public static partial class Strings {
         ["tab.sessions"] = "Sessions",
         ["sess.began"] = "Began",
         ["sess.lasted"] = "Lasted",
-        ["sess.runs"] = "Stints",
+        ["sess.runs"] = "Stretches",
         ["sess.inThisOne"] = "Driven in this one",
         ["sess.nothing"] = "Nothing was delivered in this one.",
         ["detail.legs"] = "Loaded + to the load",
