@@ -78,6 +78,10 @@ public class DeliveryStore : IDisposable {
             // What the game calls a city when it is talking to itself. Two cities can
             // share a name inside one game and never an identifier, so this is what
             // tells the Salina in Utah from the one in Kansas.
+            // Whether the tractor ran on a battery, which decides what unit the fuel
+            // figure is in. Derived from the identifier rather than reported, and kept
+            // because a total across deliveries has to be able to ask in SQL.
+            ("deliveries", "electric", "INTEGER"),
             ("deliveries", "source_city_id", "TEXT"),
             ("deliveries", "destination_city_id", "TEXT"),
             ("deliveries", "truck_damage_start_pct", "REAL"),
@@ -316,7 +320,7 @@ public class DeliveryStore : IDisposable {
                     job_type, trailer_chain_type, trailer_owned, trailer_units,
                     distance_to_load_km, special_transport,
                     truck_damage_start_pct, trailer_damage_start_pct, cargo_damage_start_pct,
-                    source_city_id, destination_city_id
+                    source_city_id, destination_city_id, xp, electric
                 ) VALUES (
                     $job_uid, $game, $game_version, $outcome, $validation_status, $validation_flags,
                     $truck_make, $truck_model, $truck_id, $trailer_name, $trailer_id,
@@ -335,7 +339,7 @@ public class DeliveryStore : IDisposable {
                     $job_type, $trailer_chain_type, $trailer_owned, $trailer_units,
                     $distance_to_load_km, $special_transport,
                     $truck_damage_start_pct, $trailer_damage_start_pct, $cargo_damage_start_pct,
-                    $source_city_id, $destination_city_id
+                    $source_city_id, $destination_city_id, $xp, $electric
                 );
                 """;
 
@@ -382,6 +386,8 @@ public class DeliveryStore : IDisposable {
             cmd.Parameters.AddWithValue("$speeding_share", r.SpeedingShare);
             cmd.Parameters.AddWithValue("$hard_speeding_share", r.HardSpeedingShare);
             cmd.Parameters.AddWithValue("$driving_style", r.DrivingStyle);
+            cmd.Parameters.AddWithValue("$xp", r.Xp);
+            cmd.Parameters.AddWithValue("$electric", r.Electric ? 1 : 0);
             cmd.Parameters.AddWithValue("$source_city_id", r.SourceCityId);
             cmd.Parameters.AddWithValue("$destination_city_id", r.DestinationCityId);
             cmd.Parameters.AddWithValue("$truck_damage_start_pct", (object?)r.StartTruckDamage ?? DBNull.Value);
@@ -702,7 +708,7 @@ public class DeliveryStore : IDisposable {
     /// of the window is using. Money as money, fuel as fuel, a sleep in hours rather
     /// than in the several hundred game minutes the game counted.
     /// </summary>
-    public List<TimelineRow> TimelineRows(long deliveryId, Units units) {
+    public List<TimelineRow> TimelineRows(long deliveryId, Units units, bool energy = false) {
         lock (_gate) {
             var rows = new List<TimelineRow>();
             using var cmd = _conn.CreateCommand();
@@ -743,7 +749,7 @@ public class DeliveryStore : IDisposable {
                     Cas = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(0)).LocalDateTime.ToString("HH:mm:ss"),
                     Udalost = Strings.T("event." + type) is var t && t != "event." + type ? t : type,
                     Hodnota = Figure(type, raw, units),
-                    Detail = Aside(type, detail, litres, units),
+                    Detail = Aside(type, detail, litres, units, energy),
                     Offence = type == "fine" ? detail : "",
                     AtMs = reader.GetInt64(0),
                     Type = type,
@@ -773,7 +779,7 @@ public class DeliveryStore : IDisposable {
             "collision" => $"{v:0.00} %",
             // Hours, because that is how long a sleep is. The game counts them in
             // minutes and nobody has ever slept for six hundred and one minutes.
-            "rest" or "save_loaded" => Units.Duration(v),
+            "rest" or "save_loaded" or "assist_refuel" or "late_delivery" => Units.Duration(v),
             _ => v.ToString("0.##"),
         };
     }
@@ -781,12 +787,15 @@ public class DeliveryStore : IDisposable {
     /// <summary>What goes beside the figure: the offence for a fine, in words rather
     /// than as the identifier it is stored under, and how much fuel a receipt was
     /// for.</summary>
-    private static string Aside(string type, string detail, double? litres, Units units) {
+    private static string Aside(string type, string detail, double? litres, Units units, bool energy) {
         if (type == "fine" && detail.Length > 0) {
             var said = Strings.T("value." + detail);
             return said == "value." + detail ? detail.Replace('_', ' ') : said;
         }
-        if (type == "refuel" && litres is { } l) return units.FormatVolume(l);
+        // A battery is filled with kilowatt hours, and the same field holds them.
+        if (type is "refuel" or "assist_refuel" && litres is { } l) {
+            return energy ? Units.FormatEnergy(l) : units.FormatVolume(l);
+        }
         if (type == "collision") {
             // Identifiers, so they are read here rather than stored as words. Rows
             // written before they were recorded have the old unit text instead, and
@@ -832,7 +841,7 @@ public class DeliveryStore : IDisposable {
                        COALESCE(special_transport, 0),
                        truck_damage_start_pct, trailer_damage_start_pct, cargo_damage_start_pct,
                        COALESCE(source_city_id, ''), COALESCE(destination_city_id, ''),
-                       COALESCE(truck_id, '')
+                       COALESCE(truck_id, ''), COALESCE(xp, 0)
                 FROM deliveries WHERE id = $id;
                 """;
             cmd.Parameters.AddWithValue("$id", id);
@@ -877,6 +886,7 @@ public class DeliveryStore : IDisposable {
                 TruckDamageStart = Opt(49), TrailerDamageStart = Opt(50), CargoDamageStart = Opt(51),
                 SourceCityId = r.GetString(52), DestinationCityId = r.GetString(53),
                 TruckId = r.GetString(54),
+                Xp = r.GetInt32(55),
             };
         }
     }
@@ -1483,7 +1493,10 @@ public class DeliveryStore : IDisposable {
                     COALESCE(SUM(penalty), 0),
                     SUM(CASE WHEN driving_style = 'clean' THEN 1 ELSE 0 END),
                     SUM(CASE WHEN driving_style = 'spirited' THEN 1 ELSE 0 END),
-                    COALESCE(SUM(fuel_used_l), 0),
+                    -- Diesel only. The same field on an electric tractor holds
+                    -- kilowatt hours, and a total that adds those to gallons is a
+                    -- number of nothing. The battery is summed on its own below.
+                    COALESCE(SUM(CASE WHEN COALESCE(electric, 0) = 0 THEN fuel_used_l ELSE 0 END), 0),
                     COALESCE(SUM(driving_ms), 0),
                     COALESCE(SUM(driving_game_min), 0),
                     COALESCE(SUM(collisions), 0),
@@ -1493,7 +1506,11 @@ public class DeliveryStore : IDisposable {
                     -- divides two figures that describe the same drives. Imported
                     -- rows carry distance but no game clock, and mixing them in
                     -- inflated the average to hundreds of km/h.
-                    COALESCE(SUM(CASE WHEN driving_game_min > 0 THEN actual_distance_km ELSE 0 END), 0)
+                    COALESCE(SUM(CASE WHEN driving_game_min > 0 THEN actual_distance_km ELSE 0 END), 0),
+                    -- Appended rather than slotted in beside the fuel: the reader
+                    -- below indexes by position.
+                    COALESCE(SUM(CASE WHEN COALESCE(electric, 0) = 1 THEN fuel_used_l ELSE 0 END), 0),
+                    COALESCE(SUM(COALESCE(xp, 0)), 0)
                 FROM deliveries
                 WHERE ($since IS NULL OR started_at_ms >= $since)
                   AND ($until IS NULL OR started_at_ms < $until)
@@ -1518,6 +1535,8 @@ public class DeliveryStore : IDisposable {
                 summary.LateDeliveries = reader.GetInt32(13);
                 summary.TotalFines = reader.GetDouble(14);
                 summary.TimedDistanceKm = reader.GetDouble(15);
+                summary.TotalBatteryKwh = reader.GetDouble(16);
+                summary.TotalXp = reader.GetInt32(17);
             }
         }
 
@@ -1722,6 +1741,12 @@ public class StatsSummary {
     public int Clean;
     public int Spirited;
     public double TotalFuelL;
+    /// <summary>What the electric tractors drew, kept apart from the diesel because
+    /// the two are not the same substance and never add up to one figure.</summary>
+    public double TotalBatteryKwh;
+    /// <summary>Experience the games paid over the same rows. Zero for anything
+    /// recorded before it was kept, and for everything imported.</summary>
+    public int TotalXp;
     public long TotalDrivingMs;
     /// <summary>In-game minutes elapsed across all deliveries. Distances are in
     /// simulated km, so average speed must divide by this, never by real time.</summary>

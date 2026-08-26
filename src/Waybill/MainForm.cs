@@ -2306,7 +2306,8 @@ public partial class MainForm : Form {
             // The document is written in the game's own units, whatever the window is
             // set to, so the timeline figures on it are read in those as well.
             var paper = WaybillSheet.UnitsFor(d.Game);
-            var written = WaybillSheet.Save(d, _store.TimelineRows(d.Id, paper), route, paper, dialog.FileName, 300f, atlas);
+            var written = WaybillSheet.Save(d, _store.TimelineRows(d.Id, paper, Tracking.Trucks.IsElectric(d.TruckId, d.Truck)),
+                                            route, paper, dialog.FileName, 300f, atlas);
             MessageBox.Show(this,
                 Strings.T("sheet.saved") + "\n" + string.Join("\n", written),
                 Strings.T("detail.saveSheet"), MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -2962,7 +2963,7 @@ public partial class MainForm : Form {
         var side = new Panel { Dock = DockStyle.Right, Width = 0, BackColor = Canvas };
         var timeline = new Panel { Dock = DockStyle.Fill, BackColor = Surface, AutoScroll = true };
 
-        var events = _store.TimelineRows(d.Id, u);
+        var events = _store.TimelineRows(d.Id, u, Tracking.Trucks.IsElectric(d.TruckId, d.Truck));
         if (events.Count == 0) {
             timeline.Controls.Add(new Label {
                 Dock = DockStyle.Top, Height = 30, Text = Strings.T("timeline.none"),
@@ -3019,6 +3020,7 @@ public partial class MainForm : Form {
         Row(Strings.T("detail.rest"), $"{d.RestStops}×  ·  {Units.Duration(d.RestMinutes)}");
 
         Group(Strings.T("detail.groupMoney"));
+        if (d.Xp > 0) Row(Strings.T("detail.xp"), $"{d.Xp} XP");
         var paid = d.Outcome == "delivered" ? d.Revenue : -d.Penalty;
         Row(Strings.T("detail.paidOffered"), $"{u.FormatMoney(paid)}  /  {u.FormatMoney(d.OfferedIncome)}");
         Row(Strings.T("detail.fines"), $"{u.FormatMoney(d.FinesTotal)}  ({d.FinesCount}×)");
@@ -3361,8 +3363,14 @@ public partial class MainForm : Form {
                     ?? (s.TotalPenalties > 0
                         ? $"{Strings.T("stats.penalties")} {Units.FormatTotal(_settings.Units, s.PenaltiesByGame)}"
                         : null)),
+            // Diesel in the figure and the battery under it, never added together:
+            // one is a volume and the other is energy, and their sum is a number of
+            // nothing. The comparison against the period before gives way to the
+            // battery when there is one, rather than the two sharing a line.
             StatTile(Strings.T("stats.fuel"), u.FormatVolume(s.TotalFuelL),
-                Change(s.TotalFuelL, x => x.TotalFuelL)),
+                s.TotalBatteryKwh > 0.5
+                    ? $"{Units.FormatEnergy(s.TotalBatteryKwh)} {Strings.T("stats.battery")}"
+                    : Change(s.TotalFuelL, x => x.TotalFuelL)),
             // Driving that carried nothing. Shown beside the deliveries rather than
             // folded into them: it is real distance, but it earned nothing and was
             // never judged, so adding it to the delivery figure would flatter both.

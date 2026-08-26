@@ -518,6 +518,7 @@ public class JobTracker {
             TruckMake = j.TruckMake,
             TruckModel = j.TruckModel,
             TruckId = j.TruckId,
+            Electric = Trucks.IsElectric(j.TruckId, $"{j.TruckMake} {j.TruckModel}"),
             TrailerName = j.TrailerName,
             TrailerId = j.TrailerId,
             TrailerChainType = ChainType(j),
@@ -959,10 +960,11 @@ public class JobTracker {
                     j.RestMinutes += slept;
                     j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = slept });
                 } else {
-                    // Time went by with the driver awake: a charge, a repair, a job
-                    // taken from a menu. Noted as what it is, which is a stop, rather
-                    // than written down as sleep nobody had.
+                    // Time went by with the driver awake: a repair, a job taken from a
+                    // menu, or the roadside assistance filling the tank. Noted as what
+                    // it is rather than written down as sleep nobody had.
                     found.Add(new Anomaly { AtMs = nowMs, Code = "awake_gap", DtMs = dtMs, Delta = jumpedMin });
+                    Assisted(j, snap, prev, nowMs, jumpedMin);
                 }
             }
         }
@@ -1083,6 +1085,7 @@ public class JobTracker {
                         j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "rest", Value = slept });
                     } else {
                         found.Add(new Anomaly { AtMs = nowMs, Code = "awake_gap", DtMs = dtMs, Delta = gameMinutesPassed });
+                        Assisted(j, snap, prev, nowMs, gameMinutesPassed);
                     }
                 }
             } else {
@@ -1176,6 +1179,33 @@ public class JobTracker {
     /// A recording made before that field was read has nothing to go on and keeps the
     /// old behaviour, which is to believe the jump.
     /// </summary>
+    /// <summary>
+    /// The roadside assistance, which costs hours rather than money.
+    ///
+    /// Running dry is not a refuel: nobody drives to a pump, nothing is paid, and the
+    /// game takes two hours of the clock and leaves a fixed amount in the tank. It
+    /// reports no event for it at all, so it is read from what it does: time passes
+    /// with the driver awake, the truck does not move, and the tank goes up. That is
+    /// the only thing in these games that fills a tank without a pump.
+    ///
+    /// It happens to a diesel truck as well. It showed up first on an electric one
+    /// because a battery runs out sooner and there is nowhere to plug it in.
+    /// </summary>
+    private static void Assisted(JobState j, Snapshot snap, Snapshot prev, long nowMs, double costMin) {
+        var filled = snap.Truck.FuelL - prev.Truck.FuelL;
+        if (filled <= 0.5) return;
+        // A truck being helped at the roadside does not move, so an odometer that
+        // jumped is a different truck: taking a quick job hands over one with a full
+        // tank, which is a tank filling without a pump and is not this. Two of those
+        // were caught calling themselves assistance before this line existed.
+        if (Math.Abs(snap.Truck.OdometerKm - prev.Truck.OdometerKm) > 0.05) return;
+        j.PendingRefuelL = 0;
+        j.Timeline.Add(new JobEvent {
+            AtMs = nowMs, Type = "assist_refuel",
+            Value = Math.Round(costMin), Litres = Math.Round(filled, 1),
+        });
+    }
+
     private static bool WasAsleep(Snapshot snap, Snapshot prev) {
         // A sleeping truck does not move an inch. A quick job taken from a menu also
         // puts the rest timer up, because the game hands over a fresh driver with it,
@@ -1256,6 +1286,7 @@ public class JobTracker {
             TruckMake = j.TruckMake,
             TruckModel = j.TruckModel,
             TruckId = j.TruckId,
+            Electric = Trucks.IsElectric(j.TruckId, $"{j.TruckMake} {j.TruckModel}"),
             TrailerName = j.TrailerName,
             TrailerId = j.TrailerId,
             TrailerChainType = ChainType(j),
@@ -1302,6 +1333,7 @@ public class JobTracker {
 
         if (outcome == "delivered" && payload is JobDeliveredEvent jd) {
             record.Revenue = jd.Revenue;
+            record.Xp = (int)Math.Round(jd.EarnedXp);
             record.DeliveredCargoDamage = jd.CargoDamage;
             record.AutoparkUsed = jd.AutoparkUsed;
             record.ReportedDistanceKm = jd.DistanceKm;

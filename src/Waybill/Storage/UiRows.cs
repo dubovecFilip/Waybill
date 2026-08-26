@@ -102,6 +102,9 @@ public class DeliveryDetail {
     /// <summary>The identifier of the tractor, which is the only thing that says
     /// whether it runs on a battery. See <see cref="Waybill.Tracking.Trucks"/>.</summary>
     public string TruckId = "";
+    /// <summary>What the game paid in experience for it. Zero on rows recorded before
+    /// it was kept, and on everything imported from elsewhere.</summary>
+    public int Xp;
     public double CargoMassKg, PlannedDistanceKm, DistanceKm;
     /// <summary>The part of <see cref="DistanceKm"/> driven before the trailer was
     /// hitched, which the plan does not describe. Zero on most jobs.</summary>

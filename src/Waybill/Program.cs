@@ -200,7 +200,8 @@ if (args.Length >= 2 && args[0] == "--export-sheet") {
         : Path.Combine(DeliveryStore.DefaultDir(), WaybillSheet.SuggestedName(detail));
     var atlas = sheetStore.RoutesForGame(detail.Game);
     var points = atlas.Routes.TryGetValue(sheetId, out var pts) ? pts : new List<RoutePoint>();
-    foreach (var file in WaybillSheet.Save(detail, sheetStore.TimelineRows(sheetId, units), points, units, sheetPath, 300f, atlas)) {
+    var timeline = sheetStore.TimelineRows(sheetId, units, Waybill.Tracking.Trucks.IsElectric(detail.TruckId, detail.Truck));
+    foreach (var file in WaybillSheet.Save(detail, timeline, points, units, sheetPath, 300f, atlas)) {
         Console.WriteLine($"Ulozene: {file}");
     }
     return;

@@ -208,6 +208,15 @@ public class JobRecord {
     public double PlannedDistanceKm;
     public double OfferedIncome;
 
+    /// <summary>What the game paid in experience for the delivery. Reported in the
+    /// delivered event and worth keeping: it is the one figure of a job that has
+    /// nothing to do with money or distance.</summary>
+    public int Xp;
+
+    /// <summary>Whether the tractor ran on a battery, which changes what the fuel
+    /// figure above is counted in. See <see cref="Trucks.IsElectric"/>.</summary>
+    public bool Electric;
+
     public string TruckMake = "";
     public string TruckModel = "";
     public string TruckId = "";
