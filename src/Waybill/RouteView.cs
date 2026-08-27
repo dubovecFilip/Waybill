@@ -160,6 +160,17 @@ public class RouteView : Control {
     public bool ShowMarks { get; set; } = true;
 
     /// <summary>
+    /// Whether the pointer can do anything to this drawing at all.
+    ///
+    /// The maps on the live page are pictures rather than instruments: they frame
+    /// themselves, and a wheel turned over one, or a drag across it, would only put
+    /// the drive somewhere the next second's refit takes it away from again. The map
+    /// page is one click away for anybody who wants to go looking.
+    /// </summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool Locked { get; set; }
+
+    /// <summary>
     /// A point the drawing is held on rather than fitting what it holds.
     ///
     /// Set to the truck's own position, this is a map that follows the truck instead
@@ -407,11 +418,19 @@ public class RouteView : Control {
         // panel and every wobble in it looked like a detour.
         wanted = Math.Min(wanted, Math.Max(room.Width, 1) / Math.Max(WorldWidth, 1f));
 
-        // The frame already drawn is kept while everything still fits inside it with
-        // room to spare, which is what stops a live drive twitching every second. The
-        // moment anything reaches the safe edge, and the truck is always the thing
-        // that reaches it first, the frame is redrawn at once.
-        if (!_snapNext && _fitScale > 0 && Holds(minX, maxX, minZ, maxZ)) {
+        // The frame already drawn is kept only while it is still the right frame: the
+        // drive fits inside it with the safe band to spare, it is the size the drive
+        // wants, and the drive is still in the middle of it. Anything else and the map
+        // is fitted again, which is what keeps a growing drive centred rather than
+        // creeping into a corner until it touches the edge.
+        //
+        // The tolerance is what stops it twitching: a second of driving moves the
+        // middle of a long route by a fraction of a pixel, and nothing is redrawn for
+        // that.
+        var offBy = Math.Abs(wanted - _fitScale) / Math.Max(wanted, 0.0001f);
+        var drift = Math.Max(Math.Abs(mid.X - Middle().X), Math.Abs(mid.Y - Middle().Y)) * PerMetre;
+        var settled = offBy < 0.02f && drift < Math.Min(Width, Height) * 0.02f;
+        if (!_snapNext && _fitScale > 0 && settled && Holds(minX, maxX, minZ, maxZ)) {
             _snapNext = false;
             Discard();
             Invalidate();
@@ -423,6 +442,13 @@ public class RouteView : Control {
         _centre = Shifted(mid);
         Discard();
         Invalidate();
+    }
+
+    /// <summary>The point of the world that is drawn in the middle of the room left
+    /// over, which is where a fitted drive is centred.</summary>
+    private PointF Middle() {
+        var room = Room();
+        return ToWorld(room.X + room.Width / 2, room.Y + room.Height / 2);
     }
 
     /// <summary>What is left of the panel once the padding and anything sitting on
@@ -469,7 +495,7 @@ public class RouteView : Control {
 
         // Measured from the middle of the room rather than of the panel, which is
         // where the drawing was centred.
-        var middle = ToWorld(room.X + room.Width / 2, room.Y + room.Height / 2);
+        var middle = Middle();
         return minX >= middle.X - reachX && maxX <= middle.X + reachX
             && minZ >= middle.Y - reachZ && maxZ <= middle.Y + reachZ;
     }
@@ -509,7 +535,7 @@ public class RouteView : Control {
 
     protected override void OnMouseWheel(MouseEventArgs e) {
         base.OnMouseWheel(e);
-        if (_drawn.Count == 0) return;
+        if (Locked || _drawn.Count == 0) return;
         StopReplay();
 
         // Zoom about the pointer: whatever is under it stays under it, which is what
@@ -526,6 +552,7 @@ public class RouteView : Control {
 
     protected override void OnMouseDown(MouseEventArgs e) {
         base.OnMouseDown(e);
+        if (Locked) return;
         StopReplay();
         Focus();
         _dragging = true;
@@ -589,6 +616,7 @@ public class RouteView : Control {
 
     protected override void OnMouseDoubleClick(MouseEventArgs e) {
         base.OnMouseDoubleClick(e);
+        if (Locked) return;
         // Only where a click means nothing else. On the history map the first click
         // has already opened a delivery.
         if (_focus is not null) Fit();
@@ -644,7 +672,10 @@ public class RouteView : Control {
         var g = e.Graphics;
         g.Clear(Backdrop);
 
-        if (_drawn.Count == 0 && _secondary.Count == 0) {
+        // Nothing to draw and nothing to follow. Following something is enough on its
+        // own: a driver on their first evening has no history behind them and still
+        // has a truck, which is the whole of what the map is for at that point.
+        if (_drawn.Count == 0 && _secondary.Count == 0 && Follow is null) {
             if (EmptyText.Length > 0) {
                 using var brush = new SolidBrush(Muted);
                 using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
@@ -660,6 +691,10 @@ public class RouteView : Control {
         if (_focus is { } f) {
             DrawRoute(g, f);
             DrawEnds(g, f);
+        } else if (Follow is { } truck) {
+            // Following without a delivery to single out: the truck is the whole of
+            // what this map is about, so it is drawn where the map is held.
+            DrawTruck(g, ToScreen(truck.X, truck.Y));
         }
         // Names go over the route rather than under it. A label is what makes the
         // line mean somewhere, so the line is not allowed to eat the first letters
@@ -779,6 +814,17 @@ public class RouteView : Control {
         } finally {
             foreach (var p in pens) p.Dispose();
         }
+    }
+
+    /// <summary>The marker for where the truck is now, with the needle for which way
+    /// it points. Shared by the end of a live route and by a map that is following the
+    /// truck with no route to end.</summary>
+    private void DrawTruck(Graphics g, PointF at) {
+        using var fill = new SolidBrush(Accent);
+        using var glow = new SolidBrush(Color.FromArgb(70, Accent));
+        g.FillEllipse(glow, at.X - 9, at.Y - 9, 18, 18);
+        g.FillEllipse(fill, at.X - 5.5f, at.Y - 5.5f, 11, 11);
+        Needle(g, fill, at);
     }
 
     private void DrawEnds(Graphics g, Drawn route) {

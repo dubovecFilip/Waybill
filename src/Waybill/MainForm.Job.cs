@@ -192,6 +192,7 @@ public partial class MainForm {
         _jobMap.EmptyText = Strings.T("job.noRoute");
         _jobMap.Hint = "";
         _jobMap.Cursor = Cursors.Default;
+        _jobMap.Locked = true;
 
         _jobClose = NewMap(CurrentUnits());
         _jobClose.ShowMarks = false;
@@ -200,6 +201,7 @@ public partial class MainForm {
         _jobClose.Hint = "";
         _jobClose.Cursor = Cursors.Default;
         _jobClose.WorldWidth = CloseWorldMetres;
+        _jobClose.Locked = true;
         _jobClose.Visible = false;
 
         var wide = new Panel { Dock = DockStyle.Fill, BackColor = Line, Padding = new Padding(1) };
