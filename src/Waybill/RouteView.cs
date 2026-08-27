@@ -317,10 +317,6 @@ public class RouteView : Control {
         Invalidate();
     }
 
-    /// <summary>Whether this drawing already holds a route with that identifier, which
-    /// is how the live page knows the background it wants is the background it has.</summary>
-    public bool Holding(long id) => _drawn.Any(d => d.Id == id);
-
     /// <summary>
     /// Draws the singled out route again from its beginning, at a steady rate, as
     /// though the drive were being watched from above.

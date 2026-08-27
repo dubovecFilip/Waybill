@@ -287,7 +287,7 @@ rejects in company; the rest are visible and cost the delivery nothing.
 | `unstable_client` | More than two `client_gap` anomalies in one delivery | no |
 | `implausible_top_speed` | Top speed over 180 km/h | no |
 | `distance_inconsistent` | Odometer against speed times game time, outside 0.75 to 1.33 | no |
-| `distance_mismatch` | Measured distance against the game's own figure on arrival, outside 0.8 to 1.25 | no |
+| `distance_mismatch` | Measured distance against the game's own figure on arrival, outside 0.8 to 1.25, and only on jobs the game reports as 10 km or more | no |
 
 ### A jump is not a verdict on its own
 

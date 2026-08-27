@@ -1482,7 +1482,14 @@ public class JobTracker {
         // The game reports its own distance on delivery, in the same simulated km the
         // odometer counts, so this is now a like-for-like comparison and a genuinely
         // strong signal: skipping the drive can't produce a matching odometer delta.
-        if (record.ReportedDistanceKm is > 0 && record.DistanceKm > 0) {
+        //
+        // Only once the job is long enough for the comparison to mean anything. The
+        // game reports whole kilometres, so on a job of one it is saying "somewhere
+        // between half and one and a half", and the manoeuvring at either dock is the
+        // same size as the drive: a delivery across Frankfurt measured 1.9 km against
+        // a reported 1, and there was nothing wrong with it. At ten the rounding is
+        // worth five percent, which the band already allows for.
+        if (record.ReportedDistanceKm is >= 10 && record.DistanceKm > 0) {
             var ratio = record.DistanceKm / record.ReportedDistanceKm.Value;
             if (ratio < 0.8 || ratio > 1.25) flags.Add("distance_mismatch");
         }
