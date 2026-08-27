@@ -2332,7 +2332,23 @@ public partial class MainForm : Form {
         // away" it looked like. The whole row is what gets selected here, so the
         // outline says nothing the highlight has not already said, and it is dropped
         // from the painting. Idempotent, so styling a grid twice is harmless.
-        g.RowPrePaint += (_, e) => e.PaintParts &= ~DataGridViewPaintParts.Focus;
+        g.RowPrePaint += (_, e) => {
+            // Windows outlines whichever cell the keyboard would type into, and on a
+            // dark row that is a black box around one cell of a selected row. The whole
+            // row is what gets selected here, so the outline says nothing the highlight
+            // has not already said.
+            e.PaintParts &= ~DataGridViewPaintParts.Focus;
+
+            // The row lays its own ground across its whole width before its cells are
+            // painted. A table leaves a pixel unpainted where two cells meet, and
+            // whatever was on the screen before survives in it: switching to this page
+            // from another left slivers of the other page's numbers standing in the
+            // gaps between columns.
+            var selected = (e.State & DataGridViewElementStates.Selected) != 0;
+            var style = e.InheritedRowStyle;
+            using var ground = new SolidBrush(selected ? style.SelectionBackColor : style.BackColor);
+            e.Graphics.FillRectangle(ground, e.RowBounds);
+        };
 
         // The row header is left alone here: on the history list it is the gutter an
         // oversize load is marked in, and this runs after that is set up.
