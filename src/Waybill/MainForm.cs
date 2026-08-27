@@ -347,6 +347,11 @@ public partial class MainForm : Form {
     /// table in the database.
     /// </summary>
     private void KeepFeed() {
+        // A demonstration is a picture of a delivery that already happened, put on the
+        // live page so that page can be looked at with no game running. What it says
+        // in the strip belongs to that picture and not to the driver's own evening,
+        // which is why it is shown and not written down.
+        if (DemoDelivery is not null) return;
         try {
             var kept = _feedLines.Select(l => new FeedLineOnDisk {
                 At = l.At, Kind = l.Kind.ToString(), Text = l.Text, Detail = l.Detail,
@@ -400,9 +405,10 @@ public partial class MainForm : Form {
             Dock = DockStyle.Top, Height = 15, Text = line.Text, ForeColor = Ink, AutoEllipsis = true,
             Font = new Font("Segoe UI", 8.5F), TextAlign = ContentAlignment.MiddleLeft,
         };
-        var when = line.Detail.Length > 0
-            ? $"{line.At:HH:mm}  ·  {line.Detail}"
-            : line.At.ToString("HH:mm");
+        // The date as well when it was not today, or a line kept from last night
+        // reads as something that happened an hour ago.
+        var clock = line.At.Date == DateTime.Today ? line.At.ToString("HH:mm") : line.At.ToString("dd.MM HH:mm");
+        var when = line.Detail.Length > 0 ? $"{clock}  ·  {line.Detail}" : clock;
         var under = new Label {
             Dock = DockStyle.Top, Height = 13, Text = when, ForeColor = Muted, AutoEllipsis = true,
             Font = new Font("Segoe UI", 7.5F), TextAlign = ContentAlignment.MiddleLeft,
@@ -3383,23 +3389,25 @@ public partial class MainForm : Form {
             if (Eye(true) is { } open) g.DrawImageUnscaled(open, 6, (r.Height - open.Height) / 2);
             if (Eye(false) is { } shut) g.DrawImageUnscaled(shut, 26, (r.Height - shut.Height) / 2);
         }, Strings.T("legend.layers"), Strings.T("legend.layersWhy"));
-        // The needle on the live map, drawn small and turned a little, since a
-        // compass pointing straight up says nothing about what it is for.
+        // The truck on the live map: the marker for where it is, with the needle for
+        // which way it points, leaning a little so the needle reads as a direction
+        // rather than as decoration.
         Entry((g, r) => {
             g.SmoothingMode = SmoothingMode.AntiAlias;
             var at = new PointF(23, r.Height / 2f);
-            using var rim = new Pen(Color.FromArgb(120, 138, 148, 163));
-            g.DrawEllipse(rim, at.X - 9, at.Y - 9, 18, 18);
+            using var glow = new SolidBrush(Color.FromArgb(70, Accent));
+            using var fill = new SolidBrush(Accent);
+            g.FillEllipse(glow, at.X - 9, at.Y - 9, 18, 18);
+            g.FillEllipse(fill, at.X - 5.5f, at.Y - 5.5f, 11, 11);
             const float lean = -0.42f;
             var nx = MathF.Sin(lean);
             var ny = -MathF.Cos(lean);
-            using var needle = new SolidBrush(Accent);
-            g.FillPolygon(needle, new[] {
-                new PointF(at.X + nx * 6.5f, at.Y + ny * 6.5f),
-                new PointF(at.X - ny * 2.6f, at.Y + nx * 2.6f),
-                new PointF(at.X + ny * 2.6f, at.Y - nx * 2.6f),
+            g.FillPolygon(fill, new[] {
+                new PointF(at.X + nx * 13, at.Y + ny * 13),
+                new PointF(at.X - ny * 4.6f - nx * 2.6f, at.Y + nx * 4.6f - ny * 2.6f),
+                new PointF(at.X + ny * 4.6f - nx * 2.6f, at.Y - nx * 4.6f - ny * 2.6f),
             });
-        }, Strings.T("legend.compass"), Strings.T("legend.compassWhy"));
+        }, Strings.T("legend.truck"), Strings.T("legend.truckWhy"));
 
         Heading(Strings.T("legend.elsewhere"));
         Entry((g, r) => {
@@ -4051,6 +4059,7 @@ public partial class MainForm : Form {
             }
         }
         _routes.Clear();
+        _roamed.Clear();
         ApplyFilter();
         ReloadMapPage();
         ReloadSessions();
@@ -4069,6 +4078,18 @@ public partial class MainForm : Form {
     private GameRoutes RoutesFor(string game) {
         if (!_routes.TryGetValue(game, out var routes)) _routes[game] = routes = _store.RoutesForGame(game);
         return routes;
+    }
+
+    /// <summary>Everything driven with nothing on the hook, kept beside the routes and
+    /// thrown away with them. The map of the drive in progress asks for this every
+    /// second, and it is a table scan.</summary>
+    private readonly Dictionary<string, List<List<RoutePoint>>> _roamed = new();
+
+    private List<List<RoutePoint>> RoamedIn(string game) {
+        if (!_roamed.TryGetValue(game, out var lines)) {
+            _roamed[game] = lines = _store.FreeroamRoutes(game).ToList();
+        }
+        return lines;
     }
 
     private void ApplyFilter() {

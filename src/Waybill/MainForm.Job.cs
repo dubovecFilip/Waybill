@@ -36,6 +36,11 @@ public partial class MainForm {
     /// <summary>Which corner the close view sits in when it is laid over the wide
     /// map, kept so it does not hop about from one second to the next.</summary>
     private ContentAlignment _closeCorner = ContentAlignment.BottomRight;
+
+    /// <summary>Which game's history the two maps are holding behind the drive. Taking
+    /// a history apart into stretches is the most expensive thing either of them does,
+    /// and it is worth doing once rather than once a second.</summary>
+    private string _mapsHolding = "";
     private Panel? _jobLaunch;
 
     /// <summary>What the map is currently drawing, so it is only redrawn when there
@@ -304,7 +309,7 @@ public partial class MainForm {
     /// and only moved when another corner is clearly emptier, so it does not hop from
     /// one second to the next as the line grows.
     /// </summary>
-    private void ChooseCorner(List<TripPoint> points) {
+    private void ChooseCorner(List<RoutePoint> points) {
         if (points.Count < 30) return;
 
         double minX = double.MaxValue, maxX = double.MinValue, minZ = double.MaxValue, maxZ = double.MinValue;
@@ -532,50 +537,52 @@ public partial class MainForm {
         _jobShown = points.Count;
 
         var history = game.Length > 0 ? RoutesFor(game) : null;
-        var behind = history is null ? new List<RouteLayer>() : Layers(history).ToList();
         var cities = history?.Cities ?? new List<CityAnchor>();
         var freeroam = history is null
             ? new List<List<RoutePoint>>()
-            : history.RunUps.Concat(_store.FreeroamRoutes(game)).ToList();
+            : history.RunUps.Concat(RoamedIn(game)).ToList();
 
-        // Only a delivery is ever singled out. A roaming line is drawn like the rest
-        // of the driving between jobs, in the quieter shade, and the map follows the
-        // truck along it rather than fitting it.
-        var live = state is not null && points.Count >= 2
+        // Whatever is being driven right now is the line singled out, delivery or not.
+        // Deliveries carry their database id and neither of these has one yet, so they
+        // take numbers no row can hold: one for a delivery, another for a roam.
+        var line = points.Count >= 2
             ? new RouteLayer {
-                // Deliveries carry their database id and this drive has none yet, so
-                // it takes one no row can hold rather than borrowing somebody else's.
-                Id = -1,
+                Id = state is not null ? -1 : -2,
                 Points = points.Select(p => new RoutePoint(p.AtMs, (float)p.X, (float)p.Z, (float)p.SpeedKmh)).ToList(),
             }
             : null;
 
-        var layers = live is null ? behind : behind.Append(live).ToList();
-        var trails = live is null && points.Count >= 2
-            ? freeroam.Append(points.Select(p => new RoutePoint(p.AtMs, (float)p.X, (float)p.Z, (float)p.SpeedKmh)).ToList()).ToList()
-            : freeroam;
-        _jobMap.Show(layers, live?.Id ?? 0, cities, null, trails);
-
-        // Following the truck when there is no delivery to fit, and only then: with a
-        // job on, the wide map is the delivery and the close view is what follows.
         var at = points.Count > 0
             ? new PointF((float)points[^1].X, (float)points[^1].Z)
             : (PointF?)null;
-        _jobMap.Follow = live is null ? at : null;
+
+        // The history goes in when the game it belongs to changes, and not again. It
+        // does not move while somebody drives, and taking every route of it apart once
+        // a second is the most expensive thing this page can do; after that only the
+        // line being driven is handed over, which leaves the picture underneath alone.
+        if (_mapsHolding != game) {
+            var behind = history is null ? new List<RouteLayer>() : Layers(history).ToList();
+            _jobMap.Show(behind, 0, cities, null, freeroam);
+            _jobClose?.Show(behind, 0, cities, null, freeroam);
+            _mapsHolding = game;
+        }
+        if (line is not null) _jobMap.ShowLive(line);
+
+        // The wide map fits the delivery, or follows the truck when there is none to
+        // fit. With a delivery on, the close view is what follows.
+        _jobMap.Follow = state is null ? at : null;
         _jobMap.WorldWidth = CloseWorldMetres;
 
-        ShowCloseUp(layers, live, cities, trails, at);
+        ShowCloseUp(line, at, state is not null);
     }
 
     /// <summary>The close view, which exists only while a delivery is on: without one
-    /// the wide map is already following the truck and a second one saying the same
+    /// the wide map is already following the truck, and a second map saying the same
     /// thing would be a waste of the panel.</summary>
-    private void ShowCloseUp(List<RouteLayer> layers, RouteLayer? live, List<CityAnchor> cities,
-                             List<List<RoutePoint>> freeroam, PointF? at) {
+    private void ShowCloseUp(RouteLayer? line, PointF? at, bool onAJob) {
         if (_jobClose is null || _jobCloseFrame is null) return;
 
-        var wanted = live is not null && at is not null;
-        if (!wanted) {
+        if (!onAJob || line is null || at is null) {
             _jobClose.Visible = false;
             _jobCloseFrame.Visible = false;
             if (_jobCloseCorner is { } hide) hide.Visible = false;
@@ -586,8 +593,8 @@ public partial class MainForm {
 
         _jobClose.Visible = true;
         _jobClose.Follow = at;
-        _jobClose.Show(layers, live!.Id, cities, null, freeroam);
-        ChooseCorner(live.Points.Select(p => new TripPoint { X = p.X, Z = p.Z }).ToList());
+        _jobClose.ShowLive(line);
+        ChooseCorner(line.Points);
         PlaceCloseUp();
     }
 }

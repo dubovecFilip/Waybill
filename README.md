@@ -182,17 +182,29 @@ pointing. Where the truck is going can be worked out from two positions, where
 it is pointing cannot, and the two are different things reversing onto a dock.
 It redraws every second, which is the rate the tracker records at, and it can be
 switched off in *Settings* for anyone who would rather the machine spent those
-milliseconds on the game. It turns the drive to whatever angle fills the shape
-of the panel it is in: a wide panel gets the drive lying down, a tall one gets it
-standing up, and either way it fills the room instead of drawing a thread down
-the middle. The angle is chosen by trying half a turn of them and keeping the one
-that draws the route biggest.
+milliseconds on the game.
 
-It says how far it turned. North in both games is the negative z of their own
-space, which the cities settle beyond doubt: sort the drops by z and Yakima comes
-first and Tucson last. The drawing may be turned up to a quarter turn either side
-of it, and a compass in the corner carries whatever turn was taken, so a picture
-with north pointing sideways still says so.
+North is up, always. The drawing used to turn itself to whatever angle filled the
+panel, with a compass in the corner to admit how far it had gone, and not turning is
+the better answer to the same problem: a glance at this and a glance at the map in
+the cab agree without either of them having to be read twice. North in both games is
+the negative z of their own space, which the cities settle beyond doubt: sort the
+drops by z and Yakima comes first and Tucson last.
+
+Behind the drive is the rest of that game's history, in the quieter line the map page
+uses, so a delivery in a corner of the map has somewhere to sit. Only the delivery is
+singled out, and only it decides the frame.
+
+Beside it, or under it, or over a corner of it, is a second map holding the truck in
+the middle at a fixed scale of about thirty kilometres of road across. Where it goes
+follows the shape of the room: a column down the right of a wide panel, a band along
+the bottom of a tall one, and a corner of a square one, where the wide map is told to
+keep the drive out from under it. And with no delivery on at all, the wide map does
+the following itself, drawing the line being roamed.
+
+Neither of them takes a wheel or a drag. They are pictures that reframe themselves
+every second, so anything the pointer did to them would be undone a moment later; the
+map page is one click away for anyone who wants to go looking.
 
 It grows without twitching, and without losing the truck off the edge. A drive
 being watched is refitted every second, and while everything still sits inside the

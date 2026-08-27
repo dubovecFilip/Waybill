@@ -57,20 +57,37 @@ public class RouteView : Control {
         public List<RoutePoint> All = new();
         public List<List<RoutePoint>> Runs = new();
         public List<int> RunStart = new();
+        /// <summary>What each stretch covers, so one that is nowhere near the panel
+        /// can be skipped without walking its points.</summary>
+        public List<RectangleF> RunBounds = new();
 
         public void Index() {
             RunStart = new List<int>(Runs.Count);
+            RunBounds = new List<RectangleF>(Runs.Count);
             var at = 0;
             foreach (var run in Runs) {
                 RunStart.Add(at);
                 at += run.Count;
+                RunBounds.Add(Around(run));
             }
+        }
+
+        public static RectangleF Around(List<RoutePoint> run) {
+            float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
+            foreach (var p in run) {
+                minX = Math.Min(minX, p.X); maxX = Math.Max(maxX, p.X);
+                minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z);
+            }
+            return run.Count == 0
+                ? RectangleF.Empty
+                : RectangleF.FromLTRB(minX, minZ, maxX, maxZ);
         }
     }
 
     private List<Drawn> _drawn = new();
     /// <summary>Stretches belonging to no delivery, already split into runs.</summary>
     private List<List<RoutePoint>> _secondary = new();
+    private List<RectangleF> _secondaryBounds = new();
     private Drawn? _focus;
     private List<CityAnchor> _cities = new();
     private List<(TimelineRow Row, RoutePoint At, int Index)> _marks = new();
@@ -266,6 +283,7 @@ public class RouteView : Control {
         foreach (var d in _drawn) d.Index();
         _secondary = (secondary ?? Enumerable.Empty<List<RoutePoint>>())
                      .SelectMany(Split).Where(r => r.Count > 1).ToList();
+        _secondaryBounds = _secondary.Select(Drawn.Around).ToList();
         _focus = _drawn.FirstOrDefault(d => d.Id == focus);
         _cities = cities;
         _marks = PlaceMarks(marks);
@@ -276,6 +294,32 @@ public class RouteView : Control {
         Discard();
         Invalidate();
     }
+
+    /// <summary>
+    /// Replaces only the route being singled out, leaving everything behind it alone.
+    ///
+    /// The history does not change while a delivery is being driven, and taking it
+    /// apart and drawing it again every second is the most expensive thing this
+    /// control can be asked to do. Nothing is discarded here: the picture underneath
+    /// holds everything except the singled out route, so it stays good until the frame
+    /// itself moves, and it knows when that happens.
+    /// </summary>
+    public void ShowLive(RouteLayer live) {
+        var drawn = new Drawn { Id = live.Id, All = live.Points, Runs = Split(live.Points) };
+        if (drawn.Runs.Count == 0) return;
+        drawn.Index();
+
+        _drawn.RemoveAll(d => d.Id == live.Id);
+        _drawn.Add(drawn);
+        _focus = drawn;
+        _sweep = 1;
+        _fitted = false;
+        Invalidate();
+    }
+
+    /// <summary>Whether this drawing already holds a route with that identifier, which
+    /// is how the live page knows the background it wants is the background it has.</summary>
+    public bool Holding(long id) => _drawn.Any(d => d.Id == id);
 
     /// <summary>
     /// Draws the singled out route again from its beginning, at a steady rate, as
@@ -449,6 +493,14 @@ public class RouteView : Control {
     private PointF Middle() {
         var room = Room();
         return ToWorld(room.X + room.Width / 2, room.Y + room.Height / 2);
+    }
+
+    /// <summary>What the panel can see, in the world's own metres, with a margin so a
+    /// stretch that only just reaches the edge is still drawn.</summary>
+    private RectangleF Seen() {
+        var topLeft = ToWorld(-40, -40);
+        var bottomRight = ToWorld(Width + 40, Height + 40);
+        return RectangleF.FromLTRB(topLeft.X, topLeft.Y, bottomRight.X, bottomRight.Y);
     }
 
     /// <summary>What is left of the panel once the padding and anything sitting on
@@ -743,10 +795,17 @@ public class RouteView : Control {
 
             // Driving that carried nothing, under everything else and without any
             // hue of its own: the deliveries are the network, this is wandering.
+            // What the panel can see, in the world's own metres. A drawing held close
+            // to the truck has almost the whole history off the edges of it, and
+            // projecting a stretch only to throw every point away is the one cost
+            // worth avoiding here.
+            var seen = Seen();
+
             if (ShowFreeroam) {
                 using var spare = new Pen(Color.FromArgb(_focus is null ? 105 : 46, 132, 136, 142), 0.9f);
-                foreach (var run in _secondary) {
-                    var pts = Reduce(Project(run), 0.7f);
+                for (var i = 0; i < _secondary.Count; i++) {
+                    if (i < _secondaryBounds.Count && !seen.IntersectsWith(_secondaryBounds[i])) continue;
+                    var pts = Reduce(Project(_secondary[i]), 0.7f);
                     if (pts.Length > 1) ug.DrawLines(spare, pts);
                 }
             }
@@ -755,7 +814,9 @@ public class RouteView : Control {
                 if (d == _focus) continue;
                 if (!ShowHistory && d.Id != _lit) continue;
                 var pen = d.Id == _lit && _lit != 0 ? loud : quiet;
-                foreach (var run in d.Runs) {
+                for (var i = 0; i < d.Runs.Count; i++) {
+                    if (i < d.RunBounds.Count && !seen.IntersectsWith(d.RunBounds[i])) continue;
+                    var run = d.Runs[i];
                     // Simplified against the screen, not the world: points closer
                     // together than a pixel cannot be told apart, and on a whole-map
                     // view that is about 97 % of them.
