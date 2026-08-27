@@ -365,7 +365,7 @@ public static class WaybillSheet {
     ///
     /// The front is the consignment: who, what, how far, how much, and the route as
     /// it was actually driven. The second sheet is the equipment and the load: the
-    /// tractor, the coupled set unit by unit, what the run cost in fuel and time, and
+    /// truck, the coupled set unit by unit, what the run cost in fuel and time, and
     /// the speed trace. The back is the log of everything that happened along the
     /// way, with the stamp under it.
     /// </summary>

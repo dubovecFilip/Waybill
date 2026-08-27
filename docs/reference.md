@@ -114,7 +114,7 @@ The case this exists for: Yakima to Camp Verde took an afternoon, an evening and
 the next morning, 15.6 %, 38.5 % and 45.9 % of the driving. Counted where it
 began, two of those three sittings read as though nobody had driven at all.
 
-## Electric tractors
+## Electric trucks
 
 Telemetry has no field for it. What it has is the identifier and the name, and
 both games are consistent: an electric variant is the diesel one with `_e` on the

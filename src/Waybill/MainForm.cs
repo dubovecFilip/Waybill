@@ -657,7 +657,7 @@ public partial class MainForm : Form {
     private readonly DataGridView _truckGrid = new();
 
     /// <summary>
-    /// What each tractor has done, side by side.
+    /// What each truck has done, side by side.
     ///
     /// The statistics answer for a period and the card answers for one drive.
     /// Neither answers "is the Volvo actually cheaper to run than the Peterbilt",
@@ -720,7 +720,7 @@ public partial class MainForm : Form {
     /// Says on hover what a column heading has no room to say.
     ///
     /// A heading is one or two words or it wraps, and one or two words cannot carry
-    /// "the damage this tractor takes on an average delivery, rather than in total".
+    /// "the damage this one takes on an average delivery, rather than in total".
     /// So the rule for the whole window is the short word in the heading and the
     /// sentence under the pointer, on the cells as well as on the heading, since
     /// somebody who wonders about a figure points at the figure.
@@ -2080,7 +2080,7 @@ public partial class MainForm : Form {
     private void OnFilterChanged(object? sender, EventArgs e) => ApplyFilter();
 
     /// <summary>How wide the gutter is: a verdict dot, then the oversize band.</summary>
-    // Room for three marks side by side: the bolt of an electric tractor, the
+    // Room for three marks side by side: the bolt of an electric truck, the
     // verdict, and the band of an oversize load down the edge. Each keeps its own
     // place whether or not the row has it, so the verdicts still read as one column
     // down the list rather than shuffling left and right by row.
@@ -2104,7 +2104,7 @@ public partial class MainForm : Form {
     /// paints itself after the row does, so anything put there first was covered up
     /// by the header's own background a moment later.
     /// </summary>
-    /// <summary>The mark for a tractor that runs on a battery: the same lightning
+    /// <summary>The mark for a truck that runs on a battery: the same lightning
     /// bolt it wears on its own cab, drawn rather than taken from a font, since the
     /// glyph for it is missing from half the fonts Windows ships with.</summary>
     private static void Bolt(Graphics g, RectangleF box) {
@@ -3755,7 +3755,7 @@ public partial class MainForm : Form {
         Row(Strings.T("detail.fines"), $"{u.FormatMoney(d.FinesTotal)}  ({d.FinesCount}×)");
         Row(Strings.T("detail.tolls"), u.FormatMoney(d.TollsPaid));
         // A battery is not a tank. The figure comes out of the same telemetry field,
-        // and on an electric tractor the game puts kilowatt hours in it.
+        // and on an electric truck the game puts kilowatt hours in it.
         var battery = Tracking.Trucks.IsElectric(d.TruckId, d.Truck);
         Row(Strings.T("detail.fuel"), battery ? Units.FormatEnergy(d.FuelUsedL) : u.FormatVolume(d.FuelUsedL));
         if (battery && d.AvgConsumption is { } kwh) Row(Strings.T("detail.consumption"), u.FormatEnergyPer100(kwh));
@@ -4016,7 +4016,7 @@ public partial class MainForm : Form {
             // And the identifiers behind the two city names, which are how the region
             // beside a city is looked up and not something anybody reads.
             nameof(DeliveryRow.OdkialId), nameof(DeliveryRow.KamId), nameof(DeliveryRow.Dokoncene),
-            // And whether the tractor was electric, which is drawn in the gutter. The
+            // And whether the truck was electric, which is drawn in the gutter. The
             // grid makes a column out of every property it is given, so anything meant
             // for the gutter has to be taken back off here or it arrives as a column
             // headed with the name of the field, in every language at once.

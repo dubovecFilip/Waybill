@@ -400,7 +400,7 @@ rather than only tested.
 - A strip at the foot of the sidebar saying the last five things Waybill noticed,
   beside every page rather than on one, each line marked for what it was: a load
   taken on, a load handed over, an award earned
-- Electric tractors told from diesel ones by their identifier, counted in kilowatt
+- Electric trucks told from diesel ones by their identifier, counted in kilowatt
   hours everywhere a tank would be counted in litres, and kept apart in the totals
 - A sleep told from a charging stop, a repair or a job taken from a menu, since the
   game jumps its clock for all four and only one of them is rest
@@ -412,7 +412,7 @@ statistics page answers for a week or a month and says how each figure moved
 against the same length of time before it, and it can be narrowed to one game.
 Session statistics are built: a page of sittings at the wheel, each with what was
 driven in it, where a sitting is one run of the app and runs close together are
-the same sitting. One truck against another is built, as a page of its own: a row per tractor over
+the same sitting. One truck against another is built, as a page of its own: a row per truck over
 the whole history, since a week's window hides the difference between a truck that
 has pulled twenty-six loads and one that has pulled one. Achievements are
 built, as a page of their own: seventy-two of them on four shelves, worth

@@ -78,7 +78,7 @@ public class DeliveryStore : IDisposable {
             // What the game calls a city when it is talking to itself. Two cities can
             // share a name inside one game and never an identifier, so this is what
             // tells the Salina in Utah from the one in Kansas.
-            // Whether the tractor ran on a battery, which decides what unit the fuel
+            // Whether the truck ran on a battery, which decides what unit the fuel
             // figure is in. Derived from the identifier rather than reported, and kept
             // because a total across deliveries has to be able to ask in SQL.
             ("deliveries", "electric", "INTEGER"),
@@ -939,7 +939,7 @@ public class DeliveryStore : IDisposable {
     }
 
     /// <summary>
-    /// Every tractor that has pulled a delivery, with what it has done.
+    /// Every truck that has pulled a delivery, with what it has done.
     ///
     /// Grouped by what the truck is rather than by which one it was: two Peterbilt
     /// 389s in a garage are the same answer to "how does a 389 do for me", and
@@ -1742,7 +1742,7 @@ public class DeliveryStore : IDisposable {
                     COALESCE(SUM(penalty), 0),
                     SUM(CASE WHEN driving_style = 'clean' THEN 1 ELSE 0 END),
                     SUM(CASE WHEN driving_style = 'spirited' THEN 1 ELSE 0 END),
-                    -- Diesel only. The same field on an electric tractor holds
+                    -- Diesel only. The same field on an electric truck holds
                     -- kilowatt hours, and a total that adds those to gallons is a
                     -- number of nothing. The battery is summed on its own below.
                     COALESCE(SUM(CASE WHEN COALESCE(electric, 0) = 0 THEN fuel_used_l ELSE 0 END), 0),
@@ -1990,7 +1990,7 @@ public class StatsSummary {
     public int Clean;
     public int Spirited;
     public double TotalFuelL;
-    /// <summary>What the electric tractors drew, kept apart from the diesel because
+    /// <summary>What the electric trucks drew, kept apart from the diesel because
     /// the two are not the same substance and never add up to one figure.</summary>
     public double TotalBatteryKwh;
     /// <summary>Experience the games paid over the same rows. Zero for anything

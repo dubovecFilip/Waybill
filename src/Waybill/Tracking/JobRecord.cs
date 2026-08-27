@@ -213,7 +213,7 @@ public class JobRecord {
     /// nothing to do with money or distance.</summary>
     public int Xp;
 
-    /// <summary>Whether the tractor ran on a battery, which changes what the fuel
+    /// <summary>Whether the truck ran on a battery, which changes what the fuel
     /// figure above is counted in. See <see cref="Trucks.IsElectric"/>.</summary>
     public bool Electric;
 

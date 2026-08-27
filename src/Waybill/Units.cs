@@ -126,7 +126,7 @@ public class Units {
     /// What a battery holds, which is never litres and never gallons.
     ///
     /// The telemetry field is the same one a diesel tank uses, and on an electric
-    /// tractor the game fills it with kilowatt hours: the 565 in a VNR Electric is
+    /// truck the game fills it with kilowatt hours: the 565 in a VNR Electric is
     /// 565 kWh, not 565 of anything pourable. Converting it produced a delivery that
     /// claimed 228.8 gal and 1.4 mpg. Nothing is converted here, in either system,
     /// because a kilowatt hour is a kilowatt hour on both sides of the Atlantic.

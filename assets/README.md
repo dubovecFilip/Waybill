@@ -14,7 +14,7 @@
 | `map.png` | The map page, with one route lit under the pointer. |
 | `statistics.png` | The statistics page, with the period and game it is answering for. |
 | `sessions.png` | The sittings at the wheel, one of them picked. |
-| `trucks.png` | Every tractor that has pulled a delivery, side by side. |
+| `trucks.png` | Every truck that has pulled a delivery, side by side. |
 | `awards.png` | The awards, earned and still to come, under the driver's own standing. |
 | `waybill-sheet.png` | A delivery exported as three A4 sheets, side by side. |
 | `legend.png` | Every mark the window uses, with what it means. |
@@ -28,9 +28,11 @@ else can end up in the picture and the window does not have to be in front.
 
 `waybill-sheet.png` is the exception: it is not a screenshot but a real export,
 its three sheets downscaled from the 300 dpi originals to 1000 px tall and set
-side by side, so each keeps A4's proportions rather than the window's. `legend.png` is the other: it is a dialog, so it is its
-own width, and it was stretched tall enough to show every entry at once rather
-than shown at its default size with half the list below the fold.
+side by side, so each keeps A4's proportions rather than the window's. `legend.png`
+is the other: it is a dialog, so it is its own width, and it was stretched tall
+enough to show every entry at once rather than shown at its default size with half
+the list below the fold. Being asked of the window rather than copied off the screen
+is what lets it be taller than the screen is.
 
 Each is named for what it shows rather than for where it happens to appear, so
 moving one around the README does not leave the name lying.

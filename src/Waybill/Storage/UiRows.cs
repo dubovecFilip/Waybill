@@ -4,7 +4,7 @@ namespace Waybill.Storage;
 
 /// <summary>One row in the deliveries grid. Property names are the column headers,
 /// so they are deliberately short and in Slovak like the rest of the UI.</summary>
-/// <summary>One tractor's whole life, for holding two of them side by side.</summary>
+/// <summary>One truck's whole life, for holding two of them side by side.</summary>
 public class TruckRow {
     public string Kamion { get; set; } = "";
     public int Zasielky { get; set; }
@@ -21,7 +21,7 @@ public class TruckRow {
     public double PokutyRaw { get; set; }
     public string Pokuty { get; set; } = "";
     public int Kolizie { get; set; }
-    /// <summary>Damage the tractor took on an average delivery, as a share. Averaged
+    /// <summary>Damage the truck took on an average delivery, as a share. Averaged
     /// rather than totalled: a total grows with how much a truck was driven, so it
     /// compares the driver's history rather than the trucks.</summary>
     public double DamagePerJob { get; set; }
@@ -77,7 +77,7 @@ public class DeliveryRow {
     /// not meant to be: they are what the region beside a city is looked up by.</summary>
     public string OdkialId { get; set; } = "";
     public string KamId { get; set; } = "";
-    /// <summary>Whether the tractor ran on a battery. Marked in the gutter the way an
+    /// <summary>Whether the truck ran on a battery. Marked in the gutter the way an
     /// oversize load is, and not a column: it is one fact about the truck and reads at
     /// a glance or not at all.</summary>
     public bool Elektricky { get; set; }
@@ -117,7 +117,7 @@ public class DeliveryDetail {
     /// on rows recorded before they were kept, where the name is all there is.</summary>
     public string SourceCityId = "", DestinationCityId = "";
     public string Cargo = "", Truck = "", Trailer = "";
-    /// <summary>The identifier of the tractor, which is the only thing that says
+    /// <summary>The identifier of the truck, which is the only thing that says
     /// whether it runs on a battery. See <see cref="Waybill.Tracking.Trucks"/>.</summary>
     public string TruckId = "";
     /// <summary>What the game paid in experience for it. Zero on rows recorded before

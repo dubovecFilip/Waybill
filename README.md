@@ -83,7 +83,7 @@ Every state, flag and anomaly is listed with its meaning in
 * Marks each thing that happened with a sign of its own, and explains every sign
 * Names a trailer for what it is instead of for the file it came out of
 * Marks an oversize load as one, on its card and in the list
-* Marks an electric tractor the same way, and counts its battery in kilowatt hours
+* Marks an electric truck the same way, and counts its battery in kilowatt hours
 * Tells a sleep from a charging stop, a repair or a job taken from a menu
 * Draws the whole history as one map, built entirely from your own drives
 * Writes a delivery out as a three sheet A4 waybill, as pictures or as one PDF
@@ -290,11 +290,11 @@ shaken as well.
 
 ## One truck against another
 
-*Trucks* puts every tractor that has pulled a delivery on a line of its own:
+*Trucks* puts every truck that has pulled a delivery on a line of its own:
 what it has carried, how far, what it earned, what it drank, how fast it
 averaged, what it cost in fines, and what a run costs it in damage.
 
-![Every tractor, side by side](assets/trucks.png)
+![Every truck, side by side](assets/trucks.png)
 
 Over the whole history rather than a period, because a truck's life is the
 comparison worth having: one of them has pulled twenty-six loads and another a
@@ -302,7 +302,7 @@ single one, and a week's window would hide exactly that. Each row is in the unit
 its own truck drinks, so a battery reads in kilowatt hours on the same page as a
 tank reading in gallons.
 
-Damage is what the tractor takes on an average delivery rather than what it has
+Damage is what the truck takes on an average delivery rather than what it has
 taken in total. A total grows with how much a truck has been driven, so it
 compares your history rather than the trucks: 26.9 % against 0.4 % says only
 that one of them has done twenty-six jobs and the other one.
@@ -592,7 +592,7 @@ after: A4 upright, the form printed and the figures written in.
 Three sheets, always the same three, because a consignment note has always been a
 document with a front and a back. The front is the consignment: shipper and
 consignee, the load, the figures, and the route as it was actually run. The
-second is the equipment: the tractor, the coupled set unit by unit with plates and
+second is the equipment: the truck, the coupled set unit by unit with plates and
 condition, what the run cost in fuel, time and tolls, and the speed trace from the
 first mile to the last, which is the chart a tachograph would have drawn. The back
 is the log of everything that happened along the way, ruled to the foot of the

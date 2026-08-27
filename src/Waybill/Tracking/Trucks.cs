@@ -7,7 +7,7 @@ namespace Waybill.Tracking;
 /// </summary>
 public static class Trucks {
     /// <summary>
-    /// Whether the tractor runs on a battery.
+    /// Whether the truck runs on a battery.
     ///
     /// Telemetry has no field for it. What it does have is the identifier and the
     /// name, and the games are consistent about both: an electric variant is the
