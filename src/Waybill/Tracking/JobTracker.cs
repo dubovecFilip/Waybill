@@ -4,6 +4,20 @@ namespace Waybill.Tracking;
 public class TrackerConfig {
     // Anything faster than this between two ticks is treated as a teleport.
     public double TeleportSpeedKmh = 400;
+
+    /// <summary>
+    /// How long after taking a ferry or a train a jump across the map is that
+    /// crossing rather than a teleport.
+    ///
+    /// The game charges for the crossing, fades out, and puts the truck down on the
+    /// far shore a few seconds later: measured on a Rostock to Gedser run, seven
+    /// seconds after the event, moving 1.15 km of world space at an implied 617 km/h.
+    /// Two minutes is far longer than any of that takes and far shorter than it takes
+    /// to drive anywhere that would look like a jump.
+    /// </summary>
+    public const double DefaultCrossingGraceMs = 120000;
+
+    public double CrossingGraceMs = DefaultCrossingGraceMs;
     // Below this a negative odometer delta is just float noise, not a real reversal.
     public double OdometerSlackKm = 0.05;
     // Below this the tick is ignored entirely, protects against duplicate polls.
@@ -551,6 +565,7 @@ public class JobTracker {
         record.DrivingStyle = j.Fines.Count < 3
             && record.HardSpeedingShare < 0.05
             && j.Collisions < 3 ? "clean" : "spirited";
+        MarkCrossings(record, TrackerConfig.DefaultCrossingGraceMs);
         record.Anomalies.Add(new Anomaly { AtMs = nowMs, Code = "abandoned" });
         // Not rejected: nothing here suggests the driving was faked, only that it was
         // never finished, which the cancelled outcome already says.
@@ -1345,6 +1360,7 @@ public class JobTracker {
 
         record.HardSpeedingShare = j.DrivingMs > 0 ? Math.Round((double)j.HardSpeedingMs / j.DrivingMs, 4) : 0;
         record.DrivingStyle = Style(record, j.Fines.Count, j.Collisions);
+        MarkCrossings(record, _config.CrossingGraceMs);
         record.Validation = Validate(record);
         return record;
     }
@@ -1378,6 +1394,35 @@ public class JobTracker {
     /// direct evidence nothing was driven. Everything else stays visible in the
     /// anomalies and the flags, and none of it blocks the delivery.
     /// </summary>
+    /// <summary>
+    /// Calls a jump what it was, when the game had just carried the truck across
+    /// water or over the Alps.
+    ///
+    /// A ferry and a train both put the truck down somewhere it did not drive to, and
+    /// the position check cannot tell that from a teleport: it sees a kilometre of
+    /// world space crossed in seven seconds. The game says so itself, though, by
+    /// charging for the crossing a moment earlier, and that event is already on the
+    /// timeline. A jump beside one of those is the crossing, and it is recorded as a
+    /// crossing rather than as evidence of anything.
+    ///
+    /// Done here rather than as the ticks arrive because the event and the jump can
+    /// land in either order, and looking both ways needs both of them in hand.
+    /// </summary>
+    private static void MarkCrossings(JobRecord record, double graceMs) {
+        var crossings = record.Timeline
+            .Where(e => e.Type is "ferry" or "train")
+            .Select(e => e.AtMs)
+            .ToList();
+        if (crossings.Count == 0) return;
+
+        foreach (var anomaly in record.Anomalies) {
+            if (anomaly.Code != "teleport") continue;
+            if (crossings.Any(at => Math.Abs(anomaly.AtMs - at) <= graceMs)) {
+                anomaly.Code = "crossing";
+            }
+        }
+    }
+
     private static Validation Validate(JobRecord record) {
         var flags = new List<string>();
 
@@ -1418,12 +1463,21 @@ public class JobTracker {
         // the driving behind it, and this claims nothing - the outcome is not
         // "delivered" and there is no payout on it to inflate. So it stays visible as
         // a flag and lands in review, without calling an honest drive a fake.
-        var hard = new[] { "teleport_detected", "distance_too_short", "odometer_manipulation" };
+        // What rejection is for: a delivery claimed without the driving behind it.
+        // Two of these say exactly that, since both mean the distance was never
+        // covered. A jump does not, on its own. The drive that made this rule was a
+        // real one: two thousand kilometres of Europe with a ferry in the middle,
+        // measured 2082.9 km against the game's own 2084, and rejected for the
+        // crossing. So a jump only counts against a delivery when the distance
+        // evidence agrees with it, and stands alone as something to look at.
+        var hard = new[] { "distance_too_short", "odometer_manipulation" };
+        var jumpedAndShort = flags.Contains("teleport_detected")
+                             && (flags.Contains("distance_mismatch") || flags.Contains("distance_inconsistent"));
         // A job that went away with a loaded save was never completed and is not a
         // delivery anyone is claiming, so there is nothing here to reject. Whatever
         // was flagged stays visible, it just cannot invalidate a drive that the game
         // itself has already erased from its own history.
-        var rejected = record.Outcome != "reloaded" && flags.Any(hard.Contains);
+        var rejected = record.Outcome != "reloaded" && (flags.Any(hard.Contains) || jumpedAndShort);
 
         return new Validation {
             Flags = flags,

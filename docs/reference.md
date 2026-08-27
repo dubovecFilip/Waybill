@@ -252,12 +252,12 @@ there was no ordinary passage there to take off.
 
 ## Validation flags
 
-Column `validation_flags`, comma separated. Three of them reject; the rest are
-visible and cost the delivery nothing.
+Column `validation_flags`, comma separated. Two of them reject on their own, one
+rejects in company; the rest are visible and cost the delivery nothing.
 
 | Flag | Raised when | Rejects |
 |---|---|---|
-| `teleport_detected` | Position moved faster than 400 km/h, unexplained by a job start, a gap or a loaded save | yes |
+| `teleport_detected` | Position moved faster than 400 km/h, unexplained by a job start, a gap, a loaded save or a crossing | only with `distance_mismatch` or `distance_inconsistent` |
 | `odometer_manipulation` | The odometer jumped more than 5 km in one tick, unexplained by a job start or a gap | yes |
 | `distance_too_short` | Under 0.5 km driven | yes |
 | `no_completion_event` | Outcome is `unresolved` | no |
@@ -266,6 +266,20 @@ visible and cost the delivery nothing.
 | `implausible_top_speed` | Top speed over 180 km/h | no |
 | `distance_inconsistent` | Odometer against speed times game time, outside 0.75 to 1.33 | no |
 | `distance_mismatch` | Measured distance against the game's own figure on arrival, outside 0.8 to 1.25 | no |
+
+### A jump is not a verdict on its own
+
+The rule used to be that a `teleport` anomaly rejected the delivery outright. The
+drive that ended that rule was an ordinary one: Rijeka to Oslo, two thousand
+kilometres, with the Rostock to Gedser ferry in the middle. Seven seconds after the
+game charged for the crossing it put the truck down on the far shore, 1.15 km of
+world space at an implied 617 km/h, and Waybill called a real delivery a fake.
+
+Two things came of it. A jump within two minutes of a ferry or a train is recorded
+as a `crossing` and feeds nothing, since the game said itself what it was doing.
+And a jump that is not explained that way no longer rejects on its own: it needs
+the distance evidence to agree, because the distance is what says whether the drive
+happened. That same delivery measured 2082.9 km against the game's own 2084.
 
 ## Anomalies
 
@@ -276,6 +290,7 @@ the three marked below feed a flag.
 | Code | What it marks | Feeds |
 |---|---|---|
 | `teleport` | A jump across the map no vehicle could drive | `teleport_detected` |
+| `crossing` | The same jump, within two minutes of a ferry or a train being paid for, which is the game carrying the truck across | |
 | `odometer_jump` | An odometer step too large for driving | `odometer_manipulation` |
 | `client_gap` | A hole in the recording across which the game clock kept running at the rate the game reports, so Waybill was not polling | `unstable_client` past two |
 | `paused_gap` | A hole across which the clock did not: a menu, photo mode, alt tab | |

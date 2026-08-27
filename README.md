@@ -32,9 +32,18 @@ Every finished delivery gets one of three states.
 **Rejection is reserved for a delivery being claimed without the driving behind
 it.** There are three such cases, and no others:
 
-* a teleport, meaning a jump across the map that no vehicle could have driven
 * an odometer that moved further in one instant than driving can account for
 * a distance of essentially zero
+* a jump across the map that no vehicle could have driven, and only when the
+  distance evidence agrees with it
+
+That last one is deliberately narrow. A jump on its own is not proof of anything:
+a ferry and a train both put the truck down somewhere it did not drive to, and the
+game itself charges for the crossing a moment earlier, so a jump beside one of
+those is recorded as the crossing it was. What decides a delivery is the distance,
+which the game reports its own figure for on arrival. Two thousand kilometres of
+Europe measured within a tenth of a percent of what the game said is a drive that
+happened, whatever the middle of it looked like.
 
 Everything else is a flag. A flag is visible on the row and says what it is,
 and that is all it does: the delivery keeps its distance, its payout and its
