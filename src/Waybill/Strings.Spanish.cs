@@ -199,6 +199,7 @@ public static partial class Strings {
         ["stats.favRoute"] = "ruta favorita",
         ["stats.favCargo"] = "carga favorita",
         ["stats.realTime"] = "h reales",
+        ["unit.gameMinutes"] = "min del juego",
         ["stats.gameTime"] = "h en el juego",
 
         ["msg.jobStart"] = "INICIO",

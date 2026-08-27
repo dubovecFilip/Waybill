@@ -199,6 +199,7 @@ public static partial class Strings {
         ["stats.favRoute"] = "oblíbená trasa",
         ["stats.favCargo"] = "oblíbený náklad",
         ["stats.realTime"] = "h reálně",
+        ["unit.gameMinutes"] = "herních min",
         ["stats.gameTime"] = "h ve hře",
 
         ["msg.jobStart"] = "START",
