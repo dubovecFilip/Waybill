@@ -299,6 +299,7 @@ public partial class MainForm : Form {
     /// this narrow the words get cut and the mark never does.
     /// </summary>
     private Control BuildFeed() {
+        if (_feedLines.Count == 0) ReadFeed();
         _feed.Dock = DockStyle.Bottom;
         _feed.BackColor = Surface;
         _feed.Padding = new Padding(0, 6, 0, 6);
@@ -330,7 +331,53 @@ public partial class MainForm : Form {
     private void Happened(Noticed kind, string text, string detail = "") {
         _feedLines.Add((DateTime.Now, kind, text, detail));
         while (_feedLines.Count > FeedLines) _feedLines.RemoveAt(0);
+        KeepFeed();
         DrawFeed();
+    }
+
+    /// <summary>Where the last few things that happened are kept between runs.</summary>
+    private static string FeedPath => Path.Combine(DeliveryStore.DefaultDir(), "noticed.json");
+
+    /// <summary>
+    /// Writes the strip down, so closing the window does not wipe the evening.
+    ///
+    /// An award earned an hour ago is still the most recent thing that happened, and a
+    /// strip that empties itself every time the app is opened says nothing at all for
+    /// the first hour of every session. Five lines of text; nothing here is worth a
+    /// table in the database.
+    /// </summary>
+    private void KeepFeed() {
+        try {
+            var kept = _feedLines.Select(l => new FeedLineOnDisk {
+                At = l.At, Kind = l.Kind.ToString(), Text = l.Text, Detail = l.Detail,
+            }).ToList();
+            File.WriteAllText(FeedPath, Newtonsoft.Json.JsonConvert.SerializeObject(kept, Newtonsoft.Json.Formatting.Indented));
+        } catch {
+            // A strip that failed to save is not worth interrupting a drive for.
+        }
+    }
+
+    private void ReadFeed() {
+        try {
+            if (!File.Exists(FeedPath)) return;
+            var kept = Newtonsoft.Json.JsonConvert.DeserializeObject<List<FeedLineOnDisk>>(File.ReadAllText(FeedPath));
+            if (kept is null) return;
+            _feedLines.Clear();
+            foreach (var line in kept.TakeLast(FeedLines)) {
+                _feedLines.Add((line.At,
+                    Enum.TryParse<Noticed>(line.Kind, out var kind) ? kind : Noticed.Started,
+                    line.Text, line.Detail));
+            }
+        } catch {
+            // Unreadable means an empty strip, which is where it started anyway.
+        }
+    }
+
+    private sealed class FeedLineOnDisk {
+        public DateTime At { get; set; }
+        public string Kind { get; set; } = "";
+        public string Text { get; set; } = "";
+        public string Detail { get; set; } = "";
     }
 
     private void DrawFeed() => Quiet(_feed, () => {
@@ -1015,7 +1062,10 @@ public partial class MainForm : Form {
     }
 
     private Panel BuildSidebar() {
-        var bar = new Panel { Dock = DockStyle.Left, Width = 176, BackColor = Surface, Padding = new Padding(12, 16, 12, 12) };
+        var bar = new Panel {
+            Dock = DockStyle.Left, Width = SidebarWidth(_settings.SidebarWidth),
+            BackColor = Surface, Padding = new Padding(12, 16, 12, 12),
+        };
         var edge = new Panel { Dock = DockStyle.Right, Width = 1, BackColor = Line };
 
         // Down in the corner, quiet, out of the way of everything and never more
@@ -1041,7 +1091,58 @@ public partial class MainForm : Form {
         bar.Controls.Add(NavButton("deliveries", Strings.T("tab.deliveries")));
         bar.Controls.Add(NavButton("live", Strings.T("tab.live")));
         bar.Controls.Add(edge);
+        bar.Controls.Add(SidebarGrip(bar));
         return bar;
+    }
+
+    /// <summary>Between a column too narrow for its own words and one that has eaten
+    /// the page beside it.</summary>
+    private static int SidebarWidth(int asked) => Math.Clamp(asked, 176, 380);
+
+    /// <summary>
+    /// The handle down the edge of the sidebar.
+    ///
+    /// The strip of what just happened lives at the foot of this column, and an award
+    /// called NOT EVEN A SCRATCH does not fit in it. How much of that is worth the
+    /// width of the page beside it is not a question with one answer, so it is left to
+    /// whoever is reading, and what they choose is remembered.
+    /// </summary>
+    private Control SidebarGrip(Panel bar) {
+        var grip = new Panel { Dock = DockStyle.Right, Width = 5, BackColor = Surface, Cursor = Cursors.SizeWE };
+
+        grip.Paint += (_, e) => {
+            // The same short bar the card's own handles wear, for the same reason: a
+            // rule down the whole edge reads as a border, and nobody pulls a border.
+            using var pen = new Pen(Line, 1f);
+            var mid = grip.Height / 2;
+            for (var y = mid - 14; y <= mid + 14; y += 4) e.Graphics.DrawLine(pen, 1, y, 3, y);
+        };
+
+        var pulling = false;
+        var from = 0;
+        var started = 0;
+
+        grip.MouseDown += (_, e) => {
+            if (e.Button != MouseButtons.Left) return;
+            pulling = true;
+            grip.Capture = true;
+            // Screen coordinates, since the handle moves with the column it sizes.
+            from = Cursor.Position.X;
+            started = bar.Width;
+        };
+        grip.MouseMove += (_, _) => {
+            if (!pulling) return;
+            bar.Width = SidebarWidth(started + (Cursor.Position.X - from));
+        };
+        grip.MouseUp += (_, _) => {
+            if (!pulling) return;
+            pulling = false;
+            _settings.SidebarWidth = bar.Width;
+            _settings.Save();
+            DrawFeed();
+        };
+
+        return grip;
     }
 
     /// <summary>

@@ -17,6 +17,11 @@ public class Settings {
     /// <summary>Where the games are installed, when the automatic search is wrong or
     /// finds nothing: a non Steam copy, a library the registry does not list, or the
     /// empty folder Steam leaves behind after moving a game. Null means search.</summary>
+    /// <summary>How wide the sidebar is, in pixels. Kept because the strip of what
+    /// just happened lives in it, and how much of an award's name fits is worth more
+    /// to one driver than the width of the page beside it is.</summary>
+    public int SidebarWidth { get; set; } = 200;
+
     public string? AtsPath { get; set; }
     public string? Ets2Path { get; set; }
 
