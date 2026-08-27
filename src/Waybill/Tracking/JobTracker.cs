@@ -258,6 +258,17 @@ public class JobTracker {
     /// driving so a restart can hand it back via <see cref="PrepareResume"/>.</summary>
     public JobState? ActiveState => _current;
 
+    /// <summary>Where the truck has been since the last hole in the recording, when no
+    /// delivery is on. The map of the drive in progress follows this while somebody is
+    /// driving about with an empty hook, which is the only useful thing it can do
+    /// then.</summary>
+    public FreeroamState? Roaming => _roam;
+
+    /// <summary>Which way the truck is pointing, job or no job. Kept here as well as on
+    /// the job, since the map wants it either way and only one of the two exists at any
+    /// moment.</summary>
+    public double? Facing { get; private set; }
+
     /// <summary>Puts a job in front of the tracker without any telemetry behind it,
     /// for the demonstration mode. See <see cref="TrackerEngine.ShowDemo"/>.</summary>
     public void ShowDemo(JobState state) => _current = state;
@@ -286,6 +297,7 @@ public class JobTracker {
         var prevAt = _prevAtMs;
         _prev = snap;
         _prevAtMs = nowMs;
+        Facing = snap.HeadingTurns;
 
         // First tick after a connect has nothing to compare against.
         if (prev == null || prevAt == null) return outEvents;

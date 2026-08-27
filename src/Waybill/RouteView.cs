@@ -81,7 +81,7 @@ public class RouteView : Control {
     private bool _fitted;
 
     private Bitmap? _under;
-    private (int W, int H, float Scale, float CX, float CY, float Spin, long Lit, bool History, bool Freeroam) _underKey;
+    private (int W, int H, float Scale, float CX, float CY, long Lit, bool History, bool Freeroam) _underKey;
 
     private Point _dragFrom;
     private bool _dragging;
@@ -160,48 +160,37 @@ public class RouteView : Control {
     public bool ShowMarks { get; set; } = true;
 
     /// <summary>
-    /// Turns the drive to whatever angle fills the shape it is drawn in.
+    /// A point the drawing is held on rather than fitting what it holds.
     ///
-    /// Not to lie flat, which is what it used to do: the panel is as often tall as
-    /// wide, and a drive turned onto its side to suit a panel that was never wide is
-    /// a worse picture than one left alone. The angle is chosen by trying half a turn
-    /// of them and keeping whichever draws the route biggest in the room there is, so
-    /// a tall panel gets the drive standing up and a wide one gets it lying down.
-    ///
-    /// There is no north here to lose: this is the game's own space and it was never
-    /// oriented to anything, so turning it costs nothing a compass would notice, and
-    /// the corner carries one anyway. The shape, the lengths and the angles within
-    /// the route are all untouched.
-    ///
-    /// Off everywhere else. On the history map there is no one drive to turn, and on
-    /// a delivery's card the route sits beside a profile of the same drive; turning
-    /// one and not the other would be worse than leaving both alone.
+    /// Set to the truck's own position, this is a map that follows the truck instead
+    /// of a map of the drive: what it shows is wherever the truck is, at whatever
+    /// scale <see cref="WorldWidth"/> asks for. Left null, the drawing is fitted to
+    /// what it holds, which is what every map here did before.
     /// </summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public bool Straighten { get; set; }
-
-    /// <summary>How far the drawing is turned, in radians.</summary>
-    private float _spin;
+    public PointF? Follow { get; set; }
 
     /// <summary>
-    /// How far from north the drawing may be turned, either way.
+    /// How much of the world the panel shows across its width, in the game's own
+    /// metres, when it is following something rather than fitting it.
     ///
-    /// North is up at zero, which is how the game's own map draws it. A quarter turn
-    /// each way covers every angle a line can lie at, so nothing is out of reach, and
-    /// the compass in the corner is what keeps the picture honest about it.
+    /// The world is not the distances the game reports: measured over this driver's
+    /// deliveries, the odometer runs about seventeen times further than the position
+    /// does, so a panel showing 1800 metres of world is showing about thirty
+    /// kilometres of road.
     /// </summary>
-    private const float MostTurn = MathF.PI / 2;
-
-    /// <summary>How many angles are tried across that half turn. Every five degrees,
-    /// which is finer than the eye can tell in a bounding box and cheap enough to do
-    /// on every fit of a live drive.</summary>
-    private const int TurnsTried = 36;
-
-    /// <summary>Whether the corner carries a compass. On wherever the drawing is
-    /// allowed to turn, because a turned map without one is a map that quietly lies
-    /// about which way you are looking.</summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public bool ShowCompass { get; set; }
+    public float WorldWidth { get; set; } = 1800f;
+
+    /// <summary>
+    /// Room along the edges that the drawing must keep out of, because something else
+    /// is sitting on top of it there.
+    ///
+    /// Used where the close view is laid over a corner of the wide one: the route is
+    /// fitted into what is left, so the drive never disappears under it.
+    /// </summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Padding Reserved { get; set; }
 
     /// <summary>Raised when a route is clicked with none singled out, which is the
     /// history map's way of opening a delivery.</summary>
@@ -370,61 +359,6 @@ public class RouteView : Control {
     /// new one differs by a good margin, or a live route would swing about under the
     /// driver every time it grew.
     /// </summary>
-    private float Spin(List<RoutePoint> points) {
-        if (points.Count < 60) return _spin;
-
-        // A handful of points is enough to find the angle: the bounding box of a
-        // drive is decided by its outermost points, and thinning the line barely
-        // moves them while making this cheap enough to run once a second.
-        var sample = Thin(points, 400);
-
-        // The angle in use has to be beaten by a margin, or a live drive would swing
-        // about under the driver every time it grew by a second.
-        var best = _spin;
-        var bestFit = Fits(sample, _spin) * 1.06f;
-        for (var i = 0; i < TurnsTried; i++) {
-            var turn = -MostTurn + i * (MostTurn * 2 / TurnsTried);
-            var fit = Fits(sample, turn);
-            if (fit <= bestFit) continue;
-            bestFit = fit;
-            best = turn;
-        }
-        return best;
-    }
-
-    /// <summary>How big the drive would be drawn at one angle: the scale that fits
-    /// its bounding box into the room there is, which is the thing being maximised.</summary>
-    private float Fits(List<RoutePoint> points, float spin) {
-        float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
-        foreach (var p in points) {
-            var (x, z) = Turn(p.X, p.Z, spin);
-            minX = Math.Min(minX, x); maxX = Math.Max(maxX, x);
-            minZ = Math.Min(minZ, z); maxZ = Math.Max(maxZ, z);
-        }
-        var w = Math.Max(maxX - minX, 1f);
-        var h = Math.Max(maxZ - minZ, 1f);
-        return Math.Min((Width - Pad * 2) / w, (Height - Pad * 2) / h);
-    }
-
-    /// <summary>Every so many points, up to a limit, with the last one always kept so
-    /// the near end of a live drive is never left out.</summary>
-    private static List<RoutePoint> Thin(List<RoutePoint> points, int most) {
-        if (points.Count <= most) return points;
-        var step = points.Count / most + 1;
-        var thinned = new List<RoutePoint>(most + 2);
-        for (var i = 0; i < points.Count; i += step) thinned.Add(points[i]);
-        thinned.Add(points[^1]);
-        return thinned;
-    }
-
-    /// <summary>An angle folded into plus or minus a quarter turn, which is as far
-    /// apart as two orientations of the same line can be.</summary>
-    private static float Wrap(float radians) {
-        while (radians > MathF.PI / 2) radians -= MathF.PI;
-        while (radians < -MathF.PI / 2) radians += MathF.PI;
-        return radians;
-    }
-
     public void Fit() {
         _zoom = 1f;
         _fitted = true;
@@ -436,36 +370,48 @@ public class RouteView : Control {
         // whole-history map it is part of where this driver has been, while on a
         // delivery's card it must not pull the view away from the delivery.
         var alsoSecondary = _focus is null && ShowFreeroam ? _secondary : new List<List<RoutePoint>>();
+
+        // Following something needs nothing measured: the scale is asked for and the
+        // centre is the thing being followed. Everything below is for a drawing that
+        // has to be made to fit instead.
+        if (Follow is { } held) {
+            _fitScale = Math.Max((Width - Pad * 2), 1) / Math.Max(WorldWidth, 1f);
+            _centre = Shifted(held);
+            _snapNext = false;
+            Discard();
+            Invalidate();
+            return;
+        }
+
         if (scope.Count == 0 && alsoSecondary.Count == 0) { _fitScale = 1f; _centre = PointF.Empty; return; }
 
         var points = scope.SelectMany(d => d.Runs).Concat(alsoSecondary).SelectMany(r => r).ToList();
-        var was = _spin;
-        _spin = Straighten ? Spin(points) : 0;
-        var spun = MathF.Abs(_spin - was) > 0.001f;
 
         float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
         foreach (var p in points) {
-            var (x, z) = Turn(p.X, p.Z, _spin);
-            minX = Math.Min(minX, x); maxX = Math.Max(maxX, x);
-            minZ = Math.Min(minZ, z); maxZ = Math.Max(maxZ, z);
+            minX = Math.Min(minX, p.X); maxX = Math.Max(maxX, p.X);
+            minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z);
         }
-        // The centre is held unturned, since everything is turned about it on the way
-        // to the screen; turning it as well would turn the drawing twice.
-        var mid = Turn((minX + maxX) / 2, (minZ + maxZ) / 2, -_spin);
+        var mid = new PointF((minX + maxX) / 2, (minZ + maxZ) / 2);
 
         var w = Math.Max(maxX - minX, 1f);
         var h = Math.Max(maxZ - minZ, 1f);
         // One scale for both axes. Stretching the route to fill the control would
         // make a straight motorway look like a curve, which is a lie about the only
         // thing this control does claim to show.
-        var wanted = Math.Min((Width - Pad * 2) / w, (Height - Pad * 2) / h);
+        var room = Room();
+        var wanted = Math.Min(room.Width / w, room.Height / h);
         if (wanted <= 0 || float.IsInfinity(wanted)) wanted = 1f;
+        // Never closer than the close view is. A drive an inch long, or one that has
+        // barely started, would otherwise be blown up until a car park filled the
+        // panel and every wobble in it looked like a detour.
+        wanted = Math.Min(wanted, Math.Max(room.Width, 1) / Math.Max(WorldWidth, 1f));
 
         // The frame already drawn is kept while everything still fits inside it with
         // room to spare, which is what stops a live drive twitching every second. The
         // moment anything reaches the safe edge, and the truck is always the thing
         // that reaches it first, the frame is redrawn at once.
-        if (!spun && !_snapNext && _fitScale > 0 && Holds(minX, maxX, minZ, maxZ)) {
+        if (!_snapNext && _fitScale > 0 && Holds(minX, maxX, minZ, maxZ)) {
             _snapNext = false;
             Discard();
             Invalidate();
@@ -474,9 +420,32 @@ public class RouteView : Control {
 
         _snapNext = false;
         _fitScale = wanted;
-        _centre = new PointF(mid.X, mid.Z);
+        _centre = Shifted(mid);
         Discard();
         Invalidate();
+    }
+
+    /// <summary>What is left of the panel once the padding and anything sitting on
+    /// top of it are taken off.</summary>
+    private RectangleF Room() => new(
+        Pad + Reserved.Left,
+        Pad + Reserved.Top,
+        Math.Max(Width - Pad * 2 - Reserved.Horizontal, 1),
+        Math.Max(Height - Pad * 2 - Reserved.Vertical, 1));
+
+    /// <summary>
+    /// The centre to hold, so that what should be in the middle of the room left over
+    /// ends up there rather than in the middle of the panel.
+    ///
+    /// Everything on the way to the screen is measured from the middle of the panel,
+    /// so reserving a corner means moving the centre by half of what was reserved.
+    /// </summary>
+    private PointF Shifted(PointF middle) {
+        var room = Room();
+        var offX = room.X + room.Width / 2 - Width / 2f;
+        var offY = room.Y + room.Height / 2 - Height / 2f;
+        var scale = Math.Max(_fitScale * _zoom, 0.000001f);
+        return new PointF(middle.X - offX / scale, middle.Y - offY / scale);
     }
 
     /// <summary>
@@ -488,19 +457,21 @@ public class RouteView : Control {
     /// drive grows by a second of driving at a time, and on a long route a second is
     /// worth a pixel or two, so this is a great many seconds of warning.
     /// </summary>
-    private const float SafeBand = 28f;
+    private const float SafeBand = 64f;
 
     /// <summary>Whether the whole drawing still sits inside the frame on screen, with
-    /// the safe band to spare. Everything here is in the turned space the drawing is
-    /// laid out in, which is the space the bounds were measured in.</summary>
+    /// the safe band to spare.</summary>
     private bool Holds(float minX, float maxX, float minZ, float maxZ) {
-        var reachX = (Width / 2f - Pad - SafeBand) / PerMetre;
-        var reachZ = (Height / 2f - Pad - SafeBand) / PerMetre;
+        var room = Room();
+        var reachX = (room.Width / 2f - SafeBand) / PerMetre;
+        var reachZ = (room.Height / 2f - SafeBand) / PerMetre;
         if (reachX <= 0 || reachZ <= 0) return false;
 
-        var (cx, cz) = Turn(_centre.X, _centre.Y, _spin);
-        return minX >= cx - reachX && maxX <= cx + reachX
-            && minZ >= cz - reachZ && maxZ <= cz + reachZ;
+        // Measured from the middle of the room rather than of the panel, which is
+        // where the drawing was centred.
+        var middle = ToWorld(room.X + room.Width / 2, room.Y + room.Height / 2);
+        return minX >= middle.X - reachX && maxX <= middle.X + reachX
+            && minZ >= middle.Y - reachZ && maxZ <= middle.Y + reachZ;
     }
 
     /// <summary>Set when the next fit has to arrive at once rather than be held: the
@@ -512,22 +483,11 @@ public class RouteView : Control {
     /// which on a Control already means resizing one.</summary>
     private float PerMetre => _fitScale * _zoom;
 
-    private PointF ToScreen(float x, float z) {
-        var (dx, dz) = Turn(x - _centre.X, z - _centre.Y, _spin);
-        return new PointF(dx * PerMetre + Width / 2f, dz * PerMetre + Height / 2f);
-    }
+    private PointF ToScreen(float x, float z) =>
+        new((x - _centre.X) * PerMetre + Width / 2f, (z - _centre.Y) * PerMetre + Height / 2f);
 
-    private PointF ToWorld(float sx, float sy) {
-        var (dx, dz) = Turn((sx - Width / 2f) / PerMetre, (sy - Height / 2f) / PerMetre, -_spin);
-        return new PointF(dx + _centre.X, dz + _centre.Y);
-    }
-
-    private static (float X, float Z) Turn(float x, float z, float by) {
-        if (by == 0) return (x, z);
-        var cos = MathF.Cos(by);
-        var sin = MathF.Sin(by);
-        return (x * cos - z * sin, x * sin + z * cos);
-    }
+    private PointF ToWorld(float sx, float sy) =>
+        new((sx - Width / 2f) / PerMetre + _centre.X, (sy - Height / 2f) / PerMetre + _centre.Y);
 
     private void Discard() { _under?.Dispose(); _under = null; }
 
@@ -707,7 +667,6 @@ public class RouteView : Control {
         if (ShowCities) DrawCities(g);
         if (ShowMarks) DrawMarks(g);
         DrawCompanion(g);
-        if (ShowCompass) DrawCompass(g);
         DrawReadout(g);
 
         if (Hint.Length > 0 && _hoverPoint < 0 && _hoverMark < 0 && _lit == 0) {
@@ -731,7 +690,7 @@ public class RouteView : Control {
         // The switches belong in the key: turning a layer off changes what the cached
         // bitmap should hold, and without them the old one was kept and the toggle
         // did nothing until the view happened to move.
-        var key = (Width, Height, PerMetre, _centre.X, _centre.Y, _spin, _lit, ShowHistory, ShowFreeroam);
+        var key = (Width, Height, PerMetre, _centre.X, _centre.Y, _lit, ShowHistory, ShowFreeroam);
         if (_under is null || _underKey != key) {
             Discard();
             _underKey = key;
@@ -861,7 +820,7 @@ public class RouteView : Control {
     /// </summary>
     private void Needle(Graphics g, Brush fill, PointF at) {
         if (Facing is not { } facing) return;
-        var a = _spin - (float)(facing * Math.PI * 2);
+        var a = -(float)(facing * Math.PI * 2);
         var fx = MathF.Sin(a);
         var fy = -MathF.Cos(a);
         g.FillPolygon(fill, new[] {
@@ -957,46 +916,6 @@ public class RouteView : Control {
             g.FillRectangle(halo, RectangleF.Inflate(label, 2, 0));
             g.DrawString(city.Name, font, text, label.Location);
         }
-    }
-
-    /// <summary>
-    /// Which way north is, in the corner.
-    ///
-    /// North is the game's own negative z, which the cities settle beyond doubt:
-    /// sorted by z, Yakima comes first and Tucson last. Unturned that is straight up
-    /// the screen, and the needle simply carries the same turn the drawing did.
-    /// </summary>
-    private void DrawCompass(Graphics g) {
-        const float r = 15f;
-        var at = new PointF(Width - r - 12, r + 12);
-
-        using (var face = new SolidBrush(Color.FromArgb(170, 22, 25, 29)))
-        using (var rim = new Pen(Color.FromArgb(120, 138, 148, 163))) {
-            g.FillEllipse(face, at.X - r, at.Y - r, r * 2, r * 2);
-            g.DrawEllipse(rim, at.X - r, at.Y - r, r * 2, r * 2);
-        }
-
-        // North turned the way everything else on the drawing is turned. Up is
-        // negative on the screen, which is why the y term carries the minus.
-        var nx = MathF.Sin(_spin);
-        var ny = -MathF.Cos(_spin);
-        var tip = new PointF(at.X + nx * (r - 4), at.Y + ny * (r - 4));
-        var tail = new PointF(at.X - nx * (r - 7), at.Y - ny * (r - 7));
-        // Across the needle, for a shape with two sides rather than a bare line.
-        var wx = -ny * 3.5f;
-        var wy = nx * 3.5f;
-
-        using (var north = new SolidBrush(Accent))
-        using (var south = new SolidBrush(Color.FromArgb(150, 138, 148, 163))) {
-            g.FillPolygon(north, new[] { tip, new PointF(at.X + wx, at.Y + wy), new PointF(at.X - wx, at.Y - wy) });
-            g.FillPolygon(south, new[] { tail, new PointF(at.X + wx, at.Y + wy), new PointF(at.X - wx, at.Y - wy) });
-        }
-
-        using var font = new Font("Segoe UI", 7F, FontStyle.Bold);
-        using var ink = new SolidBrush(Ink);
-        using var centre = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-        // Outside the dial, on the needle's own side, so it stays with north.
-        g.DrawString("N", font, ink, new PointF(at.X + nx * (r + 7), at.Y + ny * (r + 7)), centre);
     }
 
     /// <summary>Where the profile beside this map is being pointed at. Drawn in the

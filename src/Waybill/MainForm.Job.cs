@@ -20,6 +20,22 @@ namespace Waybill;
 public partial class MainForm {
     private readonly Panel _jobPage = new();
     private RouteView? _jobMap;
+
+    /// <summary>The close view: the truck in the middle at a fixed scale, and the
+    /// panel it sits in when there is room for it under the wide one.</summary>
+    private RouteView? _jobClose;
+    private Panel? _jobCloseFrame;
+
+    /// <summary>The one pixel of frame around the close view while it sits over the
+    /// wide map. Without it the two drawings run into each other, since both are the
+    /// same dark ground with the same lines on it.</summary>
+    private Panel? _jobCloseCorner;
+    private Panel? _jobCloseGap;
+    private Panel? _jobMapFrame;
+
+    /// <summary>Which corner the close view sits in when it is laid over the wide
+    /// map, kept so it does not hop about from one second to the next.</summary>
+    private ContentAlignment _closeCorner = ContentAlignment.BottomRight;
     private Panel? _jobLaunch;
 
     /// <summary>What the map is currently drawing, so it is only redrawn when there
@@ -154,26 +170,172 @@ public partial class MainForm {
         return frame;
     }
 
+    /// <summary>
+    /// The drive in progress, twice over.
+    ///
+    /// The wide one is the delivery, fitted to what has been driven so far, with the
+    /// rest of this game's history behind it in a quieter line so a route in a corner
+    /// of the map still has somewhere to sit. The close one holds the truck in the
+    /// middle at a fixed scale, about thirty kilometres of road across, which answers
+    /// "where am I now" rather than "where does this go".
+    ///
+    /// Both are pictures rather than instruments: no zooming, no panning, no compass,
+    /// north up. That last one is what lets a glance here and a glance at the map in
+    /// the cab agree with each other.
+    /// </summary>
     private Control BuildJobMap() {
-        var frame = new Panel { Dock = DockStyle.Fill, BackColor = Line, Padding = new Padding(1) };
+        var frame = new Panel { Dock = DockStyle.Fill, BackColor = Canvas };
+
         _jobMap = NewMap(CurrentUnits());
         _jobMap.Dock = DockStyle.Fill;
         _jobMap.ShowMarks = false;
         _jobMap.EmptyText = Strings.T("job.noRoute");
         _jobMap.Hint = "";
-        // Turned to lie along the panel, which is much wider than it is tall. A drive
-        // running north to south would otherwise draw itself as a thread down the
-        // middle with nine tenths of the panel empty either side.
-        _jobMap.Straighten = true;
-        // And a compass, because a drawing that is allowed to turn has to say by
-        // how much. It never turns more than sixty degrees off north, so up on the
-        // panel is still roughly up on the map in the cab.
-        _jobMap.ShowCompass = true;
-        // A picture, not an instrument. The map page is one click away for anyone who
-        // wants to zoom something.
         _jobMap.Cursor = Cursors.Default;
-        frame.Controls.Add(_jobMap);
+
+        _jobClose = NewMap(CurrentUnits());
+        _jobClose.ShowMarks = false;
+        _jobClose.ShowCities = true;
+        _jobClose.EmptyText = "";
+        _jobClose.Hint = "";
+        _jobClose.Cursor = Cursors.Default;
+        _jobClose.WorldWidth = CloseWorldMetres;
+        _jobClose.Visible = false;
+
+        var wide = new Panel { Dock = DockStyle.Fill, BackColor = Line, Padding = new Padding(1) };
+        wide.Controls.Add(_jobMap);
+
+        _jobCloseCorner = new Panel { BackColor = Line, Padding = new Padding(1), Visible = false };
+        _jobCloseGap = new Panel { Dock = DockStyle.Bottom, Height = 8, BackColor = Canvas, Visible = false };
+        _jobCloseFrame = new Panel { Dock = DockStyle.Bottom, BackColor = Line, Padding = new Padding(1), Height = 0, Visible = false };
+
+        frame.Controls.Add(wide);
+        frame.Controls.Add(_jobCloseGap);
+        frame.Controls.Add(_jobCloseFrame);
+        _jobMapFrame = frame;
+        frame.Resize += (_, _) => PlaceCloseUp();
         return frame;
+    }
+
+    /// <summary>How much of the world the close view holds across its width, in the
+    /// game's own metres. The odometer runs about seventeen times further than the
+    /// position does, measured over this driver's own deliveries, so this is about
+    /// thirty kilometres of road.</summary>
+    private const float CloseWorldMetres = 1800f;
+
+    /// <summary>
+    /// Where the close view goes, which follows the shape of the room it is in.
+    ///
+    /// Wider than it is tall, and it takes a column down the right. Taller than it is
+    /// wide, and it takes a band along the bottom. Roughly square, and there is no
+    /// side to give it without ruining the shape, so it goes into a corner of the wide
+    /// map instead and the wide map is told to keep the drive out from under it.
+    ///
+    /// Either way the wide map is left as near square as the panel allows, which is
+    /// the shape that suits a route however it happens to run.
+    /// </summary>
+    private void PlaceCloseUp() {
+        if (_jobMapFrame is not { } frame || _jobMap is null || _jobClose is null) return;
+        if (_jobCloseFrame is not { } band || _jobCloseGap is not { } gap || _jobCloseCorner is not { } corner) return;
+
+        if (!_jobClose.Visible && !band.Visible && !corner.Visible) {
+            _jobMap.Reserved = Padding.Empty;
+            return;
+        }
+
+        var room = frame.ClientSize;
+        var shape = room.Height > 0 ? room.Width / (float)room.Height : 1f;
+
+        if (shape > 1.25f) {
+            Give(band, gap, corner, DockStyle.Right, Math.Clamp(room.Width - room.Height, 200, 380));
+            return;
+        }
+        if (shape < 0.8f) {
+            Give(band, gap, corner, DockStyle.Bottom, Math.Clamp(room.Height - room.Width, 160, 300));
+            return;
+        }
+
+        // Square enough that any band would spoil it: over a corner instead.
+        band.Visible = false;
+        gap.Visible = false;
+        if (corner.Parent != _jobMap.Parent) _jobMap.Parent!.Controls.Add(corner);
+        if (_jobClose.Parent != corner) corner.Controls.Add(_jobClose);
+        _jobClose.Dock = DockStyle.Fill;
+        corner.Visible = true;
+        corner.BringToFront();
+
+        var host = _jobMap.Parent!.ClientSize;
+        var side = Math.Max(140, Math.Min(host.Width / 3, 260));
+        var tall = Math.Max(100, side * 3 / 4);
+        var left = _closeCorner is ContentAlignment.TopLeft or ContentAlignment.BottomLeft;
+        var top = _closeCorner is ContentAlignment.TopLeft or ContentAlignment.TopRight;
+        corner.Bounds = new Rectangle(
+            left ? 10 : host.Width - side - 10,
+            top ? 10 : host.Height - tall - 10, side, tall);
+        // A band the full height of the panel, since the fit can only be told to keep
+        // out of an edge rather than out of a rectangle. Wasteful of a strip above or
+        // below the close view, and worth it for a drive that never hides under it.
+        _jobMap.Reserved = left ? new Padding(side + 20, 0, 0, 0) : new Padding(0, 0, side + 20, 0);
+    }
+
+    /// <summary>Hands the close view a side of its own, along the edge named.</summary>
+    private void Give(Panel band, Panel gap, Panel corner, DockStyle side, int thickness) {
+        corner.Visible = false;
+        if (_jobClose!.Parent != band) band.Controls.Add(_jobClose);
+        _jobClose.Dock = DockStyle.Fill;
+
+        band.Dock = side;
+        gap.Dock = side;
+        gap.Width = 8;
+        gap.Height = 8;
+        if (side == DockStyle.Right) band.Width = thickness; else band.Height = thickness;
+        band.Visible = true;
+        gap.Visible = true;
+        _jobMap!.Reserved = Padding.Empty;
+    }
+
+    /// <summary>
+    /// Which corner of the wide map has least of the drive in it.
+    ///
+    /// The close view has to sit somewhere, and the least it can cost is the corner
+    /// the route was not using. Counted in quarters of the drive's own bounding box,
+    /// and only moved when another corner is clearly emptier, so it does not hop from
+    /// one second to the next as the line grows.
+    /// </summary>
+    private void ChooseCorner(List<TripPoint> points) {
+        if (points.Count < 30) return;
+
+        double minX = double.MaxValue, maxX = double.MinValue, minZ = double.MaxValue, maxZ = double.MinValue;
+        foreach (var p in points) {
+            minX = Math.Min(minX, p.X); maxX = Math.Max(maxX, p.X);
+            minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z);
+        }
+        var midX = (minX + maxX) / 2;
+        var midZ = (minZ + maxZ) / 2;
+
+        // North is negative z, so a smaller z is nearer the top of the panel.
+        var counts = new Dictionary<ContentAlignment, int> {
+            [ContentAlignment.TopLeft] = 0,
+            [ContentAlignment.TopRight] = 0,
+            [ContentAlignment.BottomLeft] = 0,
+            [ContentAlignment.BottomRight] = 0,
+        };
+        foreach (var p in points) {
+            var corner = (p.X < midX, p.Z < midZ) switch {
+                (true, true) => ContentAlignment.TopLeft,
+                (false, true) => ContentAlignment.TopRight,
+                (true, false) => ContentAlignment.BottomLeft,
+                _ => ContentAlignment.BottomRight,
+            };
+            counts[corner]++;
+        }
+
+        var best = counts.OrderBy(c => c.Value).First();
+        if (best.Key == _closeCorner) return;
+        // A tenth of the drive's points is the margin worth moving for.
+        if (counts[_closeCorner] - best.Value < points.Count / 10) return;
+        _closeCorner = best.Key;
+        PlaceCloseUp();
     }
 
     /// <summary>
@@ -262,7 +424,9 @@ public partial class MainForm {
             _progressText.Text = "";
             _progressTrack.Visible = false;
             if (_jobLaunch is { } waiting) waiting.Visible = true;
-            ShowJobRoute(null, "");
+            // No delivery, but there may still be a truck: the map follows it while
+            // somebody drives about with an empty hook.
+            ShowJobRoute(null, _engine.Roaming?.Game ?? "");
 
             // Between jobs the profile says so; with the game closed it says nothing
             // at all, rather than leaving Waybill sitting there all evening.
@@ -334,35 +498,94 @@ public partial class MainForm {
     }
 
     /// <summary>
-    /// Draws the drive so far, with the cities this profile knows behind it.
+    /// Draws the drive so far, over everywhere this driver has already been.
     ///
-    /// Only the drive itself: the rest of the history is a thousand times more line
-    /// than one panel can show and would have to be taken apart again on every
-    /// redraw. Cities cost nothing and are what make a line mean somewhere.
+    /// The history behind it is the same drawing the map page makes, in the same
+    /// quieter line, so a delivery in a corner of the map is a delivery somewhere
+    /// rather than a line in the dark. The drive itself is the one that is singled
+    /// out, which is also what the frame is fitted to: the history is background and
+    /// must never pull the view away from the delivery.
+    ///
+    /// With no job on, there is no route to fit and the map follows the truck instead,
+    /// which is the only useful thing a map can do while somebody drives about with an
+    /// empty hook.
     /// </summary>
     private void ShowJobRoute(JobState? state, string game) {
         if (_jobMap is null) return;
 
-        _jobMap.Facing = state?.Heading;
-        var points = state?.TripPoints ?? new List<TripPoint>();
-        var key = state is null ? "" : state.JobUid;
+        // The job's own heading while there is a job, the truck's own otherwise: a
+        // demonstration has the first and no telemetry, a free ride the second and no
+        // job.
+        var facing = state?.Heading ?? _engine?.Facing;
+        _jobMap.Facing = facing;
+        if (_jobClose is not null) _jobClose.Facing = facing;
+
+        // With no delivery on, the line being drawn is the roaming one.
+        var roaming = state is null ? _engine?.Roaming : null;
+        var points = state?.TripPoints ?? roaming?.Points ?? new List<TripPoint>();
+        var key = state is null ? (roaming is null ? "" : "roam") : state.JobUid;
         var same = key == _jobShowing;
         if (same && points.Count < _jobShown + JobRouteStep) return;
         _jobShowing = key;
         _jobShown = points.Count;
 
-        if (points.Count < 2) {
-            _jobMap.Show(Array.Empty<RouteLayer>(), 0, new List<CityAnchor>());
+        var history = game.Length > 0 ? RoutesFor(game) : null;
+        var behind = history is null ? new List<RouteLayer>() : Layers(history).ToList();
+        var cities = history?.Cities ?? new List<CityAnchor>();
+        var freeroam = history is null
+            ? new List<List<RoutePoint>>()
+            : history.RunUps.Concat(_store.FreeroamRoutes(game)).ToList();
+
+        // Only a delivery is ever singled out. A roaming line is drawn like the rest
+        // of the driving between jobs, in the quieter shade, and the map follows the
+        // truck along it rather than fitting it.
+        var live = state is not null && points.Count >= 2
+            ? new RouteLayer {
+                // Deliveries carry their database id and this drive has none yet, so
+                // it takes one no row can hold rather than borrowing somebody else's.
+                Id = -1,
+                Points = points.Select(p => new RoutePoint(p.AtMs, (float)p.X, (float)p.Z, (float)p.SpeedKmh)).ToList(),
+            }
+            : null;
+
+        var layers = live is null ? behind : behind.Append(live).ToList();
+        var trails = live is null && points.Count >= 2
+            ? freeroam.Append(points.Select(p => new RoutePoint(p.AtMs, (float)p.X, (float)p.Z, (float)p.SpeedKmh)).ToList()).ToList()
+            : freeroam;
+        _jobMap.Show(layers, live?.Id ?? 0, cities, null, trails);
+
+        // Following the truck when there is no delivery to fit, and only then: with a
+        // job on, the wide map is the delivery and the close view is what follows.
+        var at = points.Count > 0
+            ? new PointF((float)points[^1].X, (float)points[^1].Z)
+            : (PointF?)null;
+        _jobMap.Follow = live is null ? at : null;
+        _jobMap.WorldWidth = CloseWorldMetres;
+
+        ShowCloseUp(layers, live, cities, trails, at);
+    }
+
+    /// <summary>The close view, which exists only while a delivery is on: without one
+    /// the wide map is already following the truck and a second one saying the same
+    /// thing would be a waste of the panel.</summary>
+    private void ShowCloseUp(List<RouteLayer> layers, RouteLayer? live, List<CityAnchor> cities,
+                             List<List<RoutePoint>> freeroam, PointF? at) {
+        if (_jobClose is null || _jobCloseFrame is null) return;
+
+        var wanted = live is not null && at is not null;
+        if (!wanted) {
+            _jobClose.Visible = false;
+            _jobCloseFrame.Visible = false;
+            if (_jobCloseCorner is { } hide) hide.Visible = false;
+            if (_jobCloseGap is { } gap) gap.Visible = false;
+            _jobMap!.Reserved = Padding.Empty;
             return;
         }
 
-        var live = new RouteLayer {
-            // Deliveries carry their database id and this drive has none yet, so it
-            // takes one no row can hold rather than borrowing somebody else's.
-            Id = -1,
-            Points = points.Select(p => new RoutePoint(p.AtMs, (float)p.X, (float)p.Z, (float)p.SpeedKmh)).ToList(),
-        };
-        var cities = game.Length > 0 ? RoutesFor(game).Cities : new List<CityAnchor>();
-        _jobMap.Show(new List<RouteLayer> { live }, live.Id, cities);
+        _jobClose.Visible = true;
+        _jobClose.Follow = at;
+        _jobClose.Show(layers, live!.Id, cities, null, freeroam);
+        ChooseCorner(live.Points.Select(p => new TripPoint { X = p.X, Z = p.Z }).ToList());
+        PlaceCloseUp();
     }
 }

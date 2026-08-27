@@ -98,6 +98,13 @@ public class TrackerEngine : IDisposable {
     public JobInfo? ActiveJob { get; private set; }
     public JobState? ActiveState => _tracker.ActiveState;
 
+    /// <summary>Where the truck is roaming with nothing on the hook, and which way it
+    /// points. Both come straight from the tracker; the live page needs them to draw a
+    /// map when there is no delivery to draw.</summary>
+    public FreeroamState? Roaming => _tracker.Roaming;
+
+    public double? Facing => _tracker.Facing;
+
     /// <summary>
     /// Shows a finished delivery as though it were being driven now.
     ///
