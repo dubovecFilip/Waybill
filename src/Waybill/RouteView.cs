@@ -461,98 +461,52 @@ public class RouteView : Control {
         var wanted = Math.Min((Width - Pad * 2) / w, (Height - Pad * 2) / h);
         if (wanted <= 0 || float.IsInfinity(wanted)) wanted = 1f;
 
-        GlideTo(wanted, new PointF(mid.X, mid.Z), spun || _snapNext);
+        // The frame already drawn is kept while everything still fits inside it with
+        // room to spare, which is what stops a live drive twitching every second. The
+        // moment anything reaches the safe edge, and the truck is always the thing
+        // that reaches it first, the frame is redrawn at once.
+        if (!spun && !_snapNext && _fitScale > 0 && Holds(minX, maxX, minZ, maxZ)) {
+            _snapNext = false;
+            Discard();
+            Invalidate();
+            return;
+        }
+
         _snapNext = false;
+        _fitScale = wanted;
+        _centre = new PointF(mid.X, mid.Z);
         Discard();
         Invalidate();
     }
 
-    /// <summary>How far off the frame may drift before it is worth moving. A live
-    /// drive is refitted every second and almost every second of it lands well inside
-    /// the frame already drawn; moving the picture for that is all cost and no
-    /// information.</summary>
-    private const float FrameSlack = 0.04f;
+    /// <summary>
+    /// How much of the panel is held back from the edge.
+    ///
+    /// The frame is only kept while the drive sits inside this much less than the
+    /// panel, so the truck is redrawn into the middle while it still has a good inch
+    /// of picture in front of it rather than at the moment it crosses the edge. A live
+    /// drive grows by a second of driving at a time, and on a long route a second is
+    /// worth a pixel or two, so this is a great many seconds of warning.
+    /// </summary>
+    private const float SafeBand = 28f;
 
-    /// <summary>How long the picture takes to settle into a new frame.</summary>
-    private const int GlideMs = 320;
+    /// <summary>Whether the whole drawing still sits inside the frame on screen, with
+    /// the safe band to spare. Everything here is in the turned space the drawing is
+    /// laid out in, which is the space the bounds were measured in.</summary>
+    private bool Holds(float minX, float maxX, float minZ, float maxZ) {
+        var reachX = (Width / 2f - Pad - SafeBand) / PerMetre;
+        var reachZ = (Height / 2f - Pad - SafeBand) / PerMetre;
+        if (reachX <= 0 || reachZ <= 0) return false;
 
-    /// <summary>Set when the next fit has to arrive at once rather than glide: the
+        var (cx, cz) = Turn(_centre.X, _centre.Y, _spin);
+        return minX >= cx - reachX && maxX <= cx + reachX
+            && minZ >= cz - reachZ && maxZ <= cz + reachZ;
+    }
+
+    /// <summary>Set when the next fit has to arrive at once rather than be held: the
     /// panel changed size under it, and a frame chosen for the old size is simply
     /// wrong rather than nearly right.</summary>
     private bool _snapNext = true;
-
-    private float _wantScale = 1f;
-    private PointF _wantCentre;
-    private float _fromScale = 1f;
-    private PointF _fromCentre;
-    private int _glideFrom;
-    private System.Windows.Forms.Timer? _glide;
-
-    /// <summary>
-    /// Takes the drawing to a new frame without it jumping there.
-    ///
-    /// A drive being watched as it happens is refitted once a second, and each fit
-    /// wants the picture very slightly smaller than the one before. Snapping to each
-    /// one reads as a twitch every second. So a frame close enough to the one already
-    /// drawn is ignored altogether, and a frame far enough to matter is eased into
-    /// over a third of a second, which the eye follows instead of noticing.
-    ///
-    /// The first fit of anything, and any fit where the angle changed, arrives at
-    /// once: there is nothing on screen yet to glide away from.
-    /// </summary>
-    private void GlideTo(float scale, PointF centre, bool turned) {
-        _wantScale = scale;
-        _wantCentre = centre;
-
-        var settled = _glide is null && _fitScale > 0;
-        var offBy = Math.Abs(scale - _fitScale) / Math.Max(scale, 0.0001f);
-        var driftX = Math.Abs(centre.X - _centre.X) * scale;
-        var driftY = Math.Abs(centre.Y - _centre.Y) * scale;
-        var drift = Math.Max(driftX, driftY) / Math.Max(Math.Min(Width, Height), 1);
-
-        // Near enough that moving would be noticed and nothing else.
-        if (settled && !turned && offBy < FrameSlack && drift < FrameSlack) return;
-
-        // Far enough that easing would be a slow lurch rather than a glide, or the
-        // first sight of this drive, or a new angle, which turns everything anyway.
-        if (turned || _fitScale <= 0 || offBy > 0.5f) {
-            StopGlide();
-            _fitScale = scale;
-            _centre = centre;
-            return;
-        }
-
-        _fromScale = _fitScale;
-        _fromCentre = _centre;
-        _glideFrom = Environment.TickCount;
-        _glide ??= NewGlide();
-        _glide.Start();
-    }
-
-    private System.Windows.Forms.Timer NewGlide() {
-        // Thirty a second rather than sixty: every step throws away the drawn-once
-        // layer underneath and paints it again, and ten of those is a glide already.
-        var timer = new System.Windows.Forms.Timer { Interval = 33 };
-        timer.Tick += (_, _) => {
-            var gone = (Environment.TickCount - _glideFrom) / (float)GlideMs;
-            // Easing out, so the picture arrives rather than stops dead.
-            var into = gone >= 1 ? 1 : 1 - MathF.Pow(1 - gone, 2f);
-            _fitScale = _fromScale + (_wantScale - _fromScale) * into;
-            _centre = new PointF(
-                _fromCentre.X + (_wantCentre.X - _fromCentre.X) * into,
-                _fromCentre.Y + (_wantCentre.Y - _fromCentre.Y) * into);
-            if (gone >= 1) StopGlide();
-            Discard();
-            Invalidate();
-        };
-        return timer;
-    }
-
-    private void StopGlide() {
-        _glide?.Stop();
-        _glide?.Dispose();
-        _glide = null;
-    }
 
     /// <summary>Pixels per world metre. Named for what it is rather than "scale",
     /// which on a Control already means resizing one.</summary>

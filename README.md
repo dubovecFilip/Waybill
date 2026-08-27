@@ -194,10 +194,12 @@ first and Tucson last. The drawing may be turned up to a quarter turn either sid
 of it, and a compass in the corner carries whatever turn was taken, so a picture
 with north pointing sideways still says so.
 
-It grows without twitching. A drive being watched is refitted every second and
-almost every second lands well inside the frame already drawn, so a frame near
-enough to the one on screen is left alone, and a frame far enough to matter is
-eased into over a third of a second rather than snapped to.
+It grows without twitching, and without losing the truck off the edge. A drive
+being watched is refitted every second, and while everything still sits inside the
+frame already drawn the picture is left exactly where it is. The frame keeps a band
+along its edge that nothing is allowed into, and the truck is always the first
+thing to reach it, so the drawing is refitted while there is still an inch of
+picture ahead of the truck rather than at the moment it would leave.
 
 The bar underneath counts the loaded leg against the game's own planned distance,
 with the run out to the trailer in its own quieter shade at the head of it. It is
