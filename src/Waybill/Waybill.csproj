@@ -14,7 +14,7 @@
     <AssemblyTitle>Waybill</AssemblyTitle>
     <Product>Waybill</Product>
     <Description>Delivery tracker for Euro Truck Simulator 2 and American Truck Simulator</Description>
-    <Version>1.2.0</Version>
+    <Version>1.2.1</Version>
   </PropertyGroup>
 
   <!-- Publish settings only. Setting RuntimeIdentifier as a plain property would
