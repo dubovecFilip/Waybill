@@ -198,6 +198,28 @@ and Mediterranean routes, coast to coast, interstate driving, truck stops and
 weigh stations. Each would need the route matched against a real map, which is
 the decision the map page already refused to make.
 
+## Condition, which is wear as well as damage
+
+Both games keep one number per component, and the SDK reports that one number:
+`truck.wear.*` and `trailer.wear.*`, zero to one. It rises when something is hit and
+it rises with the kilometres, and nothing in the telemetry separates the two. The
+damage a delivery reports is the difference between the set's condition when the load
+went on and its condition at the drop, so it holds both.
+
+The impacts can still be told apart, because they arrive as steps rather than as a
+creep. That is exactly what the collision detection watches for, so every impact is a
+line on the delivery's timeline with the share of damage it did. Measured on a real
+drive: Rijeka to Oslo, the truck's condition moved 1.46 % over two thousand
+kilometres, of which one collision accounts for 0.29 % and the remaining 1.17 %
+crept up a hundredth at a time. The trailer moved 4.61 % without a single step in it,
+which is a set that was worn rather than damaged.
+
+The set's condition is read from the last tick that still had a trailer in it. The
+game drops the trailer out of telemetry the instant the load is handed over, and the
+tick carrying the delivery event has none, so reading the condition from that tick
+reads zero and reports a delivery that scratched nothing. That is what a trailer
+arriving at 4.6 % was written down as before this was found.
+
 ## The region a city is in
 
 Not stored and not reported by either game. `Places` holds a table of city names

@@ -154,6 +154,17 @@ public class JobState {
 
     public double StartTruckWear;
     public double StartTrailerWear;
+
+    /// <summary>
+    /// The last reading taken while there was a trailer to read.
+    ///
+    /// The set drops out of telemetry the instant the load is handed over, and the
+    /// tick that carries the delivery event has no trailer in it at all. Reading the
+    /// condition from that tick reads nothing and reports a delivery that scratched
+    /// nothing, which is how a set that arrived at 4.6 % came to be written down as
+    /// untouched.
+    /// </summary>
+    public double LastTrailerWear;
     /// <summary>How knocked about the load was when it went on. Null until it does.</summary>
     public double? StartCargoDamage;
     /// <summary>Which way the truck was pointing when it was last seen, nought to
@@ -719,6 +730,7 @@ public class JobTracker {
             // when the trailer is detached mid-job - and then Close() would compare
             // against a zeroed baseline and report a bogus negative damage figure.
             StartTrailerWear = snap.Trailer.Wear,
+            LastTrailerWear = snap.Trailer.Wear,
             LastOdometerKm = snap.Truck.OdometerKm,
             // Already hitched when the job began, which is how a quick job starts:
             // the truck is placed at the depot with the load on. There was no
@@ -835,7 +847,9 @@ public class JobTracker {
             // reports a negative figure. Lower the baseline to what the save actually
             // shows: the damage reported is then the damage the truck really carries.
             j.StartTruckWear = Math.Min(j.StartTruckWear, snap.Truck.Wear.Total());
-            j.StartTrailerWear = Math.Min(j.StartTrailerWear, snap.Trailer.Wear);
+            if (snap.Trailer.Present) {
+                j.StartTrailerWear = Math.Min(j.StartTrailerWear, snap.Trailer.Wear);
+            }
 
             // A save can carry a different truck than the one being driven a moment
             // ago, and the record would otherwise keep naming the old one.
@@ -1023,6 +1037,7 @@ public class JobTracker {
         }
 
         TrackTrailerChain(j, snap);
+        if (snap.Trailer.Present) j.LastTrailerWear = snap.Trailer.Wear;
 
         j.Heading = snap.HeadingTurns;
 
@@ -1319,7 +1334,10 @@ public class JobTracker {
             PausedMs = j.PausedMs,
             SpeedingShare = j.DrivingMs > 0 ? Math.Round((double)j.SpeedingMs / j.DrivingMs, 4) : 0,
             TruckDamage = Math.Round(snap.Truck.Wear.Total() - j.StartTruckWear, 4),
-            TrailerDamage = Math.Round(snap.Trailer.Wear - j.StartTrailerWear, 4),
+            // From the last tick that still had a trailer in it rather than from this
+            // one, which no longer does, and never negative: a set cannot arrive in
+            // better condition than it left in.
+            TrailerDamage = Math.Round(Math.Max(0, j.LastTrailerWear - j.StartTrailerWear), 4),
             // What each of them was in when the load went on, so the delivery can say
             // the condition before and after rather than only the difference.
             StartTruckDamage = Math.Round(j.StartTruckWear, 4),

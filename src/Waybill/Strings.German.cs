@@ -344,7 +344,7 @@ public static partial class Strings {
         ["award.ets2_1m"] = "Fahre 1.000.000 km unter Last.",
         ["award.ats_1m"] = "Fahre 1.000.000 Meilen unter Last.",
         ["truck.fuel"] = "Kraftstoff",
-        ["why.truckDamage"] = "Schaden, den diese Zugmaschine auf einer durchschnittlichen Lieferung nimmt. Gemittelt statt summiert: eine Summe wächst mit der Fahrleistung und verglich deine Historie statt der Fahrzeuge.",
+        ["why.truckDamage"] = "Schaden, den dieses Fahrzeug auf einer durchschnittlichen Lieferung nimmt. Es ist der Zustandswert des Spiels selbst, er steigt also mit den Kilometern und nicht nur mit den Stößen: die Stöße sind die Kollisionen auf der Zeitleiste jeder Lieferung. Gemittelt statt summiert: eine Summe wächst mit der Fahrleistung und würde deine Historie vergleichen statt der Fahrzeuge.",
         ["why.truckFuel"] = "Was sie über alle ihre Lieferungen verbraucht hat, in ihrer eigenen Einheit: Liter oder Gallonen für einen Tank, Kilowattstunden für eine Batterie.",
         ["why.speed"] = "Strecke gegen die Spielstunden am Steuer, nicht gegen die Zeit am Schreibtisch.",
         ["why.style"] = "Sauber gefahrene Lieferungen gegen flott gefahrene. Keines ist mehr wert und keines berührt ein Urteil.",

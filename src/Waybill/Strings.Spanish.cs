@@ -344,7 +344,7 @@ public static partial class Strings {
         ["award.ets2_1m"] = "Conduce 1.000.000 km con carga.",
         ["award.ats_1m"] = "Conduce 1.000.000 millas con carga.",
         ["truck.fuel"] = "Combustible",
-        ["why.truckDamage"] = "Daño que este camión recibe en una entrega media. Promediado y no sumado: un total crece con lo mucho que se ha conducido y compararía tu historial en vez de los camiones.",
+        ["why.truckDamage"] = "Daño que sufre este camión en una entrega media. Es la propia cifra de estado del juego, así que sube con los kilómetros y no solo con los golpes: los golpes son las colisiones en la línea de tiempo de cada entrega. Promediado en vez de sumado: un total crece con lo que se ha conducido y compararía tu historial en vez de los camiones.",
         ["why.truckFuel"] = "Lo que consumió en todas sus entregas, en su propia unidad: litros o galones para un depósito, kilovatios hora para una batería.",
         ["why.speed"] = "Distancia frente a las horas de juego al volante, no frente al tiempo delante del ordenador.",
         ["why.style"] = "Entregas conducidas limpias frente a las conducidas alegres. Ninguna vale más y ninguna toca un veredicto.",

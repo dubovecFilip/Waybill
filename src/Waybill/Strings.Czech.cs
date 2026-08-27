@@ -344,7 +344,7 @@ public static partial class Strings {
         ["award.ets2_1m"] = "Odjeď 1 000 000 km s nákladem.",
         ["award.ats_1m"] = "Odjeď 1 000 000 mil s nákladem.",
         ["truck.fuel"] = "Palivo",
-        ["why.truckDamage"] = "Poškození, které tento tahač utrpí na průměrné zakázce. Průměr, ne součet: součet roste s tím, kolik jsi s ním najezdil, a porovnával by tvou historii místo kamionů.",
+        ["why.truckDamage"] = "Poškození, které tento kamion utrpí na průměrné zakázce. Je to vlastní číslo hry, takže roste i s kilometry, nejen s nárazy: samotné nárazy jsou kolize na časové ose každé zakázky. Průměr, ne součet: součet roste s tím, kolik se s kamionem najezdilo, a porovnával by tvou historii, ne kamiony.",
         ["why.truckFuel"] = "Kolik vypil za všechny své zakázky, v jednotce, kterou pije: litry nebo galony u nádrže, kilowatthodiny u baterie.",
         ["why.speed"] = "Vzdálenost proti herním hodinám strávených jízdou, ne proti času u počítače.",
         ["why.style"] = "Zakázky odjeté podle předpisů proti odjetým ostře. Ani jedno není víc a ani jedno neovlivňuje verdikt.",

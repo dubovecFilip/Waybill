@@ -343,7 +343,7 @@ public static partial class Strings {
         ["award.ets2_1m"] = "Drive 1,000,000 km under a load.",
         ["award.ats_1m"] = "Drive 1,000,000 miles under a load.",
         ["truck.fuel"] = "Fuel",
-        ["why.truckDamage"] = "Damage this truck takes on an average delivery. Averaged rather than totalled: a total grows with how much it has been driven, and would compare your history rather than the trucks.",
+        ["why.truckDamage"] = "Damage this truck takes on an average delivery. It is the game's own condition figure, so it rises with the kilometres as well as with the knocks: the impacts are the collisions on each delivery's timeline. Averaged rather than totalled: a total grows with how much it has been driven, and would compare your history rather than the trucks.",
         ["why.truckFuel"] = "What it drank across every delivery it pulled, in the unit it drinks: litres or gallons for a tank, kilowatt hours for a battery.",
         ["why.speed"] = "Distance against the hours the game counted while driving, not against the time at the desk.",
         ["why.style"] = "Deliveries driven clean against deliveries driven spirited. Neither is worth more than the other and neither touches a verdict.",
