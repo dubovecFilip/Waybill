@@ -152,7 +152,8 @@ only ever climbs: if a rule is rewritten later and measures fewer, what was
 written down stands.
 
 Experience is Waybill's own and unrelated to the experience the games pay, which
-is stored per delivery in `xp`. A level costs fifty more than the one before it,
+is stored per delivery in `xp`. It is called XP anyway, on the grounds that every
+driver already knows what XP is and a cleverer name would need explaining. A level costs fifty more than the one before it,
 `25 * (n^2 + n - 2)` in total by level `n`, so the first is a hundred and the
 tenth is five hundred and fifty.
 

@@ -91,6 +91,7 @@ Every state, flag and anomaly is listed with its meaning in
 * Signs that sheet in your own hand, drawn once with the mouse and kept
 * Names the state or the country a city is in, in the list, on the card and on the sheet
 * Groups a night's driving into one sitting and says what came of it
+* Says the last five things it noticed beside every page, each marked by what it was
 * Keeps seventy-two awards, some of them repeatable, and its own level to show for them
 * Counts kilometres in Europe and miles in America, and never turns one into the other
 * Draws the drive in progress a second at a time, with a needle for which way it points
@@ -255,19 +256,24 @@ together underneath it.
 ## What the window says without words
 
 A good deal of it is drawn rather than written. The dot in a row's gutter is its
-verdict, the mark in the strip at the foot of the sidebar is what kind of thing
-just happened, the colour of a route is speed, hazard stripes mean an oversize
-load,
-and each thing that happened on a drive gets a sign of its own on the timeline: a burst for an impact, a dial for a speeding fine, a note for any
-other one, a drop, a moon, a hull, a barrier, two chevrons back for a save
-loaded.
+verdict, the colour of a route is speed, hazard stripes mean an oversize load, and
+each thing that happened on a drive gets a sign of its own on the timeline: a burst
+for an impact, a dial for a speeding fine, a note for any other one, a drop, a
+moon, a hull, a barrier, two chevrons back for a save loaded.
+
+The strip at the foot of the sidebar has three of its own, since in a column that
+narrow the words get cut and a mark never does: a hollow ring for a load taken on,
+a filled one for a load handed over, a star for an award earned. It says the last
+five things Waybill noticed, whichever page is open, and takes no room at all until
+there is something to say.
 
 The signs are drawn by the app itself rather than taken from a font, because the
 glyphs for most of them live in fonts that may not be installed, and a missing one
 comes out as an empty box exactly where the meaning was.
 
-*Help → Legend* names all of them in one window, along with the marks on the map
-and the two shades in the progress bar. The samples in it are painted by the same
+*Help → Legend* names all of them in one window, along with the marks on the map,
+the three in the strip at the foot of the sidebar, and the two shades in the
+progress bar. The samples in it are painted by the same
 code the rest of the window paints with, so it cannot quietly drift away from what
 it explains.
 
@@ -804,13 +810,17 @@ archive/            retired, no longer used
 ## Status
 
 Working: automatic tracking and saving, launching the game from the app, resume
-after a restart, history with search and notes, statistics, event timeline,
-per unit damage across a coupled set, the route map with event pins and the map
-of the whole history, Discord Rich Presence, TrucksBook import, export and
-backups.
+after a restart, history with search and notes, statistics with period comparison,
+sittings at the wheel, one truck against another, awards with their own levels, the
+event timeline, per unit damage across a coupled set, the route map with event pins,
+the drive replayed along its own line, the height profile beside it, the map of the
+whole history, the printable waybill, Discord Rich Presence, TrucksBook import,
+export and backups.
 
-Missing: replaying a drive along its route, an elevation profile, achievements
-and whole session statistics. Details in [`docs/roadmap.md`](docs/roadmap.md).
+Missing: GPX and KML export, fuel and cargo weight as totals in the logbook, and
+which way the truck was pointing in a finished recording. Replay from inside the
+cab is not planned: one position a second is a line on a map, not a camera. Details
+in [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Licence
 

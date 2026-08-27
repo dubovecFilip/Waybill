@@ -15,6 +15,7 @@
 | `statistics.png` | The statistics page, with the period and game it is answering for. |
 | `sessions.png` | The sittings at the wheel, one of them picked. |
 | `trucks.png` | Every tractor that has pulled a delivery, side by side. |
+| `awards.png` | The awards, earned and still to come, under the driver's own standing. |
 | `waybill-sheet.png` | A delivery exported as three A4 sheets, side by side. |
 | `legend.png` | Every mark the window uses, with what it means. |
 
@@ -36,6 +37,11 @@ moving one around the README does not leave the name lying.
 
 They are captured from a real database rather than staged, which is why the
 figures in them are ordinary rather than tidy.
+
+`current-job-live.png` is taken with a finished delivery played back on the live
+page, since a real one needs a running game. It is the only one that shows the
+strip at the foot of the sidebar filled, because that strip only says anything once
+something has happened.
 
 `current-job.png` shows the page with no game running: the two launch buttons, the
 log, and an empty map. `current-job-live.png` shows the other half, a delivery

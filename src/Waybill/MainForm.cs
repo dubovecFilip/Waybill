@@ -3322,6 +3322,35 @@ public partial class MainForm : Form {
             g.FillRectangle(over, 31, r.Height / 2 - 4, 7, 8);
         }, Strings.T("legend.progress"), Strings.T("legend.progressWhy"));
 
+        // The three marks in the strip at the foot of the sidebar, drawn here the same
+        // size they are drawn there.
+        void FeedEntry(Noticed kind, string what, string why) =>
+            Entry((g, r) => {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                var middle = new PointF(23, r.Height / 2f);
+                switch (kind) {
+                    case Noticed.Started:
+                        using (var edge = new Pen(Accent, 1.6f)) {
+                            g.DrawEllipse(edge, middle.X - 4, middle.Y - 4, 8, 8);
+                        }
+                        break;
+                    case Noticed.Delivered:
+                        using (var full = new SolidBrush(Accent)) {
+                            g.FillEllipse(full, middle.X - 4, middle.Y - 4, 8, 8);
+                        }
+                        break;
+                    default:
+                        using (var full = new SolidBrush(Accent)) {
+                            g.FillPolygon(full, Star(middle, 6, 2.4f));
+                        }
+                        break;
+                }
+            }, what, why);
+
+        FeedEntry(Noticed.Started, Strings.T("legend.feedStarted"), Strings.T("legend.feedStartedWhy"));
+        FeedEntry(Noticed.Delivered, Strings.T("legend.feedDelivered"), Strings.T("legend.feedDeliveredWhy"));
+        FeedEntry(Noticed.Award, Strings.T("legend.feedAward"), Strings.T("legend.feedAwardWhy"));
+
         // Docked children stack in reverse of adding, so the list goes in backwards.
         for (var i = rows.Count - 1; i >= 0; i--) page.Controls.Add(rows[i]);
         window.Controls.Add(page);

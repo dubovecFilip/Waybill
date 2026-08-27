@@ -368,8 +368,9 @@ rather than only tested.
 - Driving between jobs kept as well, counted apart from the deliveries and drawn
   in a quieter line, so the map fills in without the totals being flattered
 - One page for the drive in progress, which is the only one that answers what is
-  going on rather than a question the reader has to arrive with, and which turns
-  the map to lie along the panel so a route running north to south still fills it
+  going on rather than a question the reader has to arrive with, and which turns the
+  map to whatever angle fills the shape of the panel, so a route running north to
+  south fills a tall panel standing up and a wide one lying down
 - A delivery's route drawn the way it was driven rather than all at once, which
   is route replay from Phase 3 in the only form the data supports: from above,
   along the line, at the pace the drive actually went
@@ -396,15 +397,24 @@ rather than only tested.
   holding both games adds up to something
 - A finished delivery shown on the live page as though it were under way, which is
   the only way to look at that page, or photograph it, without a game running
+- A strip at the foot of the sidebar saying the last five things Waybill noticed,
+  beside every page rather than on one, each line marked for what it was: a load
+  taken on, a load handed over, an award earned
+- Electric tractors told from diesel ones by their identifier, counted in kilowatt
+  hours everywhere a tank would be counted in litres, and kept apart in the totals
+- A sleep told from a charging stop, a repair or a job taken from a menu, since the
+  game jumps its clock for all four and only one of them is rest
+- Every heading in the window kept to a word or two, with the sentence it could not
+  hold under the pointer instead
 
-**Phase 2, partly.** Export tools are there, and so are period comparisons: the
+**Phase 2 is done.** Export tools are there, and so are period comparisons: the
 statistics page answers for a week or a month and says how each figure moved
 against the same length of time before it, and it can be narrowed to one game.
 Session statistics are built: a page of sittings at the wheel, each with what was
 driven in it, where a sitting is one run of the app and runs close together are
 the same sitting. One truck against another is built, as a page of its own: a row per tractor over
-the whole history, since a week's window hides the difference between a truck
-that has pulled twenty-six loads and one that has pulled one. Achievements are
+the whole history, since a week's window hides the difference between a truck that
+has pulled twenty-six loads and one that has pulled one. Achievements are
 built, as a page of their own: seventy-two of them on four shelves, worth
 Waybill's own experience and a level to show for it. Some repeat, and then doing
 the thing again counts again. Distance is kept apart by game and never converted,
@@ -412,6 +422,10 @@ so Europe counts in kilometres and America in miles. They are worked out from th
 deliveries Waybill watched itself, since an imported row carries a distance and a
 payout and nothing else, and they are backfilled quietly, so the history that
 already exists counts without announcing forty awards at once.
+
+What this phase asked for that is still open is fuel and cargo weight as totals in
+the logbook. Every refuel is stored with what it cost and every delivery with what
+it carried; neither is summed anywhere yet.
 
 **Phase 3, mostly.** The map is drawn: a delivery's own route with its events
 marked on it, and a page showing every drive of one game at once, where clicking a
