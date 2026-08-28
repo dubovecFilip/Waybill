@@ -64,11 +64,48 @@ public sealed class MapBackdrop : IDisposable {
         public int maxZoom { get; set; }
     }
 
+    /// <summary>A town the game has, wherever the exporter found it. Nothing to do
+    /// with whether this driver has ever been there.</summary>
+    public sealed class Place {
+        public string Name { get; set; } = "";
+        public float X { get; set; }
+
+        /// <summary>The exporter's y, which is the game's z. Same axis, older name.</summary>
+        public float Y { get; set; }
+    }
+
+    /// <summary>
+    /// Every town on the map, read once when something first asks.
+    ///
+    /// Waybill knows only the cities it has driven to, which is a handful of dots in a
+    /// country. These are the rest, so a delivery is read against somewhere rather
+    /// than against nowhere, and they are drawn quietly because the driver has no
+    /// history in them.
+    /// </summary>
+    public IReadOnlyList<Place> Places {
+        get {
+            if (_places is not null) return _places;
+            try {
+                var path = Path.Combine(_folder, PlacesName);
+                _places = File.Exists(path)
+                    ? JsonConvert.DeserializeObject<List<Place>>(File.ReadAllText(path)) ?? new List<Place>()
+                    : new List<Place>();
+            } catch {
+                _places = new List<Place>();
+            }
+            return _places;
+        }
+    }
+    private List<Place>? _places;
+
     /// <summary>The name of the descriptor, looked for in the folder of tiles.</summary>
     public const string DescriptorName = "waybill-map.json";
 
     /// <summary>What the exporter calls its own, read when ours is not there.</summary>
     public const string ExportedName = "TileMapInfo.json";
+
+    /// <summary>The towns, as the exporter writes them beside the tiles.</summary>
+    public const string PlacesName = "Cities.json";
 
     private readonly string _folder;
     private readonly Descriptor _map;
@@ -188,6 +225,11 @@ public sealed class MapBackdrop : IDisposable {
     /// <summary>How many metres one tile covers at that level.</summary>
     private double TileSpan(int zoom) => WorldSide / Math.Pow(2, zoom);
 
+    /// <summary>How much detail the finest level holds, in pixels per metre. Zooming
+    /// much past this is blowing up a picture rather than looking closer at one.
+    /// </summary>
+    public float Finest => (float)(_map.TileSize / TileSpan(_map.MaxZoom));
+
     /// <summary>
     /// Which level to draw at, for a view showing this many pixels per metre.
     ///
@@ -233,13 +275,29 @@ public sealed class MapBackdrop : IDisposable {
                 var tile = Tile(zoom, tx, _map.TopDown ? tz : across - 1 - tz);
                 if (tile is null) continue;
 
-                var topLeft = toScreen((float)(_map.MinX + tx * span), (float)(_map.MinZ + tz * span));
-                var bottomRight = toScreen((float)(_map.MinX + (tx + 1) * span), (float)(_map.MinZ + (tz + 1) * span));
+                var left = _map.MinX + tx * span;
+                var top = _map.MinZ + tz * span;
+
+                // Only the part of the tile the panel can see, rather than the whole
+                // of it. Zoomed in far enough, a whole tile lands on a rectangle
+                // hundreds of thousands of pixels wide, and GDI+ answers that by
+                // drawing nothing at all: the map simply vanished at the zoom where
+                // it was most worth having.
+                var cut = RectangleF.Intersect(seen, new RectangleF((float)left, (float)top, (float)span, (float)span));
+                if (cut.Width <= 0 || cut.Height <= 0) continue;
+
+                var perTile = _map.TileSize / (float)span;
+                var from = new RectangleF(
+                    (cut.Left - (float)left) * perTile, (cut.Top - (float)top) * perTile,
+                    cut.Width * perTile, cut.Height * perTile);
+
+                var topLeft = toScreen(cut.Left, cut.Top);
+                var bottomRight = toScreen(cut.Right, cut.Bottom);
                 var box = RectangleF.FromLTRB(topLeft.X, topLeft.Y, bottomRight.X, bottomRight.Y);
                 // Half a pixel over, so neighbouring tiles meet instead of leaving a
                 // hairline of background between them.
                 box.Inflate(0.5f, 0.5f);
-                g.DrawImage(tile, box);
+                g.DrawImage(tile, box, from, GraphicsUnit.Pixel);
             }
         }
     }

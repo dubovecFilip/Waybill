@@ -635,6 +635,21 @@ public class RouteView : Control {
         var before = ToWorld(e.X, e.Y);
         var step = e.Delta > 0 ? 1.2f : 1 / 1.2f;
         _zoom = Math.Clamp(_zoom * step, 1f, 60f);
+        // With a map underneath there is a point past which there is nothing more to
+        // see, only the same tiles blown up. A little past its finest level is useful
+        // for reading a line through a junction; far past it is just a blur.
+        if (GameMap is { } detail && _fitScale > 0) {
+            _zoom = Math.Min(_zoom, Math.Max(detail.Finest * 3f / _fitScale, 1f));
+        }
+        // All the way out is everything again. Zooming in walks the centre towards the
+        // pointer, so winding back out used to leave the panel in an empty stretch of
+        // desert a hundred miles from anything the driver has ever driven.
+        if (_zoom <= 1f) {
+            _snapNext = true;
+            Fit();
+            return;
+        }
+
         var after = ToWorld(e.X, e.Y);
         _centre = Inside(new PointF(_centre.X + (before.X - after.X), _centre.Y + (before.Y - after.Y)), PerMetre);
 
@@ -1070,6 +1085,35 @@ public class RouteView : Control {
 
             g.FillRectangle(halo, RectangleF.Inflate(label, 2, 0));
             g.DrawString(city.Name, font, text, label.Location);
+        }
+
+        // Then the towns the game has and this driver has not been to. Quieter, and
+        // last, so a name the driver knows is never the one dropped when two collide.
+        // Nothing is hidden by zoom: what fits is drawn, so pulling in reveals the
+        // country the way looking closer at a map does.
+        if (GameMap is not { } map) return;
+        using var otherDot = new SolidBrush(Color.FromArgb(130, 118, 126, 138));
+        using var otherText = new SolidBrush(Color.FromArgb(150, 146, 155, 168));
+
+        foreach (var place in map.Places) {
+            if (_cities.Any(c => string.Equals(c.Name, place.Name, StringComparison.OrdinalIgnoreCase))) continue;
+
+            var at = ToScreen(place.X, place.Y);
+            if (!view.Contains(at)) continue;
+
+            var size = g.MeasureString(place.Name, font);
+            var right = at.X + 8 + size.Width <= Width - 2;
+            var label = new RectangleF(
+                right ? at.X + 8 : at.X - 8 - size.Width,
+                at.Y - size.Height / 2, size.Width, size.Height);
+            if (label.Left < 2) continue;
+            var mark = new RectangleF(at.X - 2, at.Y - 2, 4, 4);
+            if (placed.Any(p => p.IntersectsWith(label) || p.IntersectsWith(mark))) continue;
+            placed.Add(RectangleF.Inflate(label, 3, 1));
+
+            g.FillEllipse(otherDot, at.X - 2f, at.Y - 2f, 4, 4);
+            g.FillRectangle(halo, RectangleF.Inflate(label, 2, 0));
+            g.DrawString(place.Name, font, otherText, label.Location);
         }
     }
 
