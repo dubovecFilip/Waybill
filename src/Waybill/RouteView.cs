@@ -98,7 +98,7 @@ public class RouteView : Control {
     private bool _fitted;
 
     private Bitmap? _under;
-    private (int W, int H, float Scale, float CX, float CY, long Lit, bool History, bool Freeroam) _underKey;
+    private (int W, int H, float Scale, float CX, float CY, long Lit, bool History, bool Freeroam, string Map) _underKey;
 
     private Point _dragFrom;
     private bool _dragging;
@@ -175,6 +175,16 @@ public class RouteView : Control {
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool ShowMarks { get; set; } = true;
+
+    /// <summary>
+    /// The game's own map, drawn under everything else.
+    ///
+    /// Null draws nothing, which is where this started: a route on a dark ground, with
+    /// the rest of the driving behind it for the only scale there was. With a map under
+    /// it, that scale comes from the roads themselves.
+    /// </summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public MapBackdrop? GameMap { get; set; }
 
     /// <summary>
     /// Whether the line being singled out is a drive with nothing on the hook.
@@ -786,7 +796,8 @@ public class RouteView : Control {
         // The switches belong in the key: turning a layer off changes what the cached
         // bitmap should hold, and without them the old one was kept and the toggle
         // did nothing until the view happened to move.
-        var key = (Width, Height, PerMetre, _centre.X, _centre.Y, _lit, ShowHistory, ShowFreeroam);
+        var key = (Width, Height, PerMetre, _centre.X, _centre.Y, _lit, ShowHistory, ShowFreeroam,
+                   GameMap is null ? "" : GameMap.Game);
         if (_under is null || _underKey != key) {
             Discard();
             _underKey = key;
@@ -809,6 +820,11 @@ public class RouteView : Control {
             // projecting a stretch only to throw every point away is the one cost
             // worth avoiding here.
             var seen = Seen();
+
+            // The map first, since everything else is drawn on top of it. It goes into
+            // the same cached picture as the history, so a live drive costs nothing
+            // between refits.
+            GameMap?.Draw(ug, seen, PerMetre, ToScreen);
 
             if (ShowFreeroam) {
                 using var spare = new Pen(Color.FromArgb(_focus is null ? 105 : 46, 132, 136, 142), 0.9f);

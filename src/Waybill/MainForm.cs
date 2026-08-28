@@ -1328,6 +1328,7 @@ public partial class MainForm : Form {
         var shown = Units.For(_settings.Units, game);
         map.FormatSpeed = kmh => shown.FormatSpeed(kmh);
         var routes = RoutesFor(game);
+        map.GameMap = GameMapFor(game);
         map.Show(Layers(routes), 0, routes.Cities, null, routes.RunUps.Concat(_store.FreeroamRoutes(game)));
     }
 
@@ -3139,6 +3140,7 @@ public partial class MainForm : Form {
         };
 
         var map = NewMap(u);
+        map.GameMap = GameMapFor(d.Game);
         map.Show(Layers(RoutesFor(d.Game)), d.Id, RoutesFor(d.Game).Cities,
                  _store.TimelineRows(d.Id, u), RoutesFor(d.Game).RunUps.Concat(_store.FreeroamRoutes(d.Game)));
 
@@ -4078,6 +4080,23 @@ public partial class MainForm : Form {
     private GameRoutes RoutesFor(string game) {
         if (!_routes.TryGetValue(game, out var routes)) _routes[game] = routes = _store.RoutesForGame(game);
         return routes;
+    }
+
+    /// <summary>
+    /// The game's own map, if somebody has put one where Waybill looks.
+    ///
+    /// Under `map\ets2` and `map\ats` beside the database, each with the descriptor
+    /// that says which square of the world its tiles cover. Nothing here reads the
+    /// game's archives: the tiles are exported once by a tool that already knows how,
+    /// and Waybill only draws them. No map is the ordinary case and draws nothing.
+    /// </summary>
+    private readonly Dictionary<string, MapBackdrop?> _gameMaps = new(StringComparer.OrdinalIgnoreCase);
+
+    private MapBackdrop? GameMapFor(string game) {
+        if (game.Length == 0) return null;
+        if (_gameMaps.TryGetValue(game, out var had)) return had;
+        var folder = Path.Combine(DeliveryStore.DefaultDir(), "map", game.ToLowerInvariant());
+        return _gameMaps[game] = MapBackdrop.Open(folder);
     }
 
     /// <summary>Everything driven with nothing on the hook, kept beside the routes and

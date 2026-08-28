@@ -560,6 +560,9 @@ public partial class MainForm {
         // does not move while somebody drives, and taking every route of it apart once
         // a second is the most expensive thing this page can do; after that only the
         // line being driven is handed over, which leaves the picture underneath alone.
+        _jobMap.GameMap = GameMapFor(game);
+        if (_jobClose is not null) _jobClose.GameMap = _jobMap.GameMap;
+
         if (_mapsHolding != game) {
             var behind = history is null ? new List<RouteLayer>() : Layers(history).ToList();
             _jobMap.Show(behind, 0, cities, null, freeroam);
