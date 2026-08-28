@@ -389,6 +389,14 @@ public class JobTracker {
                 outEvents.Add(new TrackerEvent { Type = TrackerEventType.JobResumed, Job = _current.Job });
                 return outEvents;
             }
+            // A different job in the same game means the old one is never coming back:
+            // it was cancelled in the menu, or abandoned for this one. The driving on
+            // it happened, so it is written off as unfinished rather than dropped, and
+            // it says so plainly instead of claiming a delivery.
+            if (_pendingResume is { } given && given.Game == snap.Game) {
+                var written = CloseAbandoned(given, nowMs);
+                outEvents.Add(new TrackerEvent { Type = TrackerEventType.JobFinished, Record = written });
+            }
             _pendingResume = null;
 
             Open(snap, fp, nowMs);
@@ -528,15 +536,14 @@ public class JobTracker {
         _current == null ? null
             : (_current.DistanceKm, _current.DistanceToLoadKm, _current.Job.PlannedDistanceKm);
 
-    /// <summary>How long an unfinished job stays resumable. A week covers coming back
-    /// to a delivery after a crash, a reinstall or simply a break; past that the offer
-    /// it belongs to is long gone and the job is written off.</summary>
-    public const double ResumeMaxAgeHours = 24 * 7;
-
-    /// <summary>Closes a job that was left hanging past the resume window, from the
-    /// state persisted on disk alone. There is no final snapshot to measure against,
+    /// <summary>Closes a job that will never be finished, from the state persisted on
+    /// disk alone. There is no final snapshot to measure against,
     /// so what was accumulated before the interruption is what gets reported: the
-    /// distance is real driving and belongs in the history, it simply never arrived.</summary>
+    /// distance is real driving and belongs in the history, it simply never arrived.
+    ///
+    /// There is no clock on this. An unfinished delivery waits for its driver however
+    /// long that takes, and is only written off when another job starts in the same
+    /// game, which is the game itself saying the old one is over.</summary>
     public static JobRecord CloseAbandoned(JobState j, long nowMs) {
         var record = new JobRecord {
             JobUid = j.JobUid,
@@ -821,7 +828,12 @@ public class JobTracker {
         j.LastOdometerKm = snap.Truck.OdometerKm;
         j.StartFuelL = snap.Truck.FuelL;
         j.DistanceKm = 0;
-        j.DistanceToLoadKm = 0;
+        // The run up is kept as it stands rather than cleared. It is no longer part of
+        // the delivery, but the game counts it: the figure it reports on arrival is
+        // everything since the offer was taken, and the two are only comparable with
+        // this added back. Measured on one contract: the game said 553 km, the load
+        // travelled 174 and the drive out to the trailer was 379.
+
         j.WorldDistanceKm = 0;
         j.SimSpeedDistanceKm = 0;
         j.DrivingMs = 0;
@@ -1560,6 +1572,11 @@ public class JobTracker {
         // odometer counts, so this is now a like-for-like comparison and a genuinely
         // strong signal: skipping the drive can't produce a matching odometer delta.
         //
+        // Against the whole of what the game counted, which is the delivery plus the
+        // drive out to the trailer: the game starts counting when the offer is taken
+        // and Waybill starts when the load goes on, so the run up has to be added back
+        // for the two to be talking about the same drive.
+        //
         // Only once the job is long enough for the comparison to mean anything. The
         // game reports whole kilometres, so on a job of one it is saying "somewhere
         // between half and one and a half", and the manoeuvring at either dock is the
@@ -1567,7 +1584,7 @@ public class JobTracker {
         // a reported 1, and there was nothing wrong with it. At ten the rounding is
         // worth five percent, which the band already allows for.
         if (record.ReportedDistanceKm is >= 10 && record.DistanceKm > 0) {
-            var ratio = record.DistanceKm / record.ReportedDistanceKm.Value;
+            var ratio = (record.DistanceKm + record.DistanceToLoadKm) / record.ReportedDistanceKm.Value;
             if (ratio < 0.8 || ratio > 1.25) flags.Add("distance_mismatch");
         }
 

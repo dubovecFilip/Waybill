@@ -122,9 +122,9 @@ public class TrackerEngine : IDisposable {
         ActiveJob = job;
         _demo = true;
         _tracker.ShowDemo(state);
-        // Whatever was on the hook before this is not resumable now, and the pretend
-        // job must not be left behind as though it were.
-        ClearInProgress();
+        // Nothing on disk is touched. A demonstration is never saved in the first
+        // place, and an unfinished delivery waiting for its driver has nothing to do
+        // with somebody looking at a finished one.
     }
 
     /// <summary>Whether the job on the page is a demonstration. Nothing about one is
@@ -288,7 +288,7 @@ public class TrackerEngine : IDisposable {
                 ActiveJob = null;
                 _store.SaveDelivery(ev.Record);
                 DeliveriesThisRun++;
-                ClearInProgress();
+                ClearInProgress(ev.Record.Game);
                 JobFinished?.Invoke(ev.Record);
             }
         }
@@ -335,39 +335,58 @@ public class TrackerEngine : IDisposable {
     }
 #pragma warning restore CS8625
 
+    /// <summary>
+    /// Hands whatever was left unfinished back to the tracker.
+    ///
+    /// One per game, and no time limit on either. A delivery half driven in Europe is
+    /// still half driven a fortnight later, and playing America in between says nothing
+    /// about it: the two games keep their own trucks, their own worlds and their own
+    /// jobs, so Waybill keeps them apart as well. The fingerprint match in the tracker
+    /// is what decides whether the offer that comes back is the same one; nothing is
+    /// written off for having waited.
+    /// </summary>
     private void LoadInProgress() {
-        if (!File.Exists(_inProgressPath)) return;
-        try {
-            var saved = JsonConvert.DeserializeObject<JobState>(File.ReadAllText(_inProgressPath));
-            // The fingerprint match in the tracker is the real guard, but a job left
-            // hanging for long enough is not one being continued, and this removes any
-            // chance of it latching onto a coincidentally identical offer much later.
-            // A week is long enough to come back to a delivery after a crash or a
-            // break, and short enough that the offer it belongs to is gone.
-            var ageHours = saved == null ? 0 : (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - saved.StartedAtMs) / 3600000.0;
-            if (saved != null && !string.IsNullOrEmpty(saved.Fingerprint) && ageHours < JobTracker.ResumeMaxAgeHours) {
+        foreach (var path in UnfinishedFiles()) {
+            try {
+                var saved = JsonConvert.DeserializeObject<JobState>(File.ReadAllText(path));
+                if (saved is null || string.IsNullOrEmpty(saved.Fingerprint)) continue;
                 _tracker.PrepareResume(saved);
                 HasPendingResume = true;
                 Message?.Invoke($"{Waybill.Strings.T("msg.unfinishedFound")}: {saved.Job.SourceCity} -> {saved.Job.DestinationCity} ({saved.DistanceKm:0.0} km)");
-            } else if (saved != null) {
-                // Written to the history as cancelled rather than quietly dropped. The
-                // driving happened, and a delivery that simply disappears is worse
-                // than one that says plainly it was never finished.
-                var record = JobTracker.CloseAbandoned(saved, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-                _store.SaveDelivery(record);
-                Message?.Invoke($"{Waybill.Strings.T("msg.unfinishedStale")} ({ageHours / 24:0} d): {saved.Job.SourceCity} -> {saved.Job.DestinationCity}");
-                JobFinished?.Invoke(record);
-                File.Delete(_inProgressPath);
+            } catch (Exception ex) {
+                // A truncated or corrupt file must never stop the recorder from starting.
+                Message?.Invoke($"{Waybill.Strings.T("msg.unfinishedUnreadable")}: {ex.Message}");
             }
-        } catch (Exception ex) {
-            // A truncated/corrupt file must never stop the recorder from starting.
-            Message?.Invoke($"{Waybill.Strings.T("msg.unfinishedUnreadable")}: {ex.Message}");
         }
+    }
+
+    /// <summary>Every unfinished job on disk, newest first, and the one written before
+    /// there was a file per game, which is read once and then replaced by one.</summary>
+    private IEnumerable<string> UnfinishedFiles() {
+        var folder = Path.GetDirectoryName(_inProgressPath)!;
+        var stem = Path.GetFileNameWithoutExtension(_inProgressPath);
+        var found = new List<string>();
+        if (File.Exists(_inProgressPath)) found.Add(_inProgressPath);
+        try {
+            found.AddRange(Directory.GetFiles(folder, stem + "-*.json"));
+        } catch { /* nothing to resume is not a reason to fail to start */ }
+        return found;
+    }
+
+    /// <summary>Where a game's unfinished job lives. Beside the old single file rather
+    /// than in place of it, so a version that knew only one is not confused by the
+    /// ones it does not.</summary>
+    private string UnfinishedPathFor(string game) {
+        var folder = Path.GetDirectoryName(_inProgressPath)!;
+        var stem = Path.GetFileNameWithoutExtension(_inProgressPath);
+        var tidy = string.IsNullOrWhiteSpace(game) ? "unknown" : game.ToLowerInvariant();
+        return Path.Combine(folder, $"{stem}-{tidy}.json");
     }
 
     public void SaveInProgress(bool force = false) {
         var state = _tracker.ActiveState;
         if (state == null) return;
+        var path = UnfinishedPathFor(state.Game);
         // A demonstration is never written down. Saved here it would be picked up as
         // an unfinished job by the next start, found to be days old, and written off
         // as a delivery: the driver would come back to a cancelled duplicate of a run
@@ -378,17 +397,26 @@ public class TrackerEngine : IDisposable {
         try {
             // Write-then-replace, so an interrupted write can't leave a half-written
             // file where a complete one used to be.
-            var tmp = _inProgressPath + ".tmp";
+            var tmp = path + ".tmp";
             File.WriteAllText(tmp, JsonConvert.SerializeObject(state));
-            File.Move(tmp, _inProgressPath, overwrite: true);
+            File.Move(tmp, path, overwrite: true);
+            // The single file from before there was one per game, once its contents
+            // have somewhere better to live.
+            if (File.Exists(_inProgressPath)) File.Delete(_inProgressPath);
         } catch (Exception ex) {
             Message?.Invoke($"{Waybill.Strings.T("msg.stateSaveFailed")}: {ex.Message}");
         }
     }
 
-    private void ClearInProgress() {
+    /// <summary>Forgets the unfinished job of whichever game just finished one. The
+    /// other game's, if it has one, is none of this one's business.</summary>
+    private void ClearInProgress(string game = "") {
         try {
-            if (File.Exists(_inProgressPath)) File.Delete(_inProgressPath);
+            foreach (var path in game.Length > 0
+                         ? new[] { UnfinishedPathFor(game) }
+                         : UnfinishedFiles().ToArray()) {
+                if (File.Exists(path)) File.Delete(path);
+            }
         } catch { /* it will be overwritten or ignored on the next start */ }
     }
 
