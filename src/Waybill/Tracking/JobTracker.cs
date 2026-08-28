@@ -333,9 +333,11 @@ public class JobTracker {
         var reloaded = prev.GameTimeMin > 0 && snap.GameTimeMin > 0 && snap.GameTimeMin < prev.GameTimeMin;
         if (reloaded && _current != null) _current.SaveLoadedAtMs = nowMs;
 
-        // A finished job wins over everything else this tick.
-        var delivered = snap.Events.JobDelivered;
-        var cancelled = snap.Events.JobCancelled;
+        // A finished job wins over everything else this tick, as long as the game
+        // meant it. See Believable: a game being torn down says the same thing with
+        // nothing in it.
+        var delivered = Believable(snap.Events.JobDelivered) ? snap.Events.JobDelivered : null;
+        var cancelled = Believable(snap.Events.JobCancelled) ? snap.Events.JobCancelled : null;
 
         if (_current != null && (delivered != null || cancelled != null)) {
             Accumulate(snap, prev, dtMs, gap, reloaded, instant, nowMs);
@@ -595,6 +597,30 @@ public class JobTracker {
         record.Validation = new Validation { Flags = { "abandoned" }, Status = "review" };
         return record;
     }
+
+    /// <summary>
+    /// Whether the game meant the delivery it just announced.
+    ///
+    /// A game that is going down announces one anyway. Measured on a crash mid
+    /// delivery: JobDelivered arrived with revenue zero, distance zero, experience
+    /// zero and both timestamps zero, a fine of nothing came with it in the same
+    /// instant, and the truck on that tick read no speed and an odometer of zero. Every
+    /// field of the shared memory had gone to nothing at once, which is what a plugin
+    /// looks like when the process behind it dies.
+    ///
+    /// Taken at face value it wrote off two thousand kilometres of driving as a
+    /// delivery worth nothing, and then the game came back and started the same job
+    /// again, so the drive existed twice and neither copy was right. A real delivery
+    /// always carries something: the minute it finished, or a payout, or a distance,
+    /// or the experience earned.
+    /// </summary>
+    private static bool Believable(JobDeliveredEvent? e) =>
+        e is not null && (e.FinishedGameMin > 0 || e.Revenue > 0 || e.DistanceKm > 0 || e.EarnedXp > 0);
+
+    /// <summary>The same for a cancellation, which carries what it cost and the
+    /// minute the job it ended had started. A game going down carries neither.</summary>
+    private static bool Believable(JobCancelledEvent? e) =>
+        e is not null && (e.Penalty > 0 || e.StartedGameMin > 0);
 
     /// <summary>What to call a job that disappeared without a completion event. A save
     /// loaded moments earlier explains it: that save predates the job being accepted,
@@ -1154,7 +1180,9 @@ public class JobTracker {
     private static void RecordEvents(Snapshot snap, JobState j, List<Anomaly> found, bool inGrace, long nowMs) {
         if (j.LoadOnAtMs == 0) return;
         var e = snap.Events;
-        if (e.Fined != null) {
+        // A fine of nothing is the same tear-down: the amount is what the police
+        // charged, and they do not charge zero.
+        if (e.Fined is { Amount: > 0 }) {
             j.Fines.Add(new FineRecord { Amount = e.Fined.Amount, Offence = e.Fined.Offence });
             j.Timeline.Add(new JobEvent { AtMs = nowMs, Type = "fine", Value = e.Fined.Amount, Detail = e.Fined.Offence });
         }

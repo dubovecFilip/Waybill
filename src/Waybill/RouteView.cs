@@ -319,7 +319,10 @@ public class RouteView : Control {
         if (drawn.Runs.Count == 0) return;
         drawn.Index();
 
-        _drawn.RemoveAll(d => d.Id == live.Id);
+        // Both of the numbers no row can hold go, not just this one: the roam that
+        // ran up to a delivery must not stay behind as a line that never changes
+        // again, and a delivery must not linger once the roaming after it begins.
+        _drawn.RemoveAll(d => d.Id < 0);
         _drawn.Add(drawn);
         _focus = drawn;
         _sweep = 1;
