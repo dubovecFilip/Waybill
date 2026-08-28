@@ -431,6 +431,7 @@ public static partial class Strings {
         ["stats.freeroam"] = "ohne Auftrag",
         ["stats.withFreeroam"] = "insgesamt",
         ["map.layerCities"] = "Städte",
+        ["map.layerStops"] = "Haltepunkte",
         ["map.layerMarks"] = "Ereignisse",
         ["value.accepted"] = "Angenommen",
         ["value.review"] = "Anzusehen",

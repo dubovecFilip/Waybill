@@ -430,6 +430,7 @@ public static partial class Strings {
         ["stats.freeroam"] = "off the job",
         ["stats.withFreeroam"] = "in all",
         ["map.layerCities"] = "Cities",
+        ["map.layerStops"] = "Stops",
         ["map.layerMarks"] = "Events",
         ["value.accepted"] = "Accepted",
         ["value.review"] = "Review",

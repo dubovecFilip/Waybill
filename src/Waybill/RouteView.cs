@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using Waybill.Storage;
 
 namespace Waybill;
@@ -96,7 +97,7 @@ public class RouteView : Control {
     private bool _fitted;
 
     private Bitmap? _under;
-    private (int W, int H, float Scale, float CX, float CY, long Lit, bool History, string Map) _underKey;
+    private (int W, int H, float Scale, float CX, float CY, long Lit, bool History, bool Stops, string Map) _underKey;
 
     private Point _dragFrom;
     private bool _dragging;
@@ -170,6 +171,46 @@ public class RouteView : Control {
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool ShowMarks { get; set; } = true;
+
+    /// <summary>
+    /// Whether the stops the game has are drawn: pumps, rest areas, services and the
+    /// rest of what a driver plans a day around.
+    ///
+    /// Only once the view is close enough for them to mean a place rather than a
+    /// smudge. On a map of a whole country there are thousands of them and they would
+    /// be a texture, not information.
+    /// </summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool ShowStops {
+        get => _showStops;
+        set {
+            if (_showStops == value) return;
+            _showStops = value;
+            Discard();
+            Invalidate();
+        }
+    }
+    private bool _showStops = true;
+
+    /// <summary>How much of the panel a stop's picture takes, in pixels. Fixed rather
+    /// than scaled with the view: it is a mark saying "here", not a thing with a
+    /// size.</summary>
+    private const float StopSize = 12f;
+
+    /// <summary>
+    /// Below this many pixels to the metre the stops are not drawn.
+    ///
+    /// It works out at roughly twenty five kilometres across a panel. The game draws
+    /// these icons to be read on its own map at one town at a time, and they are
+    /// brightly coloured for it; a country's worth of them at once is a rash, not a
+    /// map, so they are kept for the distance at which each one means a place a driver
+    /// could actually pull into.
+    /// </summary>
+    private const float StopsFrom = 0.04f;
+
+    /// <summary>How much of the icon's own colour is kept. They are drawn to be the
+    /// loudest thing on the game's map; here the drive is.</summary>
+    private const float StopFade = 0.55f;
 
     /// <summary>
     /// The game's own map, drawn under everything else.
@@ -832,7 +873,7 @@ public class RouteView : Control {
         // The switches belong in the key: turning a layer off changes what the cached
         // bitmap should hold, and without them the old one was kept and the toggle
         // did nothing until the view happened to move.
-        var key = (Width, Height, PerMetre, _centre.X, _centre.Y, _lit, ShowHistory,
+        var key = (Width, Height, PerMetre, _centre.X, _centre.Y, _lit, ShowHistory, ShowStops,
                    GameMap is null ? "" : GameMap.Game);
         if (_under is null || _underKey != key) {
             Discard();
@@ -871,6 +912,7 @@ public class RouteView : Control {
             // the same cached picture as the history, so a live drive costs nothing
             // between refits.
             GameMap?.Draw(ug, seen, PerMetre, ToScreen);
+            DrawStops(ug, seen);
 
             foreach (var d in _drawn) {
                 if (d == _focus) continue;
@@ -889,6 +931,32 @@ public class RouteView : Control {
             }
         }
         g.DrawImageUnscaled(_under, 0, 0);
+    }
+
+    /// <summary>
+    /// The stops, drawn into the cached picture above the map and under the drives.
+    ///
+    /// Above the map because they are what the map is for at this distance, and under
+    /// the drives because the line is the subject and nothing is allowed to sit on top
+    /// of it.
+    /// </summary>
+    private void DrawStops(Graphics g, RectangleF seen) {
+        if (!ShowStops || GameMap is not { } map || PerMetre < StopsFrom) return;
+
+        var half = StopSize / 2;
+        using var fade = new ImageAttributes();
+        fade.SetColorMatrix(new ColorMatrix { Matrix33 = StopFade });
+
+        foreach (var stop in map.Stops) {
+            if (stop.X < seen.Left || stop.X > seen.Right || stop.Y < seen.Top || stop.Y > seen.Bottom) continue;
+            if (map.Icon(stop.Name) is not { } icon) continue;
+            var at = ToScreen(stop.X, stop.Y);
+            // The overload that takes a fade wants whole pixels, which is what an
+            // icon of this size lands on anyway.
+            var box = new Rectangle((int)Math.Round(at.X - half), (int)Math.Round(at.Y - half),
+                                    (int)StopSize, (int)StopSize);
+            g.DrawImage(icon, box, 0, 0, icon.Width, icon.Height, GraphicsUnit.Pixel, fade);
+        }
     }
 
     private PointF[] Project(List<RoutePoint> run) {

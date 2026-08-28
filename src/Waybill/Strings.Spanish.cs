@@ -431,6 +431,7 @@ public static partial class Strings {
         ["stats.freeroam"] = "fuera de trabajo",
         ["stats.withFreeroam"] = "en total",
         ["map.layerCities"] = "Ciudades",
+        ["map.layerStops"] = "Paradas",
         ["map.layerMarks"] = "Eventos",
         ["value.accepted"] = "Aceptada",
         ["value.review"] = "Para revisar",

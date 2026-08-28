@@ -98,6 +98,68 @@ public sealed class MapBackdrop : IDisposable {
     }
     private List<Place>? _places;
 
+    /// <summary>Somewhere on the map worth stopping at: a pump, a rest area, a
+    /// service, a garage, a dealer, a weigh station, a viewpoint, a ferry.</summary>
+    public sealed class Stop {
+        public string Name { get; set; } = "";
+        public string Type { get; set; } = "";
+        public float X { get; set; }
+
+        /// <summary>The exporter's y, which is the game's z.</summary>
+        public float Y { get; set; }
+    }
+
+    /// <summary>
+    /// The stops, read once when something first asks for them.
+    ///
+    /// Companies are deliberately left out. Their icon is a logo, and a driver running
+    /// company mods would be shown whatever happened to be installed on the day the
+    /// map was exported, which is worse than showing nothing. Road shields go too:
+    /// the roads themselves are already drawn underneath.
+    /// </summary>
+    public IReadOnlyList<Stop> Stops {
+        get {
+            if (_stops is not null) return _stops;
+            try {
+                var path = Path.Combine(_folder, StopsName);
+                var all = File.Exists(path)
+                    ? JsonConvert.DeserializeObject<List<Stop>>(File.ReadAllText(path)) ?? new List<Stop>()
+                    : new List<Stop>();
+                _stops = all.FindAll(s => Kinds.Contains(s.Type));
+            } catch {
+                _stops = new List<Stop>();
+            }
+            return _stops;
+        }
+    }
+    private List<Stop>? _stops;
+
+    /// <summary>What is drawn, and nothing else. Anything the exporter learns to write
+    /// that is not named here is ignored rather than drawn as a mystery.</summary>
+    private static readonly HashSet<string> Kinds = new(StringComparer.OrdinalIgnoreCase) {
+        "Fuel", "Parking", "Service", "Garage", "TruckDealer", "WeightStation", "Viewpoint", "Ferry",
+    };
+
+    /// <summary>The picture for a stop, from the icons the exporter wrote beside the
+    /// tiles. Kept for the same reason the tiles are: the same handful are asked for
+    /// again on every draw.</summary>
+    public Bitmap? Icon(string name) {
+        if (_icons.TryGetValue(name, out var had)) return had;
+        Bitmap? icon = null;
+        try {
+            var path = Path.Combine(_folder, IconFolder, name + ".png");
+            if (File.Exists(path)) {
+                using var bytes = new MemoryStream(File.ReadAllBytes(path));
+                icon = new Bitmap(bytes);
+            }
+        } catch {
+            icon = null;
+        }
+        _icons[name] = icon;
+        return icon;
+    }
+    private readonly Dictionary<string, Bitmap?> _icons = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>The name of the descriptor, looked for in the folder of tiles.</summary>
     public const string DescriptorName = "waybill-map.json";
 
@@ -106,6 +168,11 @@ public sealed class MapBackdrop : IDisposable {
 
     /// <summary>The towns, as the exporter writes them beside the tiles.</summary>
     public const string PlacesName = "Cities.json";
+
+    /// <summary>Everything the exporter marks on the map, and the folder of pictures
+    /// it marks them with.</summary>
+    public const string StopsName = "Overlays.json";
+    public const string IconFolder = "Overlays";
 
     private readonly string _folder;
     private readonly Descriptor _map;
@@ -371,5 +438,7 @@ public sealed class MapBackdrop : IDisposable {
         foreach (var tile in _tiles.Values) tile?.Dispose();
         _tiles.Clear();
         _order.Clear();
+        foreach (var icon in _icons.Values) icon?.Dispose();
+        _icons.Clear();
     }
 }

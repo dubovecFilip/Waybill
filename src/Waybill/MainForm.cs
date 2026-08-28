@@ -3758,6 +3758,7 @@ public partial class MainForm : Form {
         }
         Item(Strings.T("map.layerHistory"), map.ShowHistory, v => map.ShowHistory = v);
         Item(Strings.T("map.layerCities"), map.ShowCities, v => map.ShowCities = v);
+        Item(Strings.T("map.layerStops"), map.ShowStops, v => map.ShowStops = v);
         Item(Strings.T("map.layerMarks"), map.ShowMarks, v => map.ShowMarks = v);
         return menu;
     }

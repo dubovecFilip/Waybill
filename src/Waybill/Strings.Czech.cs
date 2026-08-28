@@ -431,6 +431,7 @@ public static partial class Strings {
         ["stats.freeroam"] = "mimo zakázku",
         ["stats.withFreeroam"] = "celkem",
         ["map.layerCities"] = "Města",
+        ["map.layerStops"] = "Zastávky",
         ["map.layerMarks"] = "Události",
         ["value.accepted"] = "Přijatá",
         ["value.review"] = "K prohlédnutí",
