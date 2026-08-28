@@ -566,6 +566,9 @@ public partial class MainForm {
             _jobClose?.Show(behind, 0, cities, null, freeroam);
             _mapsHolding = game;
         }
+        // A roam is singled out the same way a delivery is, so the history behind it
+        // can be left alone, but it is not one and must not look like one.
+        _jobMap.FocusSpare = state is null;
         if (line is not null) _jobMap.ShowLive(line);
 
         // The wide map fits the delivery, or follows the truck when there is none to

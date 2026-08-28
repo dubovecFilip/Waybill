@@ -177,6 +177,16 @@ public class RouteView : Control {
     public bool ShowMarks { get; set; } = true;
 
     /// <summary>
+    /// Whether the line being singled out is a drive with nothing on the hook.
+    ///
+    /// It is singled out for the same reason a delivery is, so the picture behind it
+    /// can be kept while it grows, but it is not one: it is drawn in the quiet shade
+    /// the rest of the driving between jobs wears, and it has no pickup to ring.
+    /// </summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool FocusSpare { get; set; }
+
+    /// <summary>
     /// Whether the pointer can do anything to this drawing at all.
     ///
     /// The maps on the live page are pictures rather than instruments: they frame
@@ -833,6 +843,20 @@ public class RouteView : Control {
     private void DrawRoute(Graphics g, Drawn route) {
         var reached = Reached(route);
 
+        // Driving that carried nothing is drawn the way it is drawn everywhere else:
+        // one quiet line, no colour of its own. It has no cargo, so it has no speed
+        // worth colouring and no pickup worth ringing.
+        if (FocusSpare) {
+            using var spare = new Pen(Color.FromArgb(150, 132, 136, 142), 1.4f) {
+                StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round,
+            };
+            foreach (var run in route.Runs) {
+                var pts = Reduce(Project(run), 0.7f);
+                if (pts.Length > 1) g.DrawLines(spare, pts);
+            }
+            return;
+        }
+
         // The stretches that were not driven, drawn first so the route sits on top.
         // A break only appears once the drive has come out the other side of it.
         using (var skip = new Pen(Color.FromArgb(90, 150, 160, 175), 1f) { DashStyle = DashStyle.Dash }) {
@@ -885,6 +909,13 @@ public class RouteView : Control {
     }
 
     private void DrawEnds(Graphics g, Drawn route) {
+        // A roam has no pickup and no drop: the only thing worth marking on it is
+        // where the truck is now.
+        if (FocusSpare) {
+            DrawTruck(g, ToScreen(route.Runs[^1][^1].X, route.Runs[^1][^1].Z));
+            return;
+        }
+
         var reached = Reached(route);
         var start = ToScreen(route.Runs[0][0].X, route.Runs[0][0].Z);
 
