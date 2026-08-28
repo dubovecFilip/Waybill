@@ -114,7 +114,16 @@ public class FreeroamState {
     public long LastAtMs;
     public double LastOdometerKm;
     public double DistanceKm;
-    public List<TripPoint> Points = new();
+
+    /// <summary>How many seconds of driving have gone into this stretch, which is all
+    /// that is left of counting them: where a roam went is not kept, only how far it
+    /// went and where the truck is at this moment.</summary>
+    public int Ticks;
+
+    /// <summary>Where the truck is now, for the map to follow. Overwritten every tick
+    /// rather than added to.</summary>
+    public double AtX;
+    public double AtZ;
 }
 
 public class TrackerEvent {
@@ -494,7 +503,9 @@ public class JobTracker {
         if (step > 0 && step <= _config.MaxOdometerJumpKm) _roam.DistanceKm += step;
         _roam.LastOdometerKm = snap.Truck.OdometerKm;
         _roam.LastAtMs = nowMs;
-        _roam.Points.Add(new TripPoint { AtMs = nowMs, X = snap.PosX, Y = snap.PosY, Z = snap.PosZ, SpeedKmh = snap.Truck.SpeedKmh });
+        _roam.Ticks++;
+        _roam.AtX = snap.PosX;
+        _roam.AtZ = snap.PosZ;
     }
 
     /// <summary>Ends the current stretch, if it went anywhere. Standing in a garage
@@ -503,13 +514,12 @@ public class JobTracker {
     private FreeroamRecord? CloseRoam() {
         var r = _roam;
         _roam = null;
-        if (r == null || r.DistanceKm < MinFreeroamKm || r.Points.Count < 3) return null;
+        if (r == null || r.DistanceKm < MinFreeroamKm || r.Ticks < 3) return null;
         return new FreeroamRecord {
             Game = r.Game,
             StartedAtMs = r.StartedAtMs,
             EndedAtMs = r.LastAtMs,
             DistanceKm = Math.Round(r.DistanceKm, 3),
-            TripPoints = r.Points,
         };
     }
 

@@ -82,6 +82,44 @@ public sealed class MapBackdrop : IDisposable {
 
     public string Game => _map.Game;
 
+    /// <summary>
+    /// The colour the map draws open country in, taken from the map itself.
+    ///
+    /// Read off the single tile that holds the whole world, so it is whatever this
+    /// export chose and stays right for a map drawn in another palette. Used behind
+    /// the tiles, so the part of the panel the map does not reach looks like more of
+    /// the same nothing rather than like a picture that failed to load.
+    /// </summary>
+    public Color Ground {
+        get {
+            if (_ground is { } had) return had;
+            var whole = Tile(_map.MinZoom, 0, 0);
+            _ground = whole is null ? Color.FromArgb(22, 25, 29) : Commonest(whole);
+            return _ground.Value;
+        }
+    }
+    private Color? _ground;
+
+    /// <summary>The colour most of a tile is, which on the tile that holds the whole
+    /// world is the ground everything else is drawn on.</summary>
+    private static Color Commonest(Bitmap tile) {
+        var seen = new Dictionary<int, int>();
+        for (var y = 0; y < tile.Height; y += 4) {
+            for (var x = 0; x < tile.Width; x += 4) {
+                var argb = tile.GetPixel(x, y).ToArgb();
+                seen[argb] = seen.TryGetValue(argb, out var n) ? n + 1 : 1;
+            }
+        }
+        var best = 0;
+        var most = 0;
+        foreach (var (argb, n) in seen) {
+            if (n <= most) continue;
+            most = n;
+            best = argb;
+        }
+        return most == 0 ? Color.FromArgb(22, 25, 29) : Color.FromArgb(best);
+    }
+
     /// <summary>The square of the world the tiles cover, in the game's metres.</summary>
     public RectangleF Bounds => RectangleF.FromLTRB(
         (float)_map.MinX, (float)_map.MinZ, (float)_map.MaxX, (float)_map.MaxZ);

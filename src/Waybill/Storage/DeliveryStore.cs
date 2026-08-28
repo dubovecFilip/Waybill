@@ -1581,64 +1581,16 @@ public class DeliveryStore : IDisposable {
     /// </summary>
     public void SaveFreeroam(FreeroamRecord r) {
         lock (_gate) {
-            using var tx = _conn.BeginTransaction();
-            long id;
-            using (var cmd = _conn.CreateCommand()) {
-                cmd.Transaction = tx;
-                cmd.CommandText = """
-                    INSERT INTO freeroam (game, started_at_ms, ended_at_ms, distance_km)
-                    VALUES ($game, $started, $ended, $distance);
-                    SELECT last_insert_rowid();
-                    """;
-                cmd.Parameters.AddWithValue("$game", r.Game);
-                cmd.Parameters.AddWithValue("$started", r.StartedAtMs);
-                cmd.Parameters.AddWithValue("$ended", r.EndedAtMs);
-                cmd.Parameters.AddWithValue("$distance", r.DistanceKm);
-                id = Convert.ToInt64(cmd.ExecuteScalar());
-            }
-            using (var cmd = _conn.CreateCommand()) {
-                cmd.Transaction = tx;
-                cmd.CommandText = """
-                    INSERT INTO freeroam_points (freeroam_id, at_ms, x, y, z, speed_kmh)
-                    VALUES ($id, $at, $x, $y, $z, $speed);
-                    """;
-                var pId = cmd.Parameters.Add("$id", SqliteType.Integer);
-                var pAt = cmd.Parameters.Add("$at", SqliteType.Integer);
-                var pX = cmd.Parameters.Add("$x", SqliteType.Real);
-                var pY = cmd.Parameters.Add("$y", SqliteType.Real);
-                var pZ = cmd.Parameters.Add("$z", SqliteType.Real);
-                var pS = cmd.Parameters.Add("$speed", SqliteType.Real);
-                foreach (var p in r.TripPoints) {
-                    pId.Value = id; pAt.Value = p.AtMs;
-                    pX.Value = p.X; pY.Value = p.Y; pZ.Value = p.Z; pS.Value = p.SpeedKmh;
-                    cmd.ExecuteNonQuery();
-                }
-            }
-            tx.Commit();
-        }
-    }
-
-    /// <summary>Every freeroam stretch of one game, for drawing. Same shape as a
-    /// delivery's route so the map can treat them alike, minus the identity: these
-    /// are not clickable because there is nothing behind them to open.</summary>
-    public List<List<RoutePoint>> FreeroamRoutes(string game) {
-        lock (_gate) {
-            var byId = new Dictionary<long, List<RoutePoint>>();
             using var cmd = _conn.CreateCommand();
             cmd.CommandText = """
-                SELECT p.freeroam_id, p.at_ms, p.x, p.z, p.speed_kmh
-                FROM freeroam_points p JOIN freeroam f ON f.id = p.freeroam_id
-                WHERE f.game = $game
-                ORDER BY p.freeroam_id, p.at_ms;
+                INSERT INTO freeroam (game, started_at_ms, ended_at_ms, distance_km)
+                VALUES ($game, $started, $ended, $distance);
                 """;
-            cmd.Parameters.AddWithValue("$game", game);
-            using var r = cmd.ExecuteReader();
-            while (r.Read()) {
-                var id = r.GetInt64(0);
-                if (!byId.TryGetValue(id, out var list)) byId[id] = list = new List<RoutePoint>();
-                list.Add(new RoutePoint(r.GetInt64(1), (float)r.GetDouble(2), (float)r.GetDouble(3), (float)r.GetDouble(4)));
-            }
-            return byId.Values.ToList();
+            cmd.Parameters.AddWithValue("$game", r.Game);
+            cmd.Parameters.AddWithValue("$started", r.StartedAtMs);
+            cmd.Parameters.AddWithValue("$ended", r.EndedAtMs);
+            cmd.Parameters.AddWithValue("$distance", r.DistanceKm);
+            cmd.ExecuteNonQuery();
         }
     }
 

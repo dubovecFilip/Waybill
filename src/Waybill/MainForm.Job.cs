@@ -513,9 +513,10 @@ public partial class MainForm {
     /// out, which is also what the frame is fitted to: the history is background and
     /// must never pull the view away from the delivery.
     ///
-    /// With no job on, there is no route to fit and the map follows the truck instead,
-    /// which is the only useful thing a map can do while somebody drives about with an
-    /// empty hook.
+    /// With no job on there is no line at all, only the truck on the map, held in the
+    /// middle of the one wide view. Where a driver has been with an empty hook is not
+    /// kept and is nobody's business; where they are right now is the whole of what a
+    /// map can usefully say at that moment.
     /// </summary>
     private void ShowJobRoute(JobState? state, string game) {
         if (_jobMap is null) return;
@@ -527,30 +528,31 @@ public partial class MainForm {
         _jobMap.Facing = facing;
         if (_jobClose is not null) _jobClose.Facing = facing;
 
-        // With no delivery on, the line being drawn is the roaming one.
         var roaming = state is null ? _engine?.Roaming : null;
-        var points = state?.TripPoints ?? roaming?.Points ?? new List<TripPoint>();
+        var points = state?.TripPoints ?? new List<TripPoint>();
         var key = state is null ? (roaming is null ? "" : "roam") : state.JobUid;
         var same = key == _jobShowing;
-        if (same && points.Count < _jobShown + JobRouteStep) return;
+        // A growing line is handed over in steps, since taking it apart is the
+        // expensive part. A truck being followed is one point and costs nothing, so it
+        // moves every tick.
+        if (state is not null && same && points.Count < _jobShown + JobRouteStep) return;
         _jobShowing = key;
         _jobShown = points.Count;
 
         var history = game.Length > 0 ? RoutesFor(game) : null;
         var cities = history?.Cities ?? new List<CityAnchor>();
-        // Whatever is being driven right now is the line singled out, delivery or not.
-        // Deliveries carry their database id and neither of these has one yet, so they
-        // take numbers no row can hold: one for a delivery, another for a roam.
+        // The delivery being driven is the line singled out. It has no database id
+        // yet, so it takes a number no row can hold.
         var line = points.Count >= 2
             ? new RouteLayer {
-                Id = state is not null ? -1 : -2,
+                Id = -1,
                 Points = points.Select(p => new RoutePoint(p.AtMs, (float)p.X, (float)p.Z, (float)p.SpeedKmh)).ToList(),
             }
             : null;
 
-        var at = points.Count > 0
-            ? new PointF((float)points[^1].X, (float)points[^1].Z)
-            : (PointF?)null;
+        var at = points.Count > 0 ? new PointF((float)points[^1].X, (float)points[^1].Z)
+               : roaming is not null ? new PointF((float)roaming.AtX, (float)roaming.AtZ)
+               : (PointF?)null;
 
         // The history goes in when the game it belongs to changes, and not again. It
         // does not move while somebody drives, and taking every route of it apart once
@@ -565,15 +567,12 @@ public partial class MainForm {
             _jobClose?.Show(behind, 0, cities);
             _mapsHolding = game;
         }
-        // A roam is singled out the same way a delivery is, so the history behind it
-        // can be left alone, but it is not one and must not look like one.
-        _jobMap.FocusSpare = state is null;
         if (line is not null) _jobMap.ShowLive(line);
 
         // The wide map fits the delivery, or follows the truck when there is none to
         // fit. With a delivery on, the close view is what follows.
-        _jobMap.Follow = state is null ? at : null;
         _jobMap.WorldWidth = CloseWorldMetres;
+        if (state is null) _jobMap.FollowTo(at); else _jobMap.Follow = null;
 
         ShowCloseUp(line, at, state is not null);
     }

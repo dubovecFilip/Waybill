@@ -37,7 +37,6 @@ public class FreeroamRecord {
     public long EndedAtMs;
     /// <summary>From the odometer, like every other distance in this project.</summary>
     public double DistanceKm;
-    public List<TripPoint> TripPoints = new();
 }
 
 /// <summary>

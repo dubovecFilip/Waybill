@@ -182,16 +182,6 @@ public class RouteView : Control {
     public MapBackdrop? GameMap { get; set; }
 
     /// <summary>
-    /// Whether the line being singled out is a drive with nothing on the hook.
-    ///
-    /// It is singled out for the same reason a delivery is, so the picture behind it
-    /// can be kept while it grows, but it is not one: it is drawn in the quiet shade
-    /// the rest of the driving between jobs wears, and it has no pickup to ring.
-    /// </summary>
-    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public bool FocusSpare { get; set; }
-
-    /// <summary>
     /// Whether the pointer can do anything to this drawing at all.
     ///
     /// The maps on the live page are pictures rather than instruments: they frame
@@ -212,6 +202,15 @@ public class RouteView : Control {
     /// </summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public PointF? Follow { get; set; }
+
+    /// <summary>Moves the map to where the truck is now. Nothing about the drawing
+    /// changed, only where it is held, and a map following a truck is asked for that
+    /// once a second.</summary>
+    public void FollowTo(PointF? at) {
+        Follow = at;
+        _fitted = false;
+        Invalidate();
+    }
 
     /// <summary>
     /// How much of the world the panel shows across its width, in the game's own
@@ -538,35 +537,34 @@ public class RouteView : Control {
     /// <summary>
     /// The furthest out the panel may be taken, in pixels per metre.
     ///
-    /// With a map underneath, that is the scale at which the map still covers the
-    /// panel: past it the drive would be read against a hole rather than against
-    /// roads. Without one there is nothing to fall off the edge of, and the answer
-    /// is that there is no limit.
+    /// The whole map across the shorter side of the panel. Past that the map is a
+    /// stamp on a field of nothing and every drive on it is a scribble, and there is
+    /// nothing further out to see: the world ends where the tiles do.
+    ///
+    /// Deliberately not the scale at which the map covers the whole panel. The map is
+    /// a square with a great deal of empty country in it, so on a wide panel that rule
+    /// forbids ever centring on the west coast, and a drive up the coast would be held
+    /// half off the edge. What is uncovered is painted the colour of the map's own
+    /// ground instead, which is the honest answer: past the coast there is nothing.
     /// </summary>
     private float Least() {
         if (GameMap is not { } map) return 0f;
         var bounds = map.Bounds;
-        if (bounds.Width <= 0 || bounds.Height <= 0) return 0f;
-        return Math.Max(Width / bounds.Width, Height / bounds.Height);
+        var side = Math.Max(bounds.Width, bounds.Height);
+        if (side <= 0) return 0f;
+        return Math.Min(Width, Height) / side;
     }
 
-    /// <summary>The nearest centre to the one asked for that keeps the panel inside
-    /// the map. Panning stops at the coast rather than sliding off into nothing.</summary>
+    /// <summary>The nearest centre to the one asked for that is still somewhere on the
+    /// map. Panning stops once the middle of the panel leaves it, which is far enough
+    /// out that the map is a sliver at the edge and there is nothing beyond.</summary>
     private PointF Inside(PointF centre, float perMetre) {
         if (GameMap is not { } map || perMetre <= 0) return centre;
         var bounds = map.Bounds;
         if (bounds.Width <= 0 || bounds.Height <= 0) return centre;
-
-        var halfW = Width / 2f / perMetre;
-        var halfH = Height / 2f / perMetre;
-        return new PointF(Between(centre.X, bounds.Left + halfW, bounds.Right - halfW),
-                          Between(centre.Y, bounds.Top + halfH, bounds.Bottom - halfH));
+        return new PointF(Math.Clamp(centre.X, bounds.Left, bounds.Right),
+                          Math.Clamp(centre.Y, bounds.Top, bounds.Bottom));
     }
-
-    /// <summary>Clamped, and when the panel is wider than what it may see, held in the
-    /// middle of it rather than thrown to one side by a backwards clamp.</summary>
-    private static float Between(float value, float low, float high) =>
-        low > high ? (low + high) / 2 : Math.Clamp(value, low, high);
 
     /// <summary>
     /// How much of the panel is held back from the edge.
@@ -827,6 +825,9 @@ public class RouteView : Control {
             _under = new Bitmap(Width, Height);
             using var ug = Graphics.FromImage(_under);
             ug.SmoothingMode = SmoothingMode.AntiAlias;
+            // The ground the map is drawn on, so what the tiles do not reach reads as
+            // the empty country it is rather than as a hole in the picture.
+            if (GameMap is { } ground) ug.Clear(ground.Ground);
 
             // With the game's own map underneath, one drive is read against roads and
             // towns. Without it the only scale on offer is the other drives, faintly,
@@ -884,20 +885,6 @@ public class RouteView : Control {
     private void DrawRoute(Graphics g, Drawn route) {
         var reached = Reached(route);
 
-        // Driving that carried nothing is drawn the way it is drawn everywhere else:
-        // one quiet line, no colour of its own. It has no cargo, so it has no speed
-        // worth colouring and no pickup worth ringing.
-        if (FocusSpare) {
-            using var spare = new Pen(Color.FromArgb(150, 132, 136, 142), 1.4f) {
-                StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round,
-            };
-            foreach (var run in route.Runs) {
-                var pts = Reduce(Project(run), 0.7f);
-                if (pts.Length > 1) g.DrawLines(spare, pts);
-            }
-            return;
-        }
-
         // The stretches that were not driven, drawn first so the route sits on top.
         // A break only appears once the drive has come out the other side of it.
         using (var skip = new Pen(Color.FromArgb(90, 150, 160, 175), 1f) { DashStyle = DashStyle.Dash }) {
@@ -950,13 +937,6 @@ public class RouteView : Control {
     }
 
     private void DrawEnds(Graphics g, Drawn route) {
-        // A roam has no pickup and no drop: the only thing worth marking on it is
-        // where the truck is now.
-        if (FocusSpare) {
-            DrawTruck(g, ToScreen(route.Runs[^1][^1].X, route.Runs[^1][^1].Z));
-            return;
-        }
-
         var reached = Reached(route);
         var start = ToScreen(route.Runs[0][0].X, route.Runs[0][0].Z);
 
