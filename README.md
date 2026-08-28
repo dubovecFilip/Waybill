@@ -213,9 +213,10 @@ along its edge that nothing is allowed into, and the truck is always the first
 thing to reach it, so the drawing is refitted while there is still an inch of
 picture ahead of the truck rather than at the moment it would leave.
 
-The bar underneath counts the delivery against the game's own planned distance, and
-both of them describe the same thing now: the load's own journey, since a delivery
-begins when the load goes on.
+The bar underneath counts the loaded leg against the game's own planned distance,
+with the run out to the trailer in its own quieter shade at the head of it. Both
+halves are the same drive, and a contract taken a city away from its trailer says
+so at a glance.
 
 It is not clamped at the plan. Going past it is ordinary, a detour or a closed road,
 so the bar rescales rather than filling up and stopping: at 112 % the plan sits nine
@@ -569,9 +570,9 @@ since you were coupled long before that; on a quick job the truck is set down at
 the depot already loaded, so it is the start.
 
 Whichever it was, the recording usually opens with a drive that is getting to work
-rather than the consignment moving. That stretch is still drawn, in the same quiet
-style as any other driving off the job, but it belongs to no delivery: it cannot be
-pointed at or opened, and it is not part of the line the delivery owns.
+rather than the consignment moving. That stretch is not drawn: it is not the
+consignment's journey, and with the game's own map underneath there is nothing a
+faint extra line would add.
 
 Nothing that happened during it is recorded either. A fine picked up on the way to
 the trailer is not the consignment's history, so the timeline starts where the load

@@ -383,14 +383,14 @@ trailer, or a refuel taken before the dock, is not the consignment's history.
 is found, but neither is shown: they mark the beginning rather than something that
 happened along the way.
 
-The map still draws that stretch, in the quieter style it uses for any other
-driving off the job, because the driver went that way and the roads are real. It
-simply belongs to no delivery, so it cannot be pointed at or opened. The exported
-sheet leaves it off entirely: a waybill is about the consignment.
+The map does not draw that stretch at all. It is not the consignment's journey,
+and with the game's own map underneath there is no longer anything a faint extra
+line adds. The exported sheet leaves it off for the same reason: a waybill is
+about the consignment.
 
 Those kilometres stay in the delivery's distance, since the game counts them
-there, and are not repeated in the freeroam total. So a delivery's drawn line can
-cover less ground than the figure beside it.
+there, and appear on their own as `distance_to_load_km`. So a delivery's drawn
+line can cover less ground than the figure beside it.
 
 The offence is stored under the SDK's own name: `Crash`, `Speeding`,
 `Speeding_camera`, `Red_signal`, `Wrong_way`, `No_lights`, `Avoid_sleeping`,
@@ -401,54 +401,56 @@ names it on the way back in.
 
 ## Driving off the job
 
-Tables `freeroam` and `freeroam_points`. A stretch driven with nothing on the
-hook: between jobs, out to a trailer, or simply going somewhere.
+Table `freeroam`. A stretch driven with no job on: between deliveries, or simply
+going somewhere. The run out to a trailer is not one of these, because a job is
+already running by then and the game counts those kilometres to it.
 
-The rule is what is on the hook, not whether a job exists. A load is being pulled
-from the moment it is both hitched and loaded until the delivery ends; everything
-else is freeroam, including your own trailer with nothing in it.
+Only how far and how long is kept. Where it went is not recorded at all: it is
+nobody's business, it is not drawn anywhere, and a driver wandering about for an
+evening should not have that evening mapped. `freeroam_points` remains in the
+schema, holding whatever was written before this, and nothing fills it now.
 
-These are drawn on the map as a quieter line and are never clickable, because
-there is nothing behind them to open. They carry no verdict and no flags: there is
-no claim here to verify, so nothing is ever refused. Statistics show the distance
-beside the deliveries rather than folded into them, and both together as everything
-driven.
+These carry no verdict and no flags: there is no claim here to verify, so nothing
+is ever refused. Statistics show the distance beside the deliveries rather than
+folded into them, and both together as everything driven.
 
 A stretch shorter than 0.5 km is dropped as manoeuvring, and a hole in the
 recording ends one and starts another, so two evenings of driving are two lines
 rather than one road drawn between them that was never taken.
 
-## A delivery begins at the load
+## Distance, in two parts
 
-`actual_distance_km` is what the odometer counted from the moment the load was on
-to the moment it came off. Everything before that is driving with an empty hook and
-is kept as a stretch of free driving, the same as any other.
+`actual_distance_km` is everything the odometer counted for the job, from the
+moment the game says it began to the moment it ended. `distance_to_load_km` is
+the part of that driven before the load was on, whether it was the run out to a
+trailer waiting in another city or the drive across town to your own dock.
 
-This is what makes the five ways of taking a job into one thing. The games disagree
-about when a job is running: a quick job and a World of Trucks contract start the
-moment the offer is taken, with the trailer possibly a city away, while the freight
-and cargo markets only start once the driver has reached the company. Measuring from
-the load makes every delivery the load's own journey, which is also what the game's
-planned distance describes and what the delivery screen reports on arrival.
+They are kept apart because the games disagree about when a job begins, and
+Waybill records what each one says rather than a rule of its own. A quick job
+and a World of Trucks contract start the moment the offer is taken in the menu,
+with the trailer possibly a city away. The freight and cargo markets start when
+the job is taken at the company, with the trailer already there. Both are the
+truth about that job, and the split says which kind it was.
 
-Measured across this history: rebuilding it under this rule moved 651 km out of 26
-deliveries and into free driving, exactly the run-up those deliveries had recorded,
-and left the other 18 untouched because their load was already on when the game said
-the job had begun. The largest single case was a delivery of 553 km of which 379 were
-the drive out to the trailer.
+The figure the game reports on arrival covers the whole job, run-up included,
+so `actual_distance_km` is what it is compared against. The planned distance
+describes the load's journey instead, so on a contract taken far from its
+trailer the plan is the smaller number by design: one measured 553 km driven
+against a plan of 172, of which 379 were the drive out to the trailer.
 
-`distance_to_load_km` is what that run-up used to be recorded as, and it stays in the
-schema for rows written before this. Nothing fills it now.
+The split is measured from the odometer as the job runs, never derived
+afterwards from the recorded positions. Deriving it was tried and came out wrong
+by up to three and a half times, because the world is compressed unevenly even
+inside one drive: the same reason nothing else here treats world space as
+distance.
 
-The load going on is the later of two moments, since they arrive in either order: the
-trailer being coupled, and the cargo being reported aboard. Pulling your own trailer
-you are hitched long before the dock; on a contract the trailer is waiting already
-loaded and the coupling is the whole of it.
+The load going on is the later of two moments, since they arrive in either
+order: the trailer being coupled, and the cargo being reported aboard. Pulling
+your own trailer you are hitched long before the dock; on a contract the trailer
+is waiting already loaded and the coupling is the whole of it.
 
-Distance is measured from the odometer as the job runs, never derived afterwards from
-the recorded positions. Deriving it was tried and came out wrong by up to three and a
-half times, because the world is compressed unevenly even inside one drive: the same
-reason nothing else here treats world space as distance.
+Progress on the live page is the loaded leg against the plan, with the run-up
+shown as its own quieter stretch at the head of the bar.
 
 ## The coupled set
 
