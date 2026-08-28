@@ -805,12 +805,21 @@ public class RouteView : Control {
             using var ug = Graphics.FromImage(_under);
             ug.SmoothingMode = SmoothingMode.AntiAlias;
 
+            // With the game's own map underneath, one drive is read against roads and
+            // towns. Without it the only scale on offer is the other drives, faintly,
+            // which is the whole reason they were ever drawn behind a route.
+            var alone = GameMap is not null && _focus is not null;
+
             // Behind a route being read they are context and stay out of the way; with
             // nothing singled out they are the whole picture, and a background drawn
-            // at background strength would leave the page looking empty.
-            using var quiet = _focus is null
-                ? new Pen(Color.FromArgb(165, 128, 146, 166), 1.4f) { LineJoin = LineJoin.Round }
-                : new Pen(Color.FromArgb(64, 104, 116, 132), 1.1f);
+            // at background strength would leave the page looking empty. Over a map
+            // they answer the roads as well, which are about as bright as the old
+            // quiet line was.
+            using var quiet = _focus is not null
+                ? new Pen(Color.FromArgb(64, 104, 116, 132), 1.1f)
+                : GameMap is not null
+                    ? new Pen(Color.FromArgb(220, 122, 176, 228), 1.6f) { LineJoin = LineJoin.Round }
+                    : new Pen(Color.FromArgb(165, 128, 146, 166), 1.4f) { LineJoin = LineJoin.Round };
             using var loud = new Pen(Color.FromArgb(235, 232, 168, 74), 2f) { LineJoin = LineJoin.Round };
 
             // Driving that carried nothing, under everything else and without any
@@ -826,7 +835,7 @@ public class RouteView : Control {
             // between refits.
             GameMap?.Draw(ug, seen, PerMetre, ToScreen);
 
-            if (ShowFreeroam) {
+            if (ShowFreeroam && !alone) {
                 using var spare = new Pen(Color.FromArgb(_focus is null ? 105 : 46, 132, 136, 142), 0.9f);
                 for (var i = 0; i < _secondary.Count; i++) {
                     if (i < _secondaryBounds.Count && !seen.IntersectsWith(_secondaryBounds[i])) continue;
@@ -837,6 +846,7 @@ public class RouteView : Control {
 
             foreach (var d in _drawn) {
                 if (d == _focus) continue;
+                if (alone) continue;
                 if (!ShowHistory && d.Id != _lit) continue;
                 var pen = d.Id == _lit && _lit != 0 ? loud : quiet;
                 for (var i = 0; i < d.Runs.Count; i++) {

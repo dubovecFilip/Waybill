@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using Newtonsoft.Json;
 
@@ -51,8 +52,23 @@ public sealed class MapBackdrop : IDisposable {
         public bool TopDown { get; set; } = true;
     }
 
+    /// <summary>What ts-map writes beside the tiles it exports: the same square of the
+    /// world and the same range of levels, under its own names. Read as it is rather
+    /// than converted by hand, so exporting a map again is a copy and nothing else.</summary>
+    private sealed class TileMapInfo {
+        public double x1 { get; set; }
+        public double x2 { get; set; }
+        public double y1 { get; set; }
+        public double y2 { get; set; }
+        public int minZoom { get; set; }
+        public int maxZoom { get; set; }
+    }
+
     /// <summary>The name of the descriptor, looked for in the folder of tiles.</summary>
     public const string DescriptorName = "waybill-map.json";
+
+    /// <summary>What the exporter calls its own, read when ours is not there.</summary>
+    public const string ExportedName = "TileMapInfo.json";
 
     private readonly string _folder;
     private readonly Descriptor _map;
@@ -77,17 +93,50 @@ public sealed class MapBackdrop : IDisposable {
     public static MapBackdrop? Open(string? folder) {
         if (string.IsNullOrWhiteSpace(folder)) return null;
         try {
-            var path = Path.Combine(folder, DescriptorName);
-            if (!File.Exists(path)) return null;
-            var map = JsonConvert.DeserializeObject<Descriptor>(File.ReadAllText(path));
+            var map = Ours(folder) ?? Exported(folder);
             if (map is null || map.MaxX <= map.MinX || map.MaxZ <= map.MinZ) return null;
             if (map.TileSize <= 0 || map.MaxZoom < map.MinZoom) return null;
+            if (map.Game.Length == 0) map.Game = new DirectoryInfo(folder).Name;
             return new MapBackdrop(folder, map);
         } catch {
             // A backdrop is decoration. Nothing about it is worth failing to draw a
             // delivery over.
             return null;
         }
+    }
+
+    /// <summary>The descriptor written for Waybill, which is the one that wins: a map
+    /// somebody has adjusted by hand is a deliberate answer to whatever the exporter
+    /// said.</summary>
+    private static Descriptor? Ours(string folder) {
+        var path = Path.Combine(folder, DescriptorName);
+        return File.Exists(path) ? JsonConvert.DeserializeObject<Descriptor>(File.ReadAllText(path)) : null;
+    }
+
+    /// <summary>
+    /// The exporter's own file, turned into a descriptor.
+    ///
+    /// ts-map writes the square it covered and the levels it went to, and puts the
+    /// pictures in a `Tiles` folder beside it. That is everything needed, so an export
+    /// is dropped in as it came out: no conversion step to get wrong, and re-exporting
+    /// after a game patch is a copy.
+    /// </summary>
+    private static Descriptor? Exported(string folder) {
+        var path = Path.Combine(folder, ExportedName);
+        if (!File.Exists(path)) return null;
+        var info = JsonConvert.DeserializeObject<TileMapInfo>(File.ReadAllText(path));
+        if (info is null) return null;
+        return new Descriptor {
+            MinX = info.x1, MaxX = info.x2,
+            // The exporter's y is the game's z. It calls the ground plane x and y, the
+            // way anything drawing a map from above does; the telemetry calls the same
+            // two axes x and z and keeps y for height.
+            MinZ = info.y1, MaxZ = info.y2,
+            MinZoom = info.minZoom, MaxZoom = info.maxZoom,
+            TileSize = 256,
+            Pattern = "Tiles/{z}/{x}/{y}.png",
+            TopDown = true,
+        };
     }
 
     /// <summary>The side of the square the pyramid covers, in the game's metres. The
@@ -173,7 +222,8 @@ public sealed class MapBackdrop : IDisposable {
             // of files somebody may want to replace while the window is open.
             if (File.Exists(path)) {
                 using var bytes = new MemoryStream(File.ReadAllBytes(path));
-                tile = new Bitmap(bytes);
+                using var bright = new Bitmap(bytes);
+                tile = Dimmed(bright);
             }
         } catch {
             // A missing or broken tile is a hole in the map, not a broken window.
@@ -187,6 +237,34 @@ public sealed class MapBackdrop : IDisposable {
             if (_tiles.Remove(oldest.Value, out var gone)) gone?.Dispose();
         }
         return tile;
+    }
+
+    /// <summary>
+    /// How much of the exported map's own brightness to keep.
+    ///
+    /// An exporter draws a map to be looked at on its own: pale land, white roads. Under
+    /// a drive it has a different job, which is to say where the roads are and then get
+    /// out of the way. At this much the land sits about where the panel's own background
+    /// does and the roads stay clearly readable, with the line of the drive brighter than
+    /// either. Done to the picture once when it is read rather than at every draw, since
+    /// the same nine tiles are asked for again after a pan of one pixel.
+    /// </summary>
+    private const float Keep = 0.42f;
+
+    private static Bitmap Dimmed(Bitmap bright) {
+        var dim = new Bitmap(bright.Width, bright.Height, PixelFormat.Format32bppPArgb);
+        using var g = Graphics.FromImage(dim);
+        using var how = new ImageAttributes();
+        how.SetColorMatrix(new ColorMatrix(new[] {
+            new[] { Keep, 0f,   0f,   0f, 0f },
+            new[] { 0f,   Keep, 0f,   0f, 0f },
+            new[] { 0f,   0f,   Keep, 0f, 0f },
+            new[] { 0f,   0f,   0f,   1f, 0f },
+            new[] { 0f,   0f,   0f,   0f, 1f },
+        }));
+        g.DrawImage(bright, new Rectangle(0, 0, bright.Width, bright.Height),
+                    0, 0, bright.Width, bright.Height, GraphicsUnit.Pixel, how);
+        return dim;
     }
 
     public void Dispose() {
