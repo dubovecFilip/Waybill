@@ -538,7 +538,15 @@ public partial class MainForm {
         // A growing line is handed over in steps, since taking it apart is the
         // expensive part. A truck being followed is one point and costs nothing, so it
         // moves every tick.
-        if (state is not null && same && points.Count < _jobShown + JobRouteStep) return;
+        //
+        // A line that got shorter is a different line: the delivery begins at the
+        // load, so the moment the trailer is coupled the drive out to it is dropped
+        // and the route starts again from one point. Counting only upwards, the map
+        // then held still until the new line grew past the length of the old one,
+        // which on the drive out to a World of Trucks trailer is several minutes of
+        // a truck frozen on the spot.
+        var unchanged = points.Count >= _jobShown && points.Count < _jobShown + JobRouteStep;
+        if (state is not null && same && unchanged) return;
         _jobShowing = key;
         _jobShown = points.Count;
 
