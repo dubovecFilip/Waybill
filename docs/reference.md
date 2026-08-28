@@ -418,26 +418,37 @@ A stretch shorter than 0.5 km is dropped as manoeuvring, and a hole in the
 recording ends one and starts another, so two evenings of driving are two lines
 rather than one road drawn between them that was never taken.
 
-## Distance, in two parts
+## A delivery begins at the load
 
-`actual_distance_km` is everything the odometer counted for the job.
-`distance_to_load_km` is the part of it driven before the load was on, whether
-that was getting to the trailer or driving your own to the dock.
+`actual_distance_km` is what the odometer counted from the moment the load was on
+to the moment it came off. Everything before that is driving with an empty hook and
+is kept as a stretch of free driving, the same as any other.
 
-They are kept apart because the game plans its route from the load, not from the
-driver. On a World of Trucks contract the odometer starts where the offer was
-accepted, so the run out to the trailer inflates the total against a plan that
-never described it. Measured across this history, the loaded leg agrees with the
-planned figure to within a few percent on every delivered job, while the total ran
-up to twelve percent over it.
+This is what makes the five ways of taking a job into one thing. The games disagree
+about when a job is running: a quick job and a World of Trucks contract start the
+moment the offer is taken, with the trailer possibly a city away, while the freight
+and cargo markets only start once the driver has reached the company. Measuring from
+the load makes every delivery the load's own journey, which is also what the game's
+planned distance describes and what the delivery screen reports on arrival.
 
-The split is measured from the odometer as the job runs, never derived afterwards
-from the recorded positions. Deriving it was tried and came out wrong by up to
-three and a half times, because the world is compressed unevenly even inside one
-drive: the same reason nothing else here treats world space as distance.
+Measured across this history: rebuilding it under this rule moved 651 km out of 26
+deliveries and into free driving, exactly the run-up those deliveries had recorded,
+and left the other 18 untouched because their load was already on when the game said
+the job had begun. The largest single case was a delivery of 553 km of which 379 were
+the drive out to the trailer.
 
-Progress on the live page is the loaded leg against the plan, with the run-up
-shown as its own quieter stretch at the head of the bar.
+`distance_to_load_km` is what that run-up used to be recorded as, and it stays in the
+schema for rows written before this. Nothing fills it now.
+
+The load going on is the later of two moments, since they arrive in either order: the
+trailer being coupled, and the cargo being reported aboard. Pulling your own trailer
+you are hitched long before the dock; on a contract the trailer is waiting already
+loaded and the coupling is the whole of it.
+
+Distance is measured from the odometer as the job runs, never derived afterwards from
+the recorded positions. Deriving it was tried and came out wrong by up to three and a
+half times, because the world is compressed unevenly even inside one drive: the same
+reason nothing else here treats world space as distance.
 
 ## The coupled set
 

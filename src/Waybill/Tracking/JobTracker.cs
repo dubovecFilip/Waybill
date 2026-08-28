@@ -430,8 +430,17 @@ public class JobTracker {
         // Anything the accumulation adds to the timeline is raised as it happens, so
         // the live log can say what occurred instead of only the delivery's card
         // learning about it once the job is over.
+        // Driving to the trailer is driving with an empty hook, so it is gathered as
+        // one: the delivery has not begun until the load is on it. The stretch is
+        // closed by the load going on, which is where the delivery takes over.
+        if (_current.LoadOnAtMs == 0) Roam(snap, prev, gap, nowMs);
+
         var timelineWas = _current.Timeline.Count;
         Accumulate(snap, prev, dtMs, gap, reloaded, instant, nowMs);
+        foreach (var done in _pendingRoam) {
+            outEvents.Add(new TrackerEvent { Type = TrackerEventType.FreeroamFinished, Freeroam = done });
+        }
+        _pendingRoam.Clear();
         for (var i = timelineWas; i < _current.Timeline.Count; i++) {
             outEvents.Add(new TrackerEvent { Type = TrackerEventType.Noted, Note = _current.Timeline[i] });
         }
@@ -791,6 +800,46 @@ public class JobTracker {
         }
     }
 
+    /// <summary>
+    /// Everything the delivery is measured from, set at the moment the load goes on.
+    ///
+    /// A delivery is the load's journey, so it begins where the load does. The five
+    /// ways of taking a job disagree about when the game calls one running: a quick job
+    /// and a World of Trucks contract start the moment the offer is taken, with the
+    /// trailer possibly a city away, while the freight and cargo markets only start
+    /// once the driver reaches the company. Measuring from the load makes all five the
+    /// same drive, and what came before it is driving with an empty hook, which is kept
+    /// as exactly that.
+    /// </summary>
+    private void BeginAtLoad(JobState j, Snapshot snap, long nowMs) {
+        // The run up to the trailer ends here and is kept as what it was.
+        if (CloseRoam() is { } runUp) _pendingRoam.Add(runUp);
+
+        j.LoadOnAtMs = nowMs;
+        j.StartedAtMs = nowMs;
+        j.StartedAtGameMin = snap.GameTimeMin;
+        j.LastOdometerKm = snap.Truck.OdometerKm;
+        j.StartFuelL = snap.Truck.FuelL;
+        j.DistanceKm = 0;
+        j.DistanceToLoadKm = 0;
+        j.WorldDistanceKm = 0;
+        j.SimSpeedDistanceKm = 0;
+        j.DrivingMs = 0;
+        j.DrivingGameMinutes = 0;
+        j.PausedMs = 0;
+        j.SpeedingMs = 0;
+        j.HardSpeedingMs = 0;
+        j.CruiseControlMs = 0;
+        j.FuelUsedL = 0;
+        j.TopSpeedKmh = 0;
+        // The route is the load's journey too: the drive out to the trailer belongs to
+        // the line of free driving rather than to the delivery.
+        j.TripPoints.Clear();
+        if (snap.Truck.OdometerKm > 0) {
+            j.TripPoints.Add(new TripPoint { AtMs = nowMs, X = snap.PosX, Y = snap.PosY, Z = snap.PosZ, SpeedKmh = snap.Truck.SpeedKmh });
+        }
+    }
+
     private List<Anomaly> Accumulate(Snapshot snap, Snapshot prev, long dtMs, bool gap, bool reloaded, bool instant, long nowMs) {
         var j = _current!;
         var found = new List<Anomaly>();
@@ -826,7 +875,7 @@ public class JobTracker {
         // a collision either, so leaving it in the damage would report an impact that
         // the delivery says never happened.
         if (j.LoadOnAtMs == 0 && j.TrailerCoupled && j.CargoOn) {
-            j.LoadOnAtMs = nowMs;
+            BeginAtLoad(j, snap, nowMs);
             j.StartTruckWear = snap.Truck.Wear.Total();
             // The load's own condition at the moment it became this delivery's
             // problem. Usually nothing, but a job picked back up after a restart, or

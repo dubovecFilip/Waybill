@@ -213,10 +213,12 @@ along its edge that nothing is allowed into, and the truck is always the first
 thing to reach it, so the drawing is refitted while there is still an inch of
 picture ahead of the truck rather than at the moment it would leave.
 
-The bar underneath counts the loaded leg against the game's own planned distance,
-with the run out to the trailer in its own quieter shade at the head of it. It is
-not clamped at the plan. Going past it is ordinary, a detour or a closed road, so
-the bar rescales rather than filling up and stopping: at 112 % the plan sits nine
+The bar underneath counts the delivery against the game's own planned distance, and
+both of them describe the same thing now: the load's own journey, since a delivery
+begins when the load goes on.
+
+It is not clamped at the plan. Going past it is ordinary, a detour or a closed road,
+so the bar rescales rather than filling up and stopping: at 112 % the plan sits nine
 tenths of the way along and the overshoot is what is left, in a dimmer amber.
 
 *Deliveries* is the history. Every row carries its verdict as a dot in the
