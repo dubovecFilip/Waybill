@@ -1329,7 +1329,7 @@ public partial class MainForm : Form {
         map.FormatSpeed = kmh => shown.FormatSpeed(kmh);
         var routes = RoutesFor(game);
         map.GameMap = GameMapFor(game);
-        map.Show(Layers(routes), 0, routes.Cities, null, routes.RunUps.Concat(_store.FreeroamRoutes(game)));
+        map.Show(Layers(routes), 0, routes.Cities);
     }
 
     // ---------- menu ----------
@@ -3141,8 +3141,7 @@ public partial class MainForm : Form {
 
         var map = NewMap(u);
         map.GameMap = GameMapFor(d.Game);
-        map.Show(Layers(RoutesFor(d.Game)), d.Id, RoutesFor(d.Game).Cities,
-                 _store.TimelineRows(d.Id, u), RoutesFor(d.Game).RunUps.Concat(_store.FreeroamRoutes(d.Game)));
+        map.Show(Layers(RoutesFor(d.Game)), d.Id, RoutesFor(d.Game).Cities, _store.TimelineRows(d.Id, u));
 
         // Drawn out once, when the panel it sits in is actually on the screen.
         // Watching the line grow says the order things happened in, which a finished
@@ -3758,7 +3757,6 @@ public partial class MainForm : Form {
             menu.Items.Add(item);
         }
         Item(Strings.T("map.layerHistory"), map.ShowHistory, v => map.ShowHistory = v);
-        Item(Strings.T("map.layerFreeroam"), map.ShowFreeroam, v => map.ShowFreeroam = v);
         Item(Strings.T("map.layerCities"), map.ShowCities, v => map.ShowCities = v);
         Item(Strings.T("map.layerMarks"), map.ShowMarks, v => map.ShowMarks = v);
         return menu;
@@ -3785,7 +3783,7 @@ public partial class MainForm : Form {
         // be maximised.
         window.Shown += (_, _) => {
             map.Show(Layers(RoutesFor(d.Game)), d.Id, RoutesFor(d.Game).Cities,
-                     _store.TimelineRows(d.Id, u), RoutesFor(d.Game).RunUps.Concat(_store.FreeroamRoutes(d.Game)));
+                     _store.TimelineRows(d.Id, u));
             map.Replay();
         };
         window.Load += (_, _) => UseDarkTitleBar(window);
@@ -4061,7 +4059,6 @@ public partial class MainForm : Form {
             }
         }
         _routes.Clear();
-        _roamed.Clear();
         ApplyFilter();
         ReloadMapPage();
         ReloadSessions();
@@ -4097,18 +4094,6 @@ public partial class MainForm : Form {
         if (_gameMaps.TryGetValue(game, out var had)) return had;
         var folder = Path.Combine(DeliveryStore.DefaultDir(), "map", game.ToLowerInvariant());
         return _gameMaps[game] = MapBackdrop.Open(folder);
-    }
-
-    /// <summary>Everything driven with nothing on the hook, kept beside the routes and
-    /// thrown away with them. The map of the drive in progress asks for this every
-    /// second, and it is a table scan.</summary>
-    private readonly Dictionary<string, List<List<RoutePoint>>> _roamed = new();
-
-    private List<List<RoutePoint>> RoamedIn(string game) {
-        if (!_roamed.TryGetValue(game, out var lines)) {
-            _roamed[game] = lines = _store.FreeroamRoutes(game).ToList();
-        }
-        return lines;
     }
 
     private void ApplyFilter() {

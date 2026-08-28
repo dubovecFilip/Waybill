@@ -428,7 +428,6 @@ public static partial class Strings {
         ["map.fit"] = "Srovnat pohled",
         ["map.expand"] = "Celá obrazovka",
         ["map.layerHistory"] = "Zásilky",
-        ["map.layerFreeroam"] = "Jízda mimo zakázku",
         ["stats.freeroam"] = "mimo zakázku",
         ["stats.withFreeroam"] = "celkem",
         ["map.layerCities"] = "Města",

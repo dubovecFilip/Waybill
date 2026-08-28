@@ -434,7 +434,6 @@ public static partial class Strings {
         ["map.fit"] = "Vrátiť pohľad",
         ["map.expand"] = "Na celú obrazovku",
         ["map.layerHistory"] = "Zásielky",
-        ["map.layerFreeroam"] = "Jazdy mimo zákazky",
         ["stats.freeroam"] = "mimo zákazky",
         ["stats.withFreeroam"] = "spolu",
         ["map.layerCities"] = "Mestá",

@@ -86,8 +86,6 @@ public class RouteView : Control {
 
     private List<Drawn> _drawn = new();
     /// <summary>Stretches belonging to no delivery, already split into runs.</summary>
-    private List<List<RoutePoint>> _secondary = new();
-    private List<RectangleF> _secondaryBounds = new();
     private Drawn? _focus;
     private List<CityAnchor> _cities = new();
     private List<(TimelineRow Row, RoutePoint At, int Index)> _marks = new();
@@ -98,7 +96,7 @@ public class RouteView : Control {
     private bool _fitted;
 
     private Bitmap? _under;
-    private (int W, int H, float Scale, float CX, float CY, long Lit, bool History, bool Freeroam, string Map) _underKey;
+    private (int W, int H, float Scale, float CX, float CY, long Lit, bool History, string Map) _underKey;
 
     private Point _dragFrom;
     private bool _dragging;
@@ -169,9 +167,6 @@ public class RouteView : Control {
         }
     }
     private bool _showHistory = true;
-
-    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public bool ShowFreeroam { get; set; } = true;
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool ShowMarks { get; set; } = true;
@@ -290,20 +285,12 @@ public class RouteView : Control {
 
     /// <summary><paramref name="focus"/> is the delivery to draw in full, or 0 to
     /// draw every route alike. <paramref name="marks"/> only mean anything against
-    /// a focused route, since they are placed by matching their time to it.
-    ///
-    /// <paramref name="secondary"/> is driving that belongs to no delivery:
-    /// between jobs, or out to a trailer. Drawn because those roads are as much a
-    /// part of where this driver has been, and drawn quietly because there is nothing
-    /// behind them to open. They are never hit-tested for the same reason.</summary>
+    /// a focused route, since they are placed by matching their time to it.</summary>
     public void Show(IEnumerable<RouteLayer> routes, long focus, List<CityAnchor> cities,
-                     List<TimelineRow>? marks = null, IEnumerable<List<RoutePoint>>? secondary = null) {
+                     List<TimelineRow>? marks = null) {
         _drawn = routes.Select(r => new Drawn { Id = r.Id, All = r.Points, Runs = Split(r.Points) })
                        .Where(d => d.Runs.Count > 0).ToList();
         foreach (var d in _drawn) d.Index();
-        _secondary = (secondary ?? Enumerable.Empty<List<RoutePoint>>())
-                     .SelectMany(Split).Where(r => r.Count > 1).ToList();
-        _secondaryBounds = _secondary.Select(Drawn.Around).ToList();
         _focus = _drawn.FirstOrDefault(d => d.Id == focus);
         _cities = cities;
         _marks = PlaceMarks(marks);
@@ -440,26 +427,22 @@ public class RouteView : Control {
         // The focused route sets the frame when there is one. On the history map
         // there is not, so everything does.
         var scope = _focus is { } f ? new List<Drawn> { f } : _drawn;
-        // Freeroam counts towards the frame only when nothing is singled out: on the
-        // whole-history map it is part of where this driver has been, while on a
-        // delivery's card it must not pull the view away from the delivery.
-        var alsoSecondary = _focus is null && ShowFreeroam ? _secondary : new List<List<RoutePoint>>();
 
         // Following something needs nothing measured: the scale is asked for and the
         // centre is the thing being followed. Everything below is for a drawing that
         // has to be made to fit instead.
         if (Follow is { } held) {
-            _fitScale = Math.Max((Width - Pad * 2), 1) / Math.Max(WorldWidth, 1f);
-            _centre = Shifted(held);
+            _fitScale = Math.Max(Math.Max((Width - Pad * 2), 1) / Math.Max(WorldWidth, 1f), Least());
+            _centre = Inside(Shifted(held, _fitScale), _fitScale);
             _snapNext = false;
             Discard();
             Invalidate();
             return;
         }
 
-        if (scope.Count == 0 && alsoSecondary.Count == 0) { _fitScale = 1f; _centre = PointF.Empty; return; }
+        if (scope.Count == 0) { _fitScale = 1f; _centre = PointF.Empty; return; }
 
-        var points = scope.SelectMany(d => d.Runs).Concat(alsoSecondary).SelectMany(r => r).ToList();
+        var points = scope.SelectMany(d => d.Runs).SelectMany(r => r).ToList();
 
         float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
         foreach (var p in points) {
@@ -480,6 +463,10 @@ public class RouteView : Control {
         // barely started, would otherwise be blown up until a car park filled the
         // panel and every wobble in it looked like a detour.
         wanted = Math.Min(wanted, Math.Max(room.Width, 1) / Math.Max(WorldWidth, 1f));
+        // ...and never so far out that the panel looks past the edge of the map. A
+        // drive is read against roads and towns; the emptiness beyond where the map
+        // was exported says nothing about anything.
+        wanted = Math.Max(wanted, Least());
 
         // The frame already drawn is kept only while it is still the right frame: the
         // drive fits inside it with the safe band to spare, it is the size the drive
@@ -490,8 +477,9 @@ public class RouteView : Control {
         // The tolerance is what stops it twitching: a second of driving moves the
         // middle of a long route by a fraction of a pixel, and nothing is redrawn for
         // that.
+        var want = Inside(Shifted(mid, wanted), wanted);
         var offBy = Math.Abs(wanted - _fitScale) / Math.Max(wanted, 0.0001f);
-        var drift = Math.Max(Math.Abs(mid.X - Middle().X), Math.Abs(mid.Y - Middle().Y)) * PerMetre;
+        var drift = Math.Max(Math.Abs(want.X - _centre.X), Math.Abs(want.Y - _centre.Y)) * PerMetre;
         var settled = offBy < 0.02f && drift < Math.Min(Width, Height) * 0.02f;
         if (!_snapNext && _fitScale > 0 && settled && Holds(minX, maxX, minZ, maxZ)) {
             _snapNext = false;
@@ -502,7 +490,7 @@ public class RouteView : Control {
 
         _snapNext = false;
         _fitScale = wanted;
-        _centre = Shifted(mid);
+        _centre = want;
         Discard();
         Invalidate();
     }
@@ -537,13 +525,48 @@ public class RouteView : Control {
     /// Everything on the way to the screen is measured from the middle of the panel,
     /// so reserving a corner means moving the centre by half of what was reserved.
     /// </summary>
-    private PointF Shifted(PointF middle) {
+    private PointF Shifted(PointF middle) => Shifted(middle, PerMetre);
+
+    private PointF Shifted(PointF middle, float perMetre) {
         var room = Room();
         var offX = room.X + room.Width / 2 - Width / 2f;
         var offY = room.Y + room.Height / 2 - Height / 2f;
-        var scale = Math.Max(_fitScale * _zoom, 0.000001f);
+        var scale = Math.Max(perMetre, 0.000001f);
         return new PointF(middle.X - offX / scale, middle.Y - offY / scale);
     }
+
+    /// <summary>
+    /// The furthest out the panel may be taken, in pixels per metre.
+    ///
+    /// With a map underneath, that is the scale at which the map still covers the
+    /// panel: past it the drive would be read against a hole rather than against
+    /// roads. Without one there is nothing to fall off the edge of, and the answer
+    /// is that there is no limit.
+    /// </summary>
+    private float Least() {
+        if (GameMap is not { } map) return 0f;
+        var bounds = map.Bounds;
+        if (bounds.Width <= 0 || bounds.Height <= 0) return 0f;
+        return Math.Max(Width / bounds.Width, Height / bounds.Height);
+    }
+
+    /// <summary>The nearest centre to the one asked for that keeps the panel inside
+    /// the map. Panning stops at the coast rather than sliding off into nothing.</summary>
+    private PointF Inside(PointF centre, float perMetre) {
+        if (GameMap is not { } map || perMetre <= 0) return centre;
+        var bounds = map.Bounds;
+        if (bounds.Width <= 0 || bounds.Height <= 0) return centre;
+
+        var halfW = Width / 2f / perMetre;
+        var halfH = Height / 2f / perMetre;
+        return new PointF(Between(centre.X, bounds.Left + halfW, bounds.Right - halfW),
+                          Between(centre.Y, bounds.Top + halfH, bounds.Bottom - halfH));
+    }
+
+    /// <summary>Clamped, and when the panel is wider than what it may see, held in the
+    /// middle of it rather than thrown to one side by a backwards clamp.</summary>
+    private static float Between(float value, float low, float high) =>
+        low > high ? (low + high) / 2 : Math.Clamp(value, low, high);
 
     /// <summary>
     /// How much of the panel is held back from the edge.
@@ -615,7 +638,7 @@ public class RouteView : Control {
         var step = e.Delta > 0 ? 1.2f : 1 / 1.2f;
         _zoom = Math.Clamp(_zoom * step, 1f, 60f);
         var after = ToWorld(e.X, e.Y);
-        _centre = new PointF(_centre.X + (before.X - after.X), _centre.Y + (before.Y - after.Y));
+        _centre = Inside(new PointF(_centre.X + (before.X - after.X), _centre.Y + (before.Y - after.Y)), PerMetre);
 
         Discard();
         Invalidate();
@@ -636,9 +659,9 @@ public class RouteView : Control {
         base.OnMouseMove(e);
         if (_dragging) {
             if (Math.Abs(e.X - _dragFrom.X) > 2 || Math.Abs(e.Y - _dragFrom.Y) > 2) _dragged = true;
-            _centre = new PointF(
+            _centre = Inside(new PointF(
                 _centre.X - (e.X - _dragFrom.X) / PerMetre,
-                _centre.Y - (e.Y - _dragFrom.Y) / PerMetre);
+                _centre.Y - (e.Y - _dragFrom.Y) / PerMetre), PerMetre);
             _dragFrom = e.Location;
             Discard();
             Invalidate();
@@ -746,7 +769,7 @@ public class RouteView : Control {
         // Nothing to draw and nothing to follow. Following something is enough on its
         // own: a driver on their first evening has no history behind them and still
         // has a truck, which is the whole of what the map is for at that point.
-        if (_drawn.Count == 0 && _secondary.Count == 0 && Follow is null) {
+        if (_drawn.Count == 0 && Follow is null) {
             if (EmptyText.Length > 0) {
                 using var brush = new SolidBrush(Muted);
                 using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
@@ -796,7 +819,7 @@ public class RouteView : Control {
         // The switches belong in the key: turning a layer off changes what the cached
         // bitmap should hold, and without them the old one was kept and the toggle
         // did nothing until the view happened to move.
-        var key = (Width, Height, PerMetre, _centre.X, _centre.Y, _lit, ShowHistory, ShowFreeroam,
+        var key = (Width, Height, PerMetre, _centre.X, _centre.Y, _lit, ShowHistory,
                    GameMap is null ? "" : GameMap.Game);
         if (_under is null || _underKey != key) {
             Discard();
@@ -822,8 +845,6 @@ public class RouteView : Control {
                     : new Pen(Color.FromArgb(165, 128, 146, 166), 1.4f) { LineJoin = LineJoin.Round };
             using var loud = new Pen(Color.FromArgb(235, 232, 168, 74), 2f) { LineJoin = LineJoin.Round };
 
-            // Driving that carried nothing, under everything else and without any
-            // hue of its own: the deliveries are the network, this is wandering.
             // What the panel can see, in the world's own metres. A drawing held close
             // to the truck has almost the whole history off the edges of it, and
             // projecting a stretch only to throw every point away is the one cost
@@ -834,15 +855,6 @@ public class RouteView : Control {
             // the same cached picture as the history, so a live drive costs nothing
             // between refits.
             GameMap?.Draw(ug, seen, PerMetre, ToScreen);
-
-            if (ShowFreeroam && !alone) {
-                using var spare = new Pen(Color.FromArgb(_focus is null ? 105 : 46, 132, 136, 142), 0.9f);
-                for (var i = 0; i < _secondary.Count; i++) {
-                    if (i < _secondaryBounds.Count && !seen.IntersectsWith(_secondaryBounds[i])) continue;
-                    var pts = Reduce(Project(_secondary[i]), 0.7f);
-                    if (pts.Length > 1) ug.DrawLines(spare, pts);
-                }
-            }
 
             foreach (var d in _drawn) {
                 if (d == _focus) continue;

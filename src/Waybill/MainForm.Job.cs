@@ -538,10 +538,6 @@ public partial class MainForm {
 
         var history = game.Length > 0 ? RoutesFor(game) : null;
         var cities = history?.Cities ?? new List<CityAnchor>();
-        var freeroam = history is null
-            ? new List<List<RoutePoint>>()
-            : history.RunUps.Concat(RoamedIn(game)).ToList();
-
         // Whatever is being driven right now is the line singled out, delivery or not.
         // Deliveries carry their database id and neither of these has one yet, so they
         // take numbers no row can hold: one for a delivery, another for a roam.
@@ -565,8 +561,8 @@ public partial class MainForm {
 
         if (_mapsHolding != game) {
             var behind = history is null ? new List<RouteLayer>() : Layers(history).ToList();
-            _jobMap.Show(behind, 0, cities, null, freeroam);
-            _jobClose?.Show(behind, 0, cities, null, freeroam);
+            _jobMap.Show(behind, 0, cities);
+            _jobClose?.Show(behind, 0, cities);
             _mapsHolding = game;
         }
         // A roam is singled out the same way a delivery is, so the history behind it

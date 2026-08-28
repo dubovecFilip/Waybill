@@ -428,7 +428,6 @@ public static partial class Strings {
         ["map.fit"] = "Ajustar la vista",
         ["map.expand"] = "Pantalla completa",
         ["map.layerHistory"] = "Entregas",
-        ["map.layerFreeroam"] = "Conducción fuera de trabajo",
         ["stats.freeroam"] = "fuera de trabajo",
         ["stats.withFreeroam"] = "en total",
         ["map.layerCities"] = "Ciudades",

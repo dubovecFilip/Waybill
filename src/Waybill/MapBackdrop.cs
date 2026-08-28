@@ -82,6 +82,10 @@ public sealed class MapBackdrop : IDisposable {
 
     public string Game => _map.Game;
 
+    /// <summary>The square of the world the tiles cover, in the game's metres.</summary>
+    public RectangleF Bounds => RectangleF.FromLTRB(
+        (float)_map.MinX, (float)_map.MinZ, (float)_map.MaxX, (float)_map.MaxZ);
+
     private MapBackdrop(string folder, Descriptor map) {
         _folder = folder;
         _map = map;

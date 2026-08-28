@@ -427,7 +427,6 @@ public static partial class Strings {
         ["map.fit"] = "Fit the view",
         ["map.expand"] = "Full screen",
         ["map.layerHistory"] = "Deliveries",
-        ["map.layerFreeroam"] = "Driving off the job",
         ["stats.freeroam"] = "off the job",
         ["stats.withFreeroam"] = "in all",
         ["map.layerCities"] = "Cities",
