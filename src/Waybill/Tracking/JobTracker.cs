@@ -1576,8 +1576,27 @@ public class JobTracker {
         // measured 2082.9 km against the game's own 2084, and rejected for the
         // crossing. So a jump only counts against a delivery when the distance
         // evidence agrees with it, and stands alone as something to look at.
-        var hard = new[] { "distance_too_short", "odometer_manipulation" };
-        var jumpedAndShort = flags.Contains("teleport_detected")
+        // A drive Waybill was not there for is not a drive that did not happen.
+        //
+        // Start the app in the middle of a delivery, or load a profile with one
+        // already running, and everything is measured from that moment: the last few
+        // hundred metres of a job the game itself says was a hundred miles. Measured on
+        // a recording joined forty seconds before the drop, that came out as "barely
+        // any distance" and a rejection, of an entirely honest delivery.
+        //
+        // The game's own figure on arrival is the evidence. When it says a real
+        // distance was covered, measuring almost none of it says where Waybill was, not
+        // what the driver did. The flags stay, so the card still explains why its
+        // numbers are small, and the verdict is something to look at rather than a
+        // refusal.
+        if (record.ReportedDistanceKm is >= 10 && flags.Contains("distance_too_short")) flags.Add("joined_late");
+        var joinedLate = flags.Contains("joined_late");
+
+        var hard = joinedLate
+            ? new[] { "odometer_manipulation" }
+            : new[] { "distance_too_short", "odometer_manipulation" };
+        var jumpedAndShort = !joinedLate
+                             && flags.Contains("teleport_detected")
                              && (flags.Contains("distance_mismatch") || flags.Contains("distance_inconsistent"));
         // A job that went away with a loaded save was never completed and is not a
         // delivery anyone is claiming, so there is nothing here to reject. Whatever

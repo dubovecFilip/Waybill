@@ -146,6 +146,8 @@ public static partial class Strings {
         ["flag.odometer_manipulation.why"] = "The odometer moved further in one instant than driving can account for.",
         ["flag.distance_too_short"] = "Barely any distance",
         ["flag.distance_too_short.why"] = "Under half a kilometre driven.",
+        ["flag.joined_late"] = "Waybill joined it late",
+        ["flag.joined_late.why"] = "The game reports a real distance for this job while Waybill measured almost none of it: the app was started, or the profile loaded, in the middle of the delivery.",
         ["flag.no_completion_event"] = "The job ended without saying so",
         ["flag.no_completion_event.why"] = "It stopped existing with neither a delivery nor a cancellation: another profile, the game quit, or a crash. Nothing is being claimed.",
         ["flag.abandoned"] = "Unfinished for over a week",

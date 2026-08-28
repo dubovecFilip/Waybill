@@ -149,6 +149,8 @@ public static partial class Strings {
         ["flag.odometer_manipulation.why"] = "Tachometer sa naraz posunul o viac, než sa dá odjazdiť.",
         ["flag.distance_too_short"] = "Takmer nulová vzdialenosť",
         ["flag.distance_too_short.why"] = "Odjazdené menej ako pol kilometra.",
+        ["flag.joined_late"] = "Waybill sa pripojil neskoro",
+        ["flag.joined_late.why"] = "Hra pri tejto zakázke hlási skutočnú vzdialenosť, kým Waybill nameral takmer nič: aplikácia sa spustila, alebo profil načítal, uprostred jazdy.",
         ["flag.no_completion_event"] = "Zákazka skončila bez oznámenia",
         ["flag.no_completion_event.why"] = "Prestala existovať bez doručenia aj bez zrušenia: iný profil, ukončená hra alebo pád. Nič si tým nenárokuješ.",
         ["flag.abandoned"] = "Nedokončená viac ako týždeň",

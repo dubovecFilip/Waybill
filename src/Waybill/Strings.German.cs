@@ -147,6 +147,8 @@ public static partial class Strings {
         ["flag.odometer_manipulation.why"] = "Der Kilometerzähler sprang in einem Augenblick weiter, als es Fahren erklärt.",
         ["flag.distance_too_short"] = "Kaum Strecke",
         ["flag.distance_too_short.why"] = "Weniger als ein halber Kilometer gefahren.",
+        ["flag.joined_late"] = "Waybill kam zu spät dazu",
+        ["flag.joined_late.why"] = "Das Spiel meldet für diesen Auftrag eine echte Strecke, während Waybill fast nichts gemessen hat: die App wurde mitten in der Fahrt gestartet oder das Profil dann geladen.",
         ["flag.no_completion_event"] = "Der Auftrag endete, ohne es zu sagen",
         ["flag.no_completion_event.why"] = "Er hörte auf zu existieren, ohne Ablieferung und ohne Abbruch: ein anderes Profil, das Spiel beendet oder ein Absturz. Damit wird nichts beansprucht.",
         ["flag.abandoned"] = "Über eine Woche unerledigt",

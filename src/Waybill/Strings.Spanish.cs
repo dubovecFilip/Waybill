@@ -147,6 +147,8 @@ public static partial class Strings {
         ["flag.odometer_manipulation.why"] = "El cuentakilómetros avanzó de golpe más de lo que explica conducir.",
         ["flag.distance_too_short"] = "Casi ninguna distancia",
         ["flag.distance_too_short.why"] = "Menos de medio kilómetro recorrido.",
+        ["flag.joined_late"] = "Waybill se unió tarde",
+        ["flag.joined_late.why"] = "El juego informa de una distancia real para este trabajo mientras que Waybill midió casi nada: la aplicación se inició, o el perfil se cargó, en mitad del viaje.",
         ["flag.no_completion_event"] = "El trabajo acabó sin decirlo",
         ["flag.no_completion_event.why"] = "Dejó de existir sin entrega ni cancelación: otro perfil, el juego cerrado o un cuelgue. Con eso no se reclama nada.",
         ["flag.abandoned"] = "Sin terminar más de una semana",

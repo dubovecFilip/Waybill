@@ -275,19 +275,35 @@ there was no ordinary passage there to take off.
 ## Validation flags
 
 Column `validation_flags`, comma separated. Two of them reject on their own, one
-rejects in company; the rest are visible and cost the delivery nothing.
+rejects in company, one disarms the others; the rest are visible and cost the
+delivery nothing.
 
 | Flag | Raised when | Rejects |
 |---|---|---|
 | `teleport_detected` | Position moved faster than 400 km/h, unexplained by a job start, a gap, a loaded save or a crossing | only with `distance_mismatch` or `distance_inconsistent` |
 | `odometer_manipulation` | The odometer jumped more than 5 km in one tick, unexplained by a job start or a gap | yes |
-| `distance_too_short` | Under 0.5 km driven | yes |
+| `distance_too_short` | Under 0.5 km driven | yes, unless `joined_late` |
+| `joined_late` | Barely any distance measured while the game reports 10 km or more | no, and it disarms `distance_too_short` and the jump rule |
 | `no_completion_event` | Outcome is `unresolved` | no |
 | `abandoned` | Unfinished past the one week window and written off | no |
 | `unstable_client` | More than two `client_gap` anomalies in one delivery | no |
 | `implausible_top_speed` | Top speed over 180 km/h | no |
 | `distance_inconsistent` | Odometer against speed times game time, outside 0.75 to 1.33 | no |
 | `distance_mismatch` | Measured distance against the game's own figure on arrival, outside 0.8 to 1.25, and only on jobs the game reports as 10 km or more | no |
+
+### Waybill arriving late is not the driver's doing
+
+Start the app in the middle of a delivery, or load a profile with one already
+running, and everything is measured from that moment. Join a hundred mile job
+forty seconds before the drop and half a kilometre is all there is to measure,
+which used to be `distance_too_short` and an outright rejection of an honest
+delivery.
+
+The game's own figure on arrival settles it. When the game says a real distance
+was covered and Waybill measured almost none of it, that says where the app was,
+not what the driver did: `joined_late` is raised, the short distance stops
+rejecting, and the delivery lands in review with its numbers plainly small. The
+other flags stay exactly as they were, so an odometer jump still rejects.
 
 ### A jump is not a verdict on its own
 
