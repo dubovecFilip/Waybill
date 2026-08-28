@@ -492,6 +492,7 @@ public static partial class Strings {
         ["msg.problems"] = "Problems:",
         ["msg.error"] = "Error",
         ["msg.plugin"] = "Plugin",
+        ["msg.gameGone"] = "The game has closed",
         ["msg.unfinishedFound"] = "Unfinished job, it will be picked up if you continue it",
         ["msg.unfinishedStale"] = "An unfinished job past its window was written off as cancelled",
         ["msg.alreadyRunning"] = "Waybill is already running.\n\nOnly one window at a time, otherwise every delivery would be saved twice.",

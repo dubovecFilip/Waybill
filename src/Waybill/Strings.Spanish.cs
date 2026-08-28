@@ -493,6 +493,7 @@ public static partial class Strings {
         ["msg.problems"] = "Problemas:",
         ["msg.error"] = "Error",
         ["msg.plugin"] = "Plugin",
+        ["msg.gameGone"] = "El juego se ha cerrado",
         ["msg.unfinishedFound"] = "Trabajo sin terminar, se retomará si sigues con él",
         ["msg.unfinishedStale"] = "Un trabajo sin terminar pasado su plazo se dio por cancelado",
         ["msg.alreadyRunning"] = "Waybill ya está abierto.\n\nSolo una ventana a la vez, si no cada entrega se guardaría dos veces.",

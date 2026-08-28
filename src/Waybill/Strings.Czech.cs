@@ -493,6 +493,7 @@ public static partial class Strings {
         ["msg.problems"] = "Problémy:",
         ["msg.error"] = "Chyba",
         ["msg.plugin"] = "Plugin",
+        ["msg.gameGone"] = "Hra byla ukončena",
         ["msg.unfinishedFound"] = "Nedokončená zakázka, naváže se na ni, když v ní budeš pokračovat",
         ["msg.unfinishedStale"] = "Nedokončená zakázka po termínu byla odepsána jako zrušená",
         ["msg.alreadyRunning"] = "Waybill už běží.\n\nNajednou může běžet jen jedno okno, jinak by se každá zásilka uložila dvakrát.",

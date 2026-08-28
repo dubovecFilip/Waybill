@@ -432,8 +432,11 @@ public partial class MainForm {
             _progressTrack.Visible = false;
             if (_jobLaunch is { } waiting) waiting.Visible = true;
             // No delivery, but there may still be a truck: the map follows it while
-            // somebody drives about with an empty hook.
-            ShowJobRoute(null, _engine.Roaming?.Game ?? "");
+            // somebody drives about with an empty hook, and equally while they sit in
+            // the screen that appears the moment a delivery is done. Where the truck is
+            // comes from the game rather than from the roaming, which has not begun yet
+            // at that moment and never begins at all if the driver stays parked.
+            ShowJobRoute(null, _engine.WhereGame);
 
             // Between jobs the profile says so; with the game closed it says nothing
             // at all, rather than leaving Waybill sitting there all evening.
@@ -528,9 +531,9 @@ public partial class MainForm {
         _jobMap.Facing = facing;
         if (_jobClose is not null) _jobClose.Facing = facing;
 
-        var roaming = state is null ? _engine?.Roaming : null;
+        var standing = state is null ? _engine?.Where : null;
         var points = state?.TripPoints ?? new List<TripPoint>();
-        var key = state is null ? (roaming is null ? "" : "roam") : state.JobUid;
+        var key = state is null ? (standing is null ? "" : "truck") : state.JobUid;
         var same = key == _jobShowing;
         // A growing line is handed over in steps, since taking it apart is the
         // expensive part. A truck being followed is one point and costs nothing, so it
@@ -551,7 +554,7 @@ public partial class MainForm {
             : null;
 
         var at = points.Count > 0 ? new PointF((float)points[^1].X, (float)points[^1].Z)
-               : roaming is not null ? new PointF((float)roaming.AtX, (float)roaming.AtZ)
+               : standing is { } truck ? new PointF(truck.X, truck.Z)
                : (PointF?)null;
 
         // The history goes in when the game it belongs to changes, and not again. It

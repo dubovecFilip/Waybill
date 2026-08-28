@@ -493,6 +493,7 @@ public static partial class Strings {
         ["msg.problems"] = "Probleme:",
         ["msg.error"] = "Fehler",
         ["msg.plugin"] = "Plugin",
+        ["msg.gameGone"] = "Das Spiel wurde beendet",
         ["msg.unfinishedFound"] = "Unerledigter Auftrag, er wird aufgenommen, wenn du ihn fortsetzt",
         ["msg.unfinishedStale"] = "Ein unerledigter Auftrag nach Fristablauf wurde als abgebrochen abgeschrieben",
         ["msg.alreadyRunning"] = "Waybill läuft bereits.\n\nNur ein Fenster auf einmal, sonst würde jede Lieferung zweimal gespeichert.",

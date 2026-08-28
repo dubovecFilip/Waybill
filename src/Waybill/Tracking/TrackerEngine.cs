@@ -139,8 +139,25 @@ public class TrackerEngine : IDisposable {
     /// start with the game already running, where the drive so far is already lost.</summary>
     public bool HasPendingResume { get; private set; }
 
-    /// <summary>True once the game has actually pushed telemetry through.</summary>
-    public bool Connected { get; private set; }
+    /// <summary>
+    /// Whether a game is there right now, rather than whether one ever was.
+    ///
+    /// The plugin clears its own flag on the way out, and the poll keeps running after
+    /// that, so a game closing is noticed within a tenth of a second. The staleness
+    /// check behind it is for the other way out: a game that dies without clearing
+    /// anything leaves the last values sitting in shared memory, and then the only
+    /// evidence is that nobody is writing to it any more.
+    /// </summary>
+    public bool Connected => _sdkActive && DateTime.UtcNow - _lastPoll < TimeSpan.FromSeconds(15);
+    private volatile bool _sdkActive;
+    private DateTime _lastPoll = DateTime.MinValue;
+
+    /// <summary>Where the truck was last seen, or nothing once the game has gone.</summary>
+    public (float X, float Z)? Where => _tracker.Where;
+
+    /// <summary>Which game that was. Empty once there is none, which is what lets the
+    /// live page put the other game's map up the moment it starts.</summary>
+    public string WhereGame => _tracker.WhereGame;
 
     public event Action<string>? Message;
     public event Action<JobInfo>? JobStarted;
@@ -212,8 +229,14 @@ public class TrackerEngine : IDisposable {
 
         _telemetry.Data += (data, updated) => {
             _last = data;
-            Connected = true;
-            if (!updated) return;
+            _lastPoll = DateTime.UtcNow;
+            var was = _sdkActive;
+            _sdkActive = data.SdkActive;
+            // The game going away is worth handling once, at the moment it happens:
+            // whatever was being roamed is closed where it was last seen, and the map
+            // stops claiming a truck that is not there.
+            if (was && !_sdkActive) NoticeGone();
+            if (!_sdkActive || !updated) return;
             TickCount++;
             if (DateTime.UtcNow - _lastSnapshot >= _snapshotEvery) {
                 _lastSnapshot = DateTime.UtcNow;
@@ -245,6 +268,27 @@ public class TrackerEngine : IDisposable {
     /// are different questions.</summary>
     private void Hook(string name, Action<EventHandler> subscribe) {
         subscribe((_, _) => Write(name, _last));
+    }
+
+    /// <summary>
+    /// Hands the tracker the news that the game has gone.
+    ///
+    /// Nothing is written to the recording for it: a game closing is not something that
+    /// happened in the world, it is the world ending. What it does do is close whatever
+    /// stretch of free driving was open, at the last place it was seen, and forget where
+    /// the truck was, so that starting the other game does not begin with a truck parked
+    /// in the wrong country.
+    /// </summary>
+    private void NoticeGone() {
+        lock (_gate) {
+            var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            foreach (var ev in _tracker.Update(null, nowMs)) {
+                if (ev.Type == TrackerEventType.FreeroamFinished && ev.Freeroam != null) {
+                    try { _store.SaveFreeroam(ev.Freeroam); } catch { /* the game leaving is not worth failing over */ }
+                }
+            }
+        }
+        Message?.Invoke(Waybill.Strings.T("msg.gameGone"));
     }
 
     private void Write(string kind, SCSTelemetry? data) {

@@ -278,6 +278,16 @@ public class JobTracker {
     /// moment.</summary>
     public double? Facing { get; private set; }
 
+    /// <summary>
+    /// Where the truck was last seen, and in which game, whatever it was doing.
+    ///
+    /// Not the same thing as roaming: a truck standing in the delivery screen with the
+    /// handbrake on is not roaming anywhere, and the map still has something true to
+    /// show. Null means the game is not there, which is its own answer.
+    /// </summary>
+    public (float X, float Z)? Where { get; private set; }
+    public string WhereGame { get; private set; } = "";
+
     /// <summary>Puts a job in front of the tracker without any telemetry behind it,
     /// for the demonstration mode. See <see cref="TrackerEngine.ShowDemo"/>.</summary>
     public void ShowDemo(JobState state) => _current = state;
@@ -299,6 +309,11 @@ public class JobTracker {
             if (CloseRoam() is { } lost) {
                 outEvents.Add(new TrackerEvent { Type = TrackerEventType.FreeroamFinished, Freeroam = lost });
             }
+            // Nowhere, rather than wherever it was an hour ago. The next game to start
+            // may well be the other one.
+            Where = null;
+            WhereGame = "";
+            Facing = null;
             return outEvents;
         }
 
@@ -307,6 +322,10 @@ public class JobTracker {
         _prev = snap;
         _prevAtMs = nowMs;
         Facing = snap.HeadingTurns;
+        if (snap.Truck.OdometerKm > 0) {
+            Where = ((float)snap.PosX, (float)snap.PosZ);
+            WhereGame = snap.Game;
+        }
 
         // First tick after a connect has nothing to compare against.
         if (prev == null || prevAt == null) return outEvents;
