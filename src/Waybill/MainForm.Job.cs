@@ -569,7 +569,13 @@ public partial class MainForm {
         // does not move while somebody drives, and taking every route of it apart once
         // a second is the most expensive thing this page can do; after that only the
         // line being driven is handed over, which leaves the picture underneath alone.
-        _jobMap.GameMap = GameMapFor(game);
+        // Chosen for the drive in progress, so a delivery that leaves the world the
+        // game shipped with is drawn on the world it is actually in.
+        var over = points.Count > 0
+            ? Ground(new[] { points.Select(p => new RoutePoint(p.AtMs, (float)p.X, (float)p.Z, (float)p.SpeedKmh)).ToList() })
+            : at is { } here ? new RectangleF(here.X, here.Y, 0, 0)
+            : RectangleF.Empty;
+        _jobMap.GameMap = GameMapFor(game, over);
         if (_jobClose is not null) _jobClose.GameMap = _jobMap.GameMap;
 
         if (_mapsHolding != game) {

@@ -187,6 +187,16 @@ public sealed class MapBackdrop : IDisposable {
     public string Game => _map.Game;
 
     /// <summary>
+    /// What this map is called, which is the name of the folder it was dropped in.
+    ///
+    /// A game has as many maps as the driver has worlds: the one the game shipped with,
+    /// and whatever a map mod makes of it. Nothing in an export says which it is, and
+    /// nothing in the telemetry says which is loaded, so the name is the one thing a
+    /// person can set by dragging a folder.
+    /// </summary>
+    public string Name { get; private set; } = "";
+
+    /// <summary>
     /// The colour the map draws open country in, taken from the map itself.
     ///
     /// Read off the single tile that holds the whole world, so it is whatever this
@@ -242,8 +252,9 @@ public sealed class MapBackdrop : IDisposable {
             var map = Ours(folder) ?? Exported(folder);
             if (map is null || map.MaxX <= map.MinX || map.MaxZ <= map.MinZ) return null;
             if (map.TileSize <= 0 || map.MaxZoom < map.MinZoom) return null;
-            if (map.Game.Length == 0) map.Game = new DirectoryInfo(folder).Name;
-            return new MapBackdrop(folder, map);
+            var named = new DirectoryInfo(folder).Name;
+            if (map.Game.Length == 0) map.Game = named;
+            return new MapBackdrop(folder, map) { Name = named };
         } catch {
             // A backdrop is decoration. Nothing about it is worth failing to draw a
             // delivery over.

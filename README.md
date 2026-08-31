@@ -534,7 +534,7 @@ near the end reads quite differently from one with a collision on the way out.
 Touching the map at all ends the replay and shows the whole route, because a
 drawing still being drawn is in the way the moment you want to look at it.
 
-### There is no real map underneath, on purpose
+### The map underneath is the game's own
 
 The game's world is not a scaled United States. Measured across nineteen
 deliveries, some pairs of cities sit thirteen times closer than reality and others
@@ -542,22 +542,42 @@ thirty, which is a difference of more than twice within the same map. SCS did no
 shrink a country; they laid out a road network that plays well and put the cities
 where that worked.
 
-So no projection fits. Fitting the closest one anyway leaves cities about thirty
-kilometres out under cross validation, and neither a quadratic fit nor a spline
-through the cities as control points does better. Thirty kilometres is roughly
-twenty minutes of driving: a state border drawn that far off would put the truck
-in the wrong state, which is exactly the sort of small lie this project tries not
-to tell.
+So no projection fits, and Waybill draws no map of its own. Fitting the closest
+projection anyway leaves cities about thirty kilometres out under cross
+validation, and neither a quadratic fit nor a spline through the cities as control
+points does better. Thirty kilometres is roughly twenty minutes of driving: a
+state border drawn that far off would put the truck in the wrong state, which is
+exactly the sort of small lie this project tries not to tell.
 
-What is drawn instead comes entirely from the driver's own data, where every
-position is exactly where the game put it:
+What can go underneath is the game's own map, because it is drawn in the same
+coordinates the telemetry reports. There is no projection to guess at and no
+landmarks to line up by, only arithmetic between two numbers that already mean the
+same thing. [ts-map](https://github.com/dariowouters/ts-map) exports it out of the
+game's files as tiles; Waybill reads what the exporter writes beside them and
+draws it, dimmed, under everything else. It never touches the game's archives
+itself, which is what keeps it out of following a format that changes with the
+patches.
 
-* **The routes already driven** are the background. They are the one backdrop that
-  cannot be wrong, and the picture fills in as more gets driven.
+Drop an export into `map\ets2` or `map\ats` beside the database and it appears:
+roads, towns, and the stops a driver plans a day around. Several worlds for one
+game go in folders inside those, say `map\ets2\vanilla` beside `map\ets2\promods`,
+and *Settings → Map* says which is drawn. A drive that falls outside the chosen
+world is drawn on whichever export does contain it, so a run through a map mod's
+country does not hang off the edge of the world the game shipped with.
+
+With no export at all nothing is lost: the drives are drawn on a dark ground the
+way they always were.
+
+On top of whatever is underneath goes what comes from the driver's own data, where
+every position is exactly where the game put it:
+
+* **The routes already driven**, each one clickable, and the one being read drawn
+  in full colour while the rest stay quiet.
 * **Cities are learned** from the jobs themselves. Each names the city it loaded
   in and the one it unloaded in, and the recording says where the truck was. A dot
   is really the middle of the depots used there, so a city seen once is one depot
-  wearing the city's name.
+  wearing the city's name. They are drawn brighter than the towns an export knows
+  about, and where two labels collide the one the driver has been to survives.
 
 Nothing on the map ever reports a distance, and it never will. The length of a
 line on it is not kilometres; the odometer answers that.

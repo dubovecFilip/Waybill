@@ -10,6 +10,7 @@ public static partial class Strings {
         ["menu.units"] = "Jednotky",
         ["menu.data"] = "Dáta",
         ["menu.language"] = "Jazyk",
+        ["menu.map"] = "Mapa",
         ["menu.installPlugin"] = "Nainštalovať telemetry plugin...",
         ["menu.gamePaths"] = "Priečinky s hrami",
         ["menu.gamePathAuto"] = "Hľadať automaticky",

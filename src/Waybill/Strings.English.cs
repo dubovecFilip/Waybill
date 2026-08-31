@@ -9,6 +9,7 @@ public static partial class Strings {
         ["menu.units"] = "Units",
         ["menu.data"] = "Data",
         ["menu.language"] = "Language",
+        ["menu.map"] = "Map",
         ["menu.installPlugin"] = "Install telemetry plugin...",
         ["menu.gamePaths"] = "Game folders",
         ["menu.gamePathAuto"] = "Detect automatically",

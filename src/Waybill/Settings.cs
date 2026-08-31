@@ -22,6 +22,15 @@ public class Settings {
     /// to one driver than the width of the page beside it is.</summary>
     public int SidebarWidth { get; set; } = 200;
 
+    /// <summary>
+    /// Which map to draw under a game's drives, by the name of its folder.
+    ///
+    /// Only meaningful once there is more than one, which happens the moment somebody
+    /// exports a map mod's world beside the one the game shipped with. Empty, or naming
+    /// a folder that is not there, means the first one found.
+    /// </summary>
+    public Dictionary<string, string> MapChoice { get; set; } = new();
+
     public string? AtsPath { get; set; }
     public string? Ets2Path { get; set; }
 

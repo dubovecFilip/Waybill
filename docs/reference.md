@@ -552,6 +552,50 @@ Column `source`. Where the row came from.
 | `waybill` | Tracked from telemetry |
 | `trucksbook` | Imported from a TrucksBook CSV export |
 
+## The map underneath
+
+Not a table: a folder beside the database, and nothing in it is Waybill's to
+write.
+
+```
+map\ets2\TileMapInfo.json      one world, straight in the game's folder
+map\ets2\Tiles\{z}\{x}\{y}.png
+map\ats\vanilla\...            or several, one folder each
+map\ats\promods\...
+```
+
+A folder counts as a map when it holds a descriptor. `TileMapInfo.json` is what
+[ts-map](https://github.com/dariowouters/ts-map) writes and is read as it comes:
+`x1`, `x2`, `y1`, `y2` are the square of the world the tiles cover in the game's
+own metres, and `minZoom`, `maxZoom` the levels it exported. Its `y` is the game's
+`z`; it names the ground plane the way anything drawing from above does, while the
+telemetry keeps `y` for height. `waybill-map.json` is the same thing under our own
+names, read first when it is there, for a map from some other tool or one adjusted
+by hand: `MinX`, `MaxX`, `MinZ`, `MaxZ`, `TileSize`, `MinZoom`, `MaxZoom`,
+`Pattern` and `TopDown`.
+
+Beside the tiles, two files the exporter also writes are read if they are there.
+`Cities.json` gives every town of that world, drawn quietly behind the ones this
+driver has actually loaded or unloaded in. `Overlays.json` with its `Overlays`
+folder of pictures gives the stops: `Fuel`, `Parking`, `Service`, `Garage`,
+`TruckDealer`, `WeightStation`, `Viewpoint` and `Ferry`, drawn from about twenty
+five kilometres across the panel and faded, since the game colours them to be the
+loudest thing on its own map. `Company` overlays are deliberately ignored: that
+icon is a logo, and a driver running company mods would be shown whatever happened
+to be installed on the day the map was exported.
+
+Tiles are dimmed to 42 % as they are read, which puts the ground about where the
+panel's own background is and leaves the roads clearly readable under a drive. The
+colour the map draws open country in is taken from the tile that holds the whole
+world and painted behind everything, so the part of a panel the tiles do not reach
+looks like more of the same nothing rather than a hole.
+
+Which world is drawn: the one named for that game in `MapChoice` in the settings,
+or the first one found. A drive whose ground the chosen map cannot hold is drawn on
+the first map that can, which is what makes a mod's larger world and the game's own
+live side by side. The switch is under *Settings → Map*, and it only appears once a
+game has more than one.
+
 ## Recording lines
 
 Field `kind` in a session recording. Either a periodic snapshot or the event that

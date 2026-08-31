@@ -10,6 +10,7 @@ public static partial class Strings {
         ["menu.units"] = "Unidades",
         ["menu.data"] = "Datos",
         ["menu.language"] = "Idioma",
+        ["menu.map"] = "Mapa",
         ["menu.installPlugin"] = "Instalar el plugin de telemetría...",
         ["menu.gamePaths"] = "Carpetas de los juegos",
         ["menu.gamePathAuto"] = "Buscar automáticamente",

@@ -1328,7 +1328,7 @@ public partial class MainForm : Form {
         var shown = Units.For(_settings.Units, game);
         map.FormatSpeed = kmh => shown.FormatSpeed(kmh);
         var routes = RoutesFor(game);
-        map.GameMap = GameMapFor(game);
+        map.GameMap = GameMapFor(game, Ground(routes.Routes.Values));
         map.Show(Layers(routes), 0, routes.Cities);
     }
 
@@ -1408,6 +1408,7 @@ public partial class MainForm : Form {
         var settings = new ToolStripMenuItem(Strings.T("menu.settings"));
         settings.DropDownItems.Add(BuildUnitsMenu());
         settings.DropDownItems.Add(BuildLanguageMenu());
+        if (BuildMapMenu() is { } maps) settings.DropDownItems.Add(maps);
         settings.DropDownItems.Add(BuildDiscordMenu());
         settings.DropDownItems.Add(MenuAction(Strings.T("menu.signature"), SignHere));
 
@@ -1501,6 +1502,39 @@ public partial class MainForm : Form {
         }
 
         return units;
+    }
+
+    /// <summary>
+    /// Which world to draw under each game's drives.
+    ///
+    /// Only offered once a game has more than one map to choose between, which happens
+    /// when somebody exports a map mod's world beside the one the game shipped with.
+    /// With one, or none, there is nothing to decide and the menu says nothing.
+    /// </summary>
+    private ToolStripMenuItem? BuildMapMenu() {
+        var games = new[] { "Ets2", "Ats" }.Where(g => MapsFor(g).Count > 1).ToList();
+        if (games.Count == 0) return null;
+
+        var maps = new ToolStripMenuItem(Strings.T("menu.map"));
+        foreach (var game in games) {
+            var forGame = games.Count > 1 ? new ToolStripMenuItem(GameName(game)) : maps;
+            var chosen = GameMapFor(game);
+            foreach (var map in MapsFor(game)) {
+                var item = new ToolStripMenuItem(map.Name) { Tag = map.Name, Checked = map == chosen };
+                item.Click += (_, _) => {
+                    _settings.MapChoice[game] = map.Name;
+                    _settings.Save();
+                    foreach (ToolStripMenuItem other in forGame.DropDownItems) {
+                        other.Checked = Equals(other.Tag, map.Name);
+                    }
+                    // Every map on screen was built with the old choice behind it.
+                    ReloadHistory();
+                };
+                forGame.DropDownItems.Add(item);
+            }
+            if (!ReferenceEquals(forGame, maps)) maps.DropDownItems.Add(forGame);
+        }
+        return maps;
     }
 
     private ToolStripMenuItem BuildLanguageMenu() {
@@ -3140,7 +3174,8 @@ public partial class MainForm : Form {
         };
 
         var map = NewMap(u);
-        map.GameMap = GameMapFor(d.Game);
+        map.GameMap = GameMapFor(d.Game, Ground(RoutesFor(d.Game).Routes.TryGetValue(d.Id, out var line)
+                                                ? new[] { line } : Array.Empty<List<RoutePoint>>()));
         map.Show(Layers(RoutesFor(d.Game)), d.Id, RoutesFor(d.Game).Cities, _store.TimelineRows(d.Id, u));
 
         // Drawn out once, when the panel it sits in is actually on the screen.
@@ -4081,20 +4116,68 @@ public partial class MainForm : Form {
     }
 
     /// <summary>
-    /// The game's own map, if somebody has put one where Waybill looks.
+    /// The maps a game has, if somebody has put one where Waybill looks.
     ///
     /// Under `map\ets2` and `map\ats` beside the database, each with the descriptor
-    /// that says which square of the world its tiles cover. Nothing here reads the
-    /// game's archives: the tiles are exported once by a tool that already knows how,
-    /// and Waybill only draws them. No map is the ordinary case and draws nothing.
+    /// that says which square of the world its tiles cover. A folder of tiles straight
+    /// in there is one map; folders inside it are one map each, which is how a world
+    /// changed by a map mod lives beside the one the game shipped with. Nothing here
+    /// reads the game's archives: the tiles are exported once by a tool that already
+    /// knows how. No map at all is the ordinary case and draws nothing.
     /// </summary>
-    private readonly Dictionary<string, MapBackdrop?> _gameMaps = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<MapBackdrop>> _gameMaps = new(StringComparer.OrdinalIgnoreCase);
 
-    private MapBackdrop? GameMapFor(string game) {
-        if (game.Length == 0) return null;
+    private List<MapBackdrop> MapsFor(string game) {
+        if (game.Length == 0) return new List<MapBackdrop>();
         if (_gameMaps.TryGetValue(game, out var had)) return had;
+
         var folder = Path.Combine(DeliveryStore.DefaultDir(), "map", game.ToLowerInvariant());
-        return _gameMaps[game] = MapBackdrop.Open(folder);
+        var found = new List<MapBackdrop>();
+        if (MapBackdrop.Open(folder) is { } plain) found.Add(plain);
+        try {
+            foreach (var inside in Directory.GetDirectories(folder).OrderBy(d => d, StringComparer.OrdinalIgnoreCase)) {
+                if (MapBackdrop.Open(inside) is { } one) found.Add(one);
+            }
+        } catch { /* a game with no map at all is the ordinary case */ }
+        return _gameMaps[game] = found;
+    }
+
+    /// <summary>The map chosen for a game, or the first one it has.</summary>
+    private MapBackdrop? GameMapFor(string game) {
+        var maps = MapsFor(game);
+        if (maps.Count == 0) return null;
+        var chosen = _settings.MapChoice.TryGetValue(game, out var name) ? name : "";
+        return maps.FirstOrDefault(m => m.Name.Equals(chosen, StringComparison.OrdinalIgnoreCase)) ?? maps[0];
+    }
+
+    /// <summary>
+    /// The map for a game that can actually hold this drive.
+    ///
+    /// The chosen one wins whenever it covers the ground, which is the ordinary case.
+    /// A map mod's world is larger than the one the game shipped with, so a drive that
+    /// falls outside the chosen map happened in another world, and drawing it over the
+    /// wrong one, or over nothing at all, says less than quietly reaching for the map
+    /// that contains it.
+    /// </summary>
+    private MapBackdrop? GameMapFor(string game, RectangleF need) {
+        var chosen = GameMapFor(game);
+        if (chosen is null || need.IsEmpty || chosen.Bounds.Contains(need)) return chosen;
+        foreach (var map in MapsFor(game)) {
+            if (map.Bounds.Contains(need)) return map;
+        }
+        return chosen;
+    }
+
+    /// <summary>The ground a set of drives covers, for choosing a map by it.</summary>
+    private static RectangleF Ground(IEnumerable<List<RoutePoint>> runs) {
+        float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
+        foreach (var run in runs) {
+            foreach (var point in run) {
+                minX = Math.Min(minX, point.X); maxX = Math.Max(maxX, point.X);
+                minZ = Math.Min(minZ, point.Z); maxZ = Math.Max(maxZ, point.Z);
+            }
+        }
+        return minX > maxX ? RectangleF.Empty : RectangleF.FromLTRB(minX, minZ, maxX, maxZ);
     }
 
     private void ApplyFilter() {
