@@ -31,6 +31,17 @@ public class Settings {
     /// </summary>
     public Dictionary<string, string> MapChoice { get; set; } = new();
 
+    /// <summary>
+    /// Which world every new delivery of a game should be recorded as driven in.
+    ///
+    /// Separate from <see cref="MapChoice"/> on purpose: that one is what you are
+    /// looking at, this one is what you are playing, and looking at last month's
+    /// vanilla history while running a map mod must not label tonight's drive wrongly.
+    /// Empty, or missing, means nothing is written and the map is worked out from the
+    /// drive instead.
+    /// </summary>
+    public Dictionary<string, string> MapRecord { get; set; } = new();
+
     public string? AtsPath { get; set; }
     public string? Ets2Path { get; set; }
 

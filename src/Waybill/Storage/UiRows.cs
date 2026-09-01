@@ -111,6 +111,14 @@ public class DeliveryRow {
 /// volumes and masses are metric as stored; the card converts for display.</summary>
 public class DeliveryDetail {
     public long Id;
+
+    /// <summary>What the tracker calls this job, which survives a rebuild while the row
+    /// id does not. Anything the driver says about a delivery is kept against it.</summary>
+    public string JobUid = "";
+
+    /// <summary>Which of the game's worlds this was driven in, when the driver has said
+    /// so. Empty means nobody has, and the map is worked out from the drive itself.</summary>
+    public string MapWorld = "";
     public DateTime StartedAt, FinishedAt;
     public string Game = "", SourceCity = "", SourceCompany = "", DestinationCity = "", DestinationCompany = "";
     /// <summary>What the game calls the two ends when it is talking to itself. Empty

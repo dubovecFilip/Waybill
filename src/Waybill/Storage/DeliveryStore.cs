@@ -287,6 +287,15 @@ public class DeliveryStore : IDisposable {
             -- What has been reached, and when. Written once and never rewritten:
             -- an award is a record of something that happened, and this project does
             -- not take back what a driver has done.
+            -- Which of a game's worlds a delivery was driven in, said by the driver
+            -- rather than worked out. Keyed by the job rather than by the row, and
+            -- kept in its own table, because a rebuild throws every delivery row away
+            -- and writes it again: anything a person typed has to survive that.
+            CREATE TABLE IF NOT EXISTS delivery_world (
+                job_uid TEXT PRIMARY KEY,
+                world   TEXT NOT NULL
+            );
+
             -- What has been earned, and how many times. Every figure in here is
             -- worked out from the deliveries, so it can always be built again.
             CREATE TABLE IF NOT EXISTS awards (
@@ -472,6 +481,20 @@ public class DeliveryStore : IDisposable {
 
         InsertEvents(tx, deliveryId, r);
         InsertTripPoints(tx, deliveryId, r);
+
+        // Only when the record carries one. A rebuild has nothing to say about
+        // which world a drive happened in, and must not wipe what the driver said.
+        if (r.MapWorld.Length > 0) {
+            using var world = _conn.CreateCommand();
+            world.Transaction = tx;
+            world.CommandText = """
+                INSERT INTO delivery_world (job_uid, world) VALUES ($uid, $world)
+                ON CONFLICT(job_uid) DO UPDATE SET world = excluded.world;
+                """;
+            world.Parameters.AddWithValue("$uid", r.JobUid);
+            world.Parameters.AddWithValue("$world", r.MapWorld);
+            world.ExecuteNonQuery();
+        }
 
         tx.Commit();
         }
@@ -888,7 +911,8 @@ public class DeliveryStore : IDisposable {
                        COALESCE(special_transport, 0),
                        truck_damage_start_pct, trailer_damage_start_pct, cargo_damage_start_pct,
                        COALESCE(source_city_id, ''), COALESCE(destination_city_id, ''),
-                       COALESCE(truck_id, ''), COALESCE(xp, 0)
+                       COALESCE(truck_id, ''), COALESCE(xp, 0), job_uid,
+                       COALESCE((SELECT world FROM delivery_world w WHERE w.job_uid = deliveries.job_uid), '')
                 FROM deliveries WHERE id = $id;
                 """;
             cmd.Parameters.AddWithValue("$id", id);
@@ -934,6 +958,8 @@ public class DeliveryStore : IDisposable {
                 SourceCityId = r.GetString(52), DestinationCityId = r.GetString(53),
                 TruckId = r.GetString(54),
                 Xp = r.GetInt32(55),
+                JobUid = r.GetString(56),
+                MapWorld = r.GetString(57),
             };
         }
     }
@@ -1305,6 +1331,31 @@ public class DeliveryStore : IDisposable {
                    ?? new List<TrailerUnitRecord>();
         } catch {
             return new List<TrailerUnitRecord>();
+        }
+    }
+
+    /// <summary>
+    /// Says which world a delivery was driven in, or forgets it when given nothing.
+    ///
+    /// Against the job rather than the row, so a rebuild does not lose it. Nothing
+    /// here is derived from anything: it is the one thing about a delivery that the
+    /// recordings cannot answer, because the game never says which map is loaded.
+    /// </summary>
+    public void SetDeliveryWorld(string jobUid, string world) {
+        if (string.IsNullOrWhiteSpace(jobUid)) return;
+        lock (_gate) {
+            using var cmd = _conn.CreateCommand();
+            if (string.IsNullOrWhiteSpace(world)) {
+                cmd.CommandText = "DELETE FROM delivery_world WHERE job_uid = $uid;";
+            } else {
+                cmd.CommandText = """
+                    INSERT INTO delivery_world (job_uid, world) VALUES ($uid, $world)
+                    ON CONFLICT(job_uid) DO UPDATE SET world = excluded.world;
+                    """;
+                cmd.Parameters.AddWithValue("$world", world);
+            }
+            cmd.Parameters.AddWithValue("$uid", jobUid);
+            cmd.ExecuteNonQuery();
         }
     }
 

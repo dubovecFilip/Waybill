@@ -170,6 +170,17 @@ public class JobRecord {
     public string JobUid = "";
     public string Outcome = ""; // delivered | cancelled | unresolved | reloaded
 
+    /// <summary>
+    /// Which of the game's worlds this was driven in, when the driver has told Waybill
+    /// which one they play.
+    ///
+    /// Not from the game: telemetry says nothing about which map is loaded, so this is
+    /// either a standing answer from the settings or nothing at all. Empty leaves the
+    /// question to the map itself, which can often work it out from where the drive
+    /// began and ended.
+    /// </summary>
+    public string MapWorld = "";
+
     /// <summary>How the delivery was driven: "clean" or "race". Derived from what was
     /// measured, never chosen in advance, so it can be recomputed for old deliveries
     /// from their recordings. Informational only, exactly like the assists: it sorts

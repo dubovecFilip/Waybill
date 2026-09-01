@@ -1440,6 +1440,7 @@ public partial class MainForm : Form {
         var settings = new ToolStripMenuItem(Strings.T("menu.settings"));
         settings.DropDownItems.Add(BuildUnitsMenu());
         settings.DropDownItems.Add(BuildLanguageMenu());
+        if (BuildRecordWorldMenu() is { } worlds) settings.DropDownItems.Add(worlds);
         settings.DropDownItems.Add(BuildDiscordMenu());
         settings.DropDownItems.Add(MenuAction(Strings.T("menu.signature"), SignHere));
 
@@ -1533,6 +1534,44 @@ public partial class MainForm : Form {
         }
 
         return units;
+    }
+
+    /// <summary>
+    /// Which world new deliveries are recorded as driven in.
+    ///
+    /// Not the same question as which one the map page is showing. This one says what
+    /// is being played tonight, so looking through last month's vanilla history while
+    /// running a map mod does not label tonight's drive wrongly. Offered only where a
+    /// game has more than one world, and "not said" is a real answer: it leaves the
+    /// map to be worked out from where the drive began and ended.
+    /// </summary>
+    private ToolStripMenuItem? BuildRecordWorldMenu() {
+        var games = new[] { "Ets2", "Ats" }.Where(g => MapsFor(g).Count > 1).ToList();
+        if (games.Count == 0) return null;
+
+        var top = new ToolStripMenuItem(Strings.T("menu.recordWorld"));
+        foreach (var game in games) {
+            var forGame = games.Count > 1 ? new ToolStripMenuItem(GameName(game)) : top;
+            var now = _settings.MapRecord.TryGetValue(game, out var world) ? world : "";
+
+            void Choice(string name, string label) {
+                var item = new ToolStripMenuItem(label) { Tag = name, Checked = now.Equals(name, StringComparison.OrdinalIgnoreCase) };
+                item.Click += (_, _) => {
+                    if (name.Length == 0) _settings.MapRecord.Remove(game);
+                    else _settings.MapRecord[game] = name;
+                    _settings.Save();
+                    foreach (ToolStripMenuItem other in forGame.DropDownItems) {
+                        other.Checked = Equals(other.Tag, name);
+                    }
+                };
+                forGame.DropDownItems.Add(item);
+            }
+
+            Choice("", Strings.T("map.worldAuto"));
+            foreach (var one in MapsFor(game)) Choice(one.Name, one.Name);
+            if (!ReferenceEquals(forGame, top)) top.DropDownItems.Add(forGame);
+        }
+        return top;
     }
 
     private ToolStripMenuItem BuildLanguageMenu() {
@@ -1799,6 +1838,8 @@ public partial class MainForm : Form {
 
     private void StartEngine() {
         _engine = new TrackerEngine(_store);
+        _engine.WorldForNewDelivery = game =>
+            _settings.MapRecord.TryGetValue(game, out var world) ? world : "";
         _engine.Message += m => BeginInvoke(() => AddLog(m));
         _engine.JobStarted += j => BeginInvoke(() => AddLog($"{Strings.T("msg.jobStart")}  {j.SourceCity} -> {j.DestinationCity} ({j.Cargo})"));
         _engine.JobResumed += j => BeginInvoke(() => AddLog($"{Strings.T("msg.jobResume")}  {j.SourceCity} -> {j.DestinationCity}"));
@@ -3172,11 +3213,7 @@ public partial class MainForm : Form {
         };
 
         var map = NewMap(u);
-        var drawn = RoutesFor(d.Game).Routes.TryGetValue(d.Id, out var line) ? line : new List<RoutePoint>();
-        map.GameMap = drawn.Count > 0
-            ? GameMapFor(d.Game, Ground(new[] { drawn }),
-                         new PointF(drawn[0].X, drawn[0].Z), new PointF(drawn[^1].X, drawn[^1].Z))
-            : GameMapFor(d.Game);
+        map.GameMap = MapForDelivery(d);
         map.Show(Layers(RoutesFor(d.Game)), d.Id, RoutesFor(d.Game).Cities, _store.TimelineRows(d.Id, u));
 
         // Drawn out once, when the panel it sits in is actually on the screen.
@@ -3211,7 +3248,7 @@ public partial class MainForm : Form {
         box.Controls.Add(map);
         box.Controls.Add(divider);
         box.Controls.Add(profile);
-        MapButtons(box, map, () => BigMap(d, u), replay: true);
+        MapButtons(box, map, () => BigMap(d, u), replay: true, about: d);
         return box;
     }
 
@@ -3233,7 +3270,8 @@ public partial class MainForm : Form {
     /// spare. Placed by hand on every resize because the map underneath them is
     /// docked to fill, so there is no layout to anchor to.
     /// </summary>
-    private void MapButtons(Control host, RouteView map, Action? expand, bool replay = false) {
+    private void MapButtons(Control host, RouteView map, Action? expand, bool replay = false,
+                            DeliveryDetail? about = null) {
         var bar = new Panel { BackColor = Color.Transparent, Height = 26, Width = 0 };
 
         Button Glyph(string text, string tip, Action click) {
@@ -3252,7 +3290,7 @@ public partial class MainForm : Form {
         }
 
         var layers = Glyph("≡", Strings.T("map.layers"), () => { });
-        layers.Click += (_, _) => LayerMenu(map).Show(layers, new Point(0, layers.Height));
+        layers.Click += (_, _) => LayerMenu(map, about).Show(layers, new Point(0, layers.Height));
         // Only where one delivery is singled out: there is nothing to replay on the
         // map of everything, where no drive is more the subject than any other.
         if (replay) {
@@ -3766,7 +3804,7 @@ public partial class MainForm : Form {
         return bmp;
     }
 
-    private ContextMenuStrip LayerMenu(RouteView map) {
+    private ContextMenuStrip LayerMenu(RouteView map, DeliveryDetail? about = null) {
         var menu = new ContextMenuStrip {
             BackColor = Surface, ForeColor = Ink, ShowImageMargin = true,
             Renderer = new ToolStripProfessionalRenderer(new DarkMenuColours()),
@@ -3796,7 +3834,63 @@ public partial class MainForm : Form {
         Item(Strings.T("map.layerCities"), map.ShowCities, v => map.ShowCities = v);
         Item(Strings.T("map.layerStops"), map.ShowStops, v => map.ShowStops = v);
         Item(Strings.T("map.layerMarks"), map.ShowMarks, v => map.ShowMarks = v);
+
+        // Which world this delivery was driven in, on the delivery's own map, because
+        // that is where being drawn on the wrong one is noticed. Only where the game
+        // has more than one to be wrong about.
+        if (about is not null && MapsFor(about.Game).Count > 1) {
+            menu.Items.Add(new ToolStripSeparator());
+            var worlds = new ToolStripMenuItem(Strings.T("map.world")) { BackColor = Surface };
+
+            void World(string name, string label) {
+                var item = new ToolStripMenuItem(label) { Tag = name, BackColor = Surface };
+                item.Checked = about.MapWorld.Equals(name, StringComparison.OrdinalIgnoreCase);
+                item.Click += (_, _) => {
+                    about.MapWorld = name;
+                    _store.SetDeliveryWorld(about.JobUid, name);
+                    foreach (ToolStripMenuItem other in worlds.DropDownItems) {
+                        other.Checked = Equals(other.Tag, name);
+                    }
+                    map.GameMap = MapForDelivery(about);
+                    map.Invalidate();
+                };
+                worlds.DropDownItems.Add(item);
+            }
+
+            World("", Strings.T("map.worldAuto"));
+            foreach (var one in MapsFor(about.Game)) World(one.Name, one.Name);
+            menu.Items.Add(worlds);
+            StyleMenuItems(menu.Items);
+        }
         return menu;
+    }
+
+    /// <summary>The world the driver has said they are playing in, if any of that
+    /// game's exports is called that.</summary>
+    private MapBackdrop? PlayingIn(string game) {
+        if (game.Length == 0 || !_settings.MapRecord.TryGetValue(game, out var world) || world.Length == 0) return null;
+        return MapsFor(game).FirstOrDefault(m => m.Name.Equals(world, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// The world a delivery is drawn on.
+    ///
+    /// What the driver said about this one wins, since nothing else here knows better:
+    /// the game never says which map is loaded, so a person saying "this was ProMods"
+    /// is the only certain answer there is. Without one, the drive is asked to explain
+    /// itself, and failing that the picker's choice stands.
+    /// </summary>
+    private MapBackdrop? MapForDelivery(DeliveryDetail about) {
+        if (about.MapWorld.Length > 0) {
+            var said = MapsFor(about.Game).FirstOrDefault(
+                m => m.Name.Equals(about.MapWorld, StringComparison.OrdinalIgnoreCase));
+            if (said is not null) return said;
+        }
+        var drawn = RoutesFor(about.Game).Routes.TryGetValue(about.Id, out var line) ? line : new List<RoutePoint>();
+        return drawn.Count > 0
+            ? GameMapFor(about.Game, Ground(new[] { drawn }),
+                         new PointF(drawn[0].X, drawn[0].Z), new PointF(drawn[^1].X, drawn[^1].Z))
+            : GameMapFor(about.Game);
     }
 
     /// <summary>The same map with the whole screen to itself. A route panel beside a

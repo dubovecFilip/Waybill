@@ -590,11 +590,33 @@ colour the map draws open country in is taken from the tile that holds the whole
 world and painted behind everything, so the part of a panel the tiles do not reach
 looks like more of the same nothing rather than a hole.
 
-Which world is drawn: the one named for that game in `MapChoice` in the settings,
-or the first one found. A drive whose ground the chosen map cannot hold is drawn on
-the first map that can, which is what makes a mod's larger world and the game's own
-live side by side. The switch is under *Settings → Map*, and it only appears once a
-game has more than one.
+### Which world a drive is drawn on
+
+Four answers, in this order.
+
+**What the driver said about that delivery.** Table `delivery_world`, one row per
+job: `job_uid` and the folder name of a world. Set from the layer menu on a
+delivery's own map, cleared by choosing to work it out instead. Keyed by the job
+rather than the row because a rebuild deletes every delivery row and writes it
+again; anything a person said has to outlive that, and this does.
+
+**What is being played.** `MapRecord` in the settings, per game, under *Settings →
+World for new deliveries*. Every delivery finished from then on is stamped with it,
+and the live map draws it while driving. Deliberately not the same setting as the
+picker: what you are looking at and what you are playing are different questions,
+and looking through last month's vanilla history while running a map mod must not
+label tonight's drive wrongly.
+
+**What the drive itself says.** A world can account for a delivery when it holds
+the ground covered and has a town within three kilometres of world space of each
+end. Every map mod keeps the towns the game shipped with and adds its own, so a
+delivery that loaded or dropped where only one world has a town happened in that
+one. Three kilometres is generous where the whole of Europe is 211 km across, and
+still separates towns.
+
+**What is being looked at.** `MapChoice` in the settings, set by the picker on the
+map page, which reads "ATS" for a game with one world and "ETS2 - promods" for a
+game with several. It is the answer when nothing above has one.
 
 ## Recording lines
 

@@ -561,9 +561,14 @@ patches.
 Drop an export into `map\ets2` or `map\ats` beside the database and it appears:
 roads, towns, and the stops a driver plans a day around. Several worlds for one
 game go in folders inside those, say `map\ets2\vanilla` beside `map\ets2\promods`,
-and *Settings → Map* says which is drawn. A drive that falls outside the chosen
-world is drawn on whichever export does contain it, so a run through a map mod's
-country does not hang off the edge of the world the game shipped with.
+and the picker on the map page reads "ETS2 - promods" instead of just "ETS2".
+
+Which world a delivery is drawn on is answered in the order that anyone would: what
+you said about that delivery, from the layer menu on its own map; then what you told
+*Settings → World for new deliveries* you are playing, which also stamps every new
+delivery as it is recorded; then the drive itself, since a delivery that loaded or
+dropped where only one of your worlds has a town happened in that one; and failing
+all of that, whatever the picker is showing.
 
 With no export at all nothing is lost: the drives are drawn on a dark ground the
 way they always were.

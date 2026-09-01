@@ -575,7 +575,10 @@ public partial class MainForm {
             ? Ground(new[] { points.Select(p => new RoutePoint(p.AtMs, (float)p.X, (float)p.Z, (float)p.SpeedKmh)).ToList() })
             : at is { } here ? new RectangleF(here.X, here.Y, 0, 0)
             : RectangleF.Empty;
-        _jobMap.GameMap = GameMapFor(game, over);
+        // What is being played tonight, when the driver has said. The live map is the
+        // one place where the answer is not a guess about the past but a fact about
+        // right now, so the setting outranks both the picker and the drive itself.
+        _jobMap.GameMap = PlayingIn(game) ?? GameMapFor(game, over);
         if (_jobClose is not null) _jobClose.GameMap = _jobMap.GameMap;
 
         if (_mapsHolding != game) {

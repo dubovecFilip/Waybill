@@ -152,6 +152,10 @@ public class TrackerEngine : IDisposable {
     private volatile bool _sdkActive;
     private DateTime _lastPoll = DateTime.MinValue;
 
+    /// <summary>Which world a delivery finished now should be recorded as. Answered by
+    /// the app from its settings; null means the driver has not said.</summary>
+    public Func<string, string>? WorldForNewDelivery { get; set; }
+
     /// <summary>Where the truck was last seen, or nothing once the game has gone.</summary>
     public (float X, float Z)? Where => _tracker.Where;
 
@@ -330,6 +334,10 @@ public class TrackerEngine : IDisposable {
             }
             if (ev.Type == TrackerEventType.JobFinished && ev.Record != null) {
                 ActiveJob = null;
+                // Which world it was driven in, if the driver has said which one they
+                // play. Asked here rather than carried through the tracker, since it is
+                // nothing the telemetry knows and nothing a replay could work out.
+                ev.Record.MapWorld = WorldForNewDelivery?.Invoke(ev.Record.Game) ?? "";
                 _store.SaveDelivery(ev.Record);
                 DeliveriesThisRun++;
                 ClearInProgress(ev.Record.Game);
