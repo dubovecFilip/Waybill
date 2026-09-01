@@ -3172,8 +3172,11 @@ public partial class MainForm : Form {
         };
 
         var map = NewMap(u);
-        map.GameMap = GameMapFor(d.Game, Ground(RoutesFor(d.Game).Routes.TryGetValue(d.Id, out var line)
-                                                ? new[] { line } : Array.Empty<List<RoutePoint>>()));
+        var drawn = RoutesFor(d.Game).Routes.TryGetValue(d.Id, out var line) ? line : new List<RoutePoint>();
+        map.GameMap = drawn.Count > 0
+            ? GameMapFor(d.Game, Ground(new[] { drawn }),
+                         new PointF(drawn[0].X, drawn[0].Z), new PointF(drawn[^1].X, drawn[^1].Z))
+            : GameMapFor(d.Game);
         map.Show(Layers(RoutesFor(d.Game)), d.Id, RoutesFor(d.Game).Cities, _store.TimelineRows(d.Id, u));
 
         // Drawn out once, when the panel it sits in is actually on the screen.
@@ -4157,14 +4160,42 @@ public partial class MainForm : Form {
     /// wrong one, or over nothing at all, says less than quietly reaching for the map
     /// that contains it.
     /// </summary>
-    private MapBackdrop? GameMapFor(string game, RectangleF need) {
+    private MapBackdrop? GameMapFor(string game, RectangleF need, params PointF[] ends) {
         var chosen = GameMapFor(game);
-        if (chosen is null || need.IsEmpty || chosen.Bounds.Contains(need)) return chosen;
+        if (chosen is null) return null;
+        if (Explains(chosen, need, ends)) return chosen;
         foreach (var map in MapsFor(game)) {
-            if (map.Bounds.Contains(need)) return map;
+            if (Explains(map, need, ends)) return map;
         }
         return chosen;
     }
+
+    /// <summary>
+    /// Whether a world can account for a drive.
+    ///
+    /// It has to hold the ground the drive covered, and it has to have a town at each
+    /// end of it. The ends are what tell two worlds apart: a map mod keeps the towns
+    /// the game shipped with and adds its own, so a delivery that loaded or dropped
+    /// where only one of them has a town happened in that one, whatever is chosen.
+    /// Anything both can account for stays with whatever the driver chose.
+    /// </summary>
+    private static bool Explains(MapBackdrop map, RectangleF need, PointF[] ends) {
+        if (!need.IsEmpty && !map.Bounds.Contains(need)) return false;
+        foreach (var end in ends) {
+            if (!map.HasTownNear(end.X, end.Y, TownReachMetres)) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// How far from a town a delivery may end and still count as being there.
+    ///
+    /// In the game's own metres, which are compressed: the whole of America is 161 km
+    /// across in them. Depots sit inside their town at this scale, and towns are far
+    /// further apart than this, so it separates them without being fussy about which
+    /// depot was used.
+    /// </summary>
+    private const float TownReachMetres = 3000f;
 
     /// <summary>The ground a set of drives covers, for choosing a map by it.</summary>
     private static RectangleF Ground(IEnumerable<List<RoutePoint>> runs) {

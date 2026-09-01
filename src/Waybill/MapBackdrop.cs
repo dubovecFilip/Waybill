@@ -234,6 +234,24 @@ public sealed class MapBackdrop : IDisposable {
         return most == 0 ? Color.FromArgb(22, 25, 29) : Color.FromArgb(best);
     }
 
+    /// <summary>
+    /// Whether this world has a town about here.
+    ///
+    /// What a delivery's two ends are asked against. Every world a map mod builds keeps
+    /// the towns the game shipped with, so a drive between two of those could have
+    /// happened in either; a drive that ends where only one world has a town could only
+    /// have happened in that one.
+    /// </summary>
+    public bool HasTownNear(float x, float z, float metres) {
+        var reach = metres * metres;
+        foreach (var place in Places) {
+            var dx = place.X - x;
+            var dz = place.Y - z;
+            if (dx * dx + dz * dz <= reach) return true;
+        }
+        return false;
+    }
+
     /// <summary>The square of the world the tiles cover, in the game's metres.</summary>
     public RectangleF Bounds => RectangleF.FromLTRB(
         (float)_map.MinX, (float)_map.MinZ, (float)_map.MaxX, (float)_map.MaxZ);
