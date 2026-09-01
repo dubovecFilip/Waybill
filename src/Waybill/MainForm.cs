@@ -91,9 +91,16 @@ public partial class MainForm : Form {
     private readonly ToolTip _tips = new();
     private RouteView? _mapPage;
     private readonly ComboBox _mapGame = new();
-    /// <summary>The games behind the entries in <see cref="_mapGame"/>, as the
-    /// database spells them. The box shows them the way the game does.</summary>
-    private List<string> _mapGames = new();
+    /// <summary>
+    /// What each entry of <see cref="_mapGame"/> stands for: the game as the database
+    /// spells it, and which of that game's maps to draw under it.
+    ///
+    /// One entry per game while a game has one map or none, which is every ordinary
+    /// case. A game with several worlds gets one entry each, so choosing which world
+    /// to look at is the same act as choosing which game, rather than a setting
+    /// somewhere else that the page silently obeys.
+    /// </summary>
+    private List<(string Game, string Map)> _mapGames = new();
 
     public MainForm() {
         Text = "Waybill";
@@ -1305,23 +1312,48 @@ public partial class MainForm : Form {
     private void ReloadMapPage() {
         if (_mapPage is not { } map) return;
 
-        var games = _rows.Select(r => r.Hra).Where(g => g.Length > 0).Distinct().OrderBy(g => g).ToList();
-        if (!_mapGames.SequenceEqual(games)) {
+        var picks = new List<(string Game, string Map)>();
+        foreach (var g in _rows.Select(r => r.Hra).Where(g => g.Length > 0).Distinct().OrderBy(g => g)) {
+            var maps = MapsFor(g);
+            if (maps.Count < 2) picks.Add((g, ""));
+            else foreach (var one in maps) picks.Add((g, one.Name));
+        }
+
+        if (!_mapGames.SequenceEqual(picks)) {
             var was = _mapGame.SelectedIndex >= 0 && _mapGame.SelectedIndex < _mapGames.Count
-                ? _mapGames[_mapGame.SelectedIndex] : null;
-            _mapGames = games;
+                ? _mapGames[_mapGame.SelectedIndex] : ((string, string)?)null;
+            _mapGames = picks;
             _mapGame.Items.Clear();
-            // Shown as the game calls itself, kept as the database spells it.
-            foreach (var g in games) _mapGame.Items.Add(GameName(g));
-            _mapGame.SelectedIndex = was is not null && games.IndexOf(was) >= 0 ? games.IndexOf(was)
-                : games.Count > 0 ? 0 : -1;
+            // Shown as the game calls itself, kept as the database spells it, and named
+            // after its world only where there is more than one to be in.
+            foreach (var (g, name) in picks) {
+                _mapGame.Items.Add(name.Length == 0 ? GameName(g) : $"{GameName(g)} - {name}");
+            }
+            // Wide enough for what is in it. A world is named by its folder, and
+            // somebody who keeps four map mods apart by name deserves to read them.
+            var widest = 0;
+            foreach (string label in _mapGame.Items) {
+                widest = Math.Max(widest, TextRenderer.MeasureText(label, _mapGame.Font).Width);
+            }
+            _mapGame.Width = Math.Clamp(widest + 40, 150, 420);
+            _mapGame.DropDownWidth = Math.Max(_mapGame.Width, Math.Min(widest + 30, 640));
+
+            var back = was is { } had ? picks.IndexOf(had) : -1;
+            _mapGame.SelectedIndex = back >= 0 ? back : picks.Count > 0 ? 0 : -1;
         }
         if (_mapGame.SelectedIndex < 0 || _mapGame.SelectedIndex >= _mapGames.Count) {
             map.Show(new List<RouteLayer>(), 0, new List<CityAnchor>());
             return;
         }
 
-        var game = _mapGames[_mapGame.SelectedIndex];
+        var (game, chosen) = _mapGames[_mapGame.SelectedIndex];
+        // Picking a world here is picking it everywhere, since a delivery's own card
+        // draws the same ground: the page is where the choice is made, not where it
+        // only applies.
+        if (chosen.Length > 0 && (!_settings.MapChoice.TryGetValue(game, out var already) || already != chosen)) {
+            _settings.MapChoice[game] = chosen;
+            _settings.Save();
+        }
         // Same reasoning as the statistics: the page names the game it is showing, so
         // a speed read off it is in that game's units. The distances beside a route
         // come from its own row and were already right.
@@ -1408,7 +1440,6 @@ public partial class MainForm : Form {
         var settings = new ToolStripMenuItem(Strings.T("menu.settings"));
         settings.DropDownItems.Add(BuildUnitsMenu());
         settings.DropDownItems.Add(BuildLanguageMenu());
-        if (BuildMapMenu() is { } maps) settings.DropDownItems.Add(maps);
         settings.DropDownItems.Add(BuildDiscordMenu());
         settings.DropDownItems.Add(MenuAction(Strings.T("menu.signature"), SignHere));
 
@@ -1502,39 +1533,6 @@ public partial class MainForm : Form {
         }
 
         return units;
-    }
-
-    /// <summary>
-    /// Which world to draw under each game's drives.
-    ///
-    /// Only offered once a game has more than one map to choose between, which happens
-    /// when somebody exports a map mod's world beside the one the game shipped with.
-    /// With one, or none, there is nothing to decide and the menu says nothing.
-    /// </summary>
-    private ToolStripMenuItem? BuildMapMenu() {
-        var games = new[] { "Ets2", "Ats" }.Where(g => MapsFor(g).Count > 1).ToList();
-        if (games.Count == 0) return null;
-
-        var maps = new ToolStripMenuItem(Strings.T("menu.map"));
-        foreach (var game in games) {
-            var forGame = games.Count > 1 ? new ToolStripMenuItem(GameName(game)) : maps;
-            var chosen = GameMapFor(game);
-            foreach (var map in MapsFor(game)) {
-                var item = new ToolStripMenuItem(map.Name) { Tag = map.Name, Checked = map == chosen };
-                item.Click += (_, _) => {
-                    _settings.MapChoice[game] = map.Name;
-                    _settings.Save();
-                    foreach (ToolStripMenuItem other in forGame.DropDownItems) {
-                        other.Checked = Equals(other.Tag, map.Name);
-                    }
-                    // Every map on screen was built with the old choice behind it.
-                    ReloadHistory();
-                };
-                forGame.DropDownItems.Add(item);
-            }
-            if (!ReferenceEquals(forGame, maps)) maps.DropDownItems.Add(forGame);
-        }
-        return maps;
     }
 
     private ToolStripMenuItem BuildLanguageMenu() {
