@@ -323,6 +323,20 @@ public partial class MainForm {
         _liveHero?.Invalidate();
         _liveRail?.Invalidate();
         if (_jobLaunch is { } launch) launch.Visible = !_live.OnJob && !_live.Attached;
+
+        // The strip along the foot of a window given over to the drive is the same two
+        // labels the card used to carry, so they are kept filled even while the page
+        // itself paints its own hero.
+        _jobLine.Text = _live.OnJob ? $"{_live.From}   →   {_live.To}" : _live.From;
+        _jobLine.ForeColor = _live.OnJob ? Look.Ink : Look.Muted;
+        _progressText.Text = _live.OnJob ? $"{_live.Driven}   ·   {_live.Percent}" : _live.Empty;
+        _progressTrack.Visible = _live.OnJob;
+        if (_live.OnJob && _progressTrack.ClientSize.Width > 0) {
+            var wide = _progressTrack.ClientSize.Width;
+            _progressLead.Width = 0;
+            _progressFill.Width = (int)(wide * Math.Clamp(_live.Part, 0f, 1f));
+            _progressOver.Width = 0;
+        }
     }
 
     private static string Span(long ms) {
