@@ -55,6 +55,15 @@ public partial class MainForm : Form {
     private readonly ListBox _log = new();
 
     private readonly DataGridView _grid = new();
+
+    /// <summary>The history itself, drawn rather than bound. See DeliveryList.</summary>
+    private readonly DeliveryList _list = new();
+    private Panel? _historyHead;
+    private Panel? _historyLegend;
+
+    /// <summary>What the page says beside its own name: how much history there is, in
+    /// the units of whichever game is being shown.</summary>
+    private string _historyTotals = "";
     private readonly TextBox _search = new();
     private readonly TriSwitch _gameFilter =
         new(GameName("Ets2"), Strings.T("filter.both"), GameName("Ats"));
@@ -2037,114 +2046,133 @@ public partial class MainForm : Form {
     // ---------- tabs ----------
 
     private Panel BuildHistoryPage() {
-        var page = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16), BackColor = Canvas };
+        var page = new Panel { Dock = DockStyle.Fill, Padding = new Padding(Look.PagePad, 10, Look.PagePad, Look.PagePad), BackColor = Look.Window };
 
-        // Flow layout rather than fixed coordinates, so buttons size to their own
-        // text and nothing gets clipped when a label changes.
+        // The page word with the standing totals beside it, then the toolbar under it.
+        var head = new Panel { Dock = DockStyle.Top, Height = 34, BackColor = Look.Window };
+        head.Paint += (_, e) => {
+            var g = e.Graphics;
+            g.Clear(Look.Window);
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            Look.Text(g, Strings.T("tab.deliveries"), Look.PageHeading, Look.Ink, 0, 6);
+            Look.TextRight(g, _historyTotals, Look.Small, Look.Dim, head.Width, 10);
+        };
+        _historyHead = head;
+
         var bar = new FlowLayoutPanel {
-            Dock = DockStyle.Top,
-            Height = 36,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            Padding = new Padding(0, 3, 0, 3),
+            Dock = DockStyle.Top, Height = 44, FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false, Padding = new Padding(0, 6, 0, 6), BackColor = Look.Window,
         };
 
-        // A TextBox has no padding of its own, so its text sits hard against the
-        // border on both sides. Wrapping it in a panel that carries the background and
-        // the padding gives the text room to sit in without touching anything.
         _search.PlaceholderText = Strings.T("search.placeholder");
         _search.BorderStyle = BorderStyle.None;
-        _search.BackColor = Raised;
-        _search.ForeColor = Ink;
+        _search.BackColor = Look.Control;
+        _search.ForeColor = Look.Ink;
+        _search.Font = Look.Body;
         _search.Dock = DockStyle.Fill;
-        _search.TextChanged += (_, _) => ApplyFilter();
+        _search.TextChanged -= OnSearchTyped;
+        _search.TextChanged += OnSearchTyped;
 
+        // The glyph is drawn on the box rather than set as an icon: a search field is
+        // a rounded control with a magnifier inset, and that is two shapes.
         var searchBox = new Panel {
-            Width = 260, Height = 28, Margin = new Padding(0, 3, 8, 3),
-            BackColor = Raised, Padding = new Padding(10, 6, 10, 4),
+            Width = 264, Height = Look.InputHeight, Margin = new Padding(0, 0, 10, 0),
+            BackColor = Look.Window, Padding = new Padding(34, 7, 12, 5),
+        };
+        searchBox.Paint += (_, e) => {
+            var g = e.Graphics;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            Look.Surface(g, new RectangleF(0, 0, searchBox.Width - 1, searchBox.Height - 1), Look.Control, Look.Border, Look.RadiusControl);
+            using var pen = new Pen(Look.Dim, 1.4f);
+            g.DrawEllipse(pen, 13, 10, 8, 8);
+            g.DrawLine(pen, 20, 17, 23.5f, 20.5f);
         };
         searchBox.Controls.Add(_search);
 
-        // Two switches rather than a list of states. Filtering by verdict was
-        // filtering by something that is already a dot on every row and that almost
-        // never has more than one value worth asking for; which game and which kind
-        // of load are the two questions the history is actually read with, and both
-        // have a natural middle meaning both.
         _cargoFilter.RightBadge = (g, r) => HazardStripes(g, r, 210);
-        // The controls outlive the layout, which is rebuilt when the language
-        // changes, so the words are set here rather than only where they are made.
         _gameFilter.Retext(GameName("Ets2"), Strings.T("filter.both"), GameName("Ats"));
         _cargoFilter.Retext(Strings.T("filter.ordinary"), Strings.T("filter.both"), Strings.T("filter.oversize"));
         foreach (var filter in new[] { _gameFilter, _cargoFilter }) {
-            filter.Margin = new Padding(0, 3, 10, 3);
-            filter.BackColor = Canvas;
+            filter.Margin = new Padding(0, 2, 10, 2);
+            filter.BackColor = Look.Window;
             filter.Changed -= OnFilterChanged;
             filter.Changed += OnFilterChanged;
         }
 
-        // Only what changes the view of the list. Exporting, backing up and restoring
-        // used to sit here too, which put "show me fewer rows" and "replace the whole
-        // database" one button apart; they live under Data now.
         bar.Controls.Add(searchBox);
         bar.Controls.Add(_gameFilter);
         bar.Controls.Add(_cargoFilter);
-        bar.Controls.Add(MakeButton(Strings.T("button.refresh"), () => { ReloadHistory(); ReloadStats(); }));
 
-        _grid.Dock = DockStyle.Fill;
-        _grid.AllowUserToAddRows = false;
-        _grid.AllowUserToDeleteRows = false;
-        _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _grid.MultiSelect = false;
-        // Fixed widths and a horizontal scrollbar rather than columns that redistribute
-        // themselves every time the window is resized: a column should stay where the
-        // eye last found it, and narrowing the window should not squeeze fourteen of
-        // them into unreadable slivers.
-        _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
-        _grid.ScrollBars = ScrollBars.Both;
-        // The gutter down the left of the list, carrying the two things a row says
-        // without words: its verdict, and whether the load was oversize. The row
-        // header is already there and already sits left of the date, so both live in
-        // it rather than in columns of their own squeezed in among the figures.
-        _grid.RowHeadersVisible = true;
-        _grid.RowHeadersWidth = GutterWidth;
-        _grid.RowHeadersWidthSizeMode = DataGridViewRowHeadersWidthSizeMode.DisableResizing;
-        _grid.RowHeadersDefaultCellStyle.BackColor = Canvas;
-        _grid.RowHeadersDefaultCellStyle.SelectionBackColor = Canvas;
-        _grid.EnableHeadersVisualStyles = false;
-        _grid.CellPainting -= OnRowMarker;
-        _grid.CellPainting += OnRowMarker;
-        _grid.EditMode = DataGridViewEditMode.EditOnEnter;
-        StyleGrid(_grid);
+        // The three marks a row can carry, named. A dot with no key beside it is a
+        // colour, and a colour on its own says nothing.
+        var legend = new Panel { Width = 260, Height = Look.InputHeight, Margin = new Padding(10, 0, 0, 0), BackColor = Look.Window };
+        legend.Paint += (_, e) => {
+            var g = e.Graphics;
+            g.Clear(Look.Window);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            var at = 0f;
+            foreach (var (status, word) in new[] {
+                         ("accepted", Label("accepted")), ("review", Label("review")),
+                         ("rejected", Label("rejected")) }) {
+                Look.Dot(g, new PointF(at + 4, legend.Height / 2f), VerdictColour(status), 7);
+                Look.Text(g, word, Look.Caption, Look.Dim, at + 13, legend.Height / 2f - 7);
+                at += 13 + Look.Measure(g, word, Look.Caption).Width + 16;
+            }
+        };
+        _historyLegend = legend;
 
-        // Detach before attaching: these controls are reused when the layout is
-        // rebuilt for a language change, and handlers added a second time would fire
-        // a second time.
-        _grid.DataBindingComplete -= OnGridBound;
-        _grid.DataBindingComplete += OnGridBound;
-        _grid.CellEndEdit -= OnGridCellEndEdit;
-        _grid.CellEndEdit += OnGridCellEndEdit;
-        _grid.CellFormatting -= OnGridCellFormatting;
-        _grid.CellFormatting += OnGridCellFormatting;
-
-        // Opening a delivery is a double click: a single one is how a row gets
-        // selected while walking the list, and it would fling the card open on every
-        // press of an arrow key.
-        _grid.CellDoubleClick -= OnGridDoubleClick;
-        _grid.CellDoubleClick += OnGridDoubleClick;
-        _grid.KeyDown -= OnGridKeyDown;
-        _grid.KeyDown += OnGridKeyDown;
+        _list.Dock = DockStyle.Fill;
+        _list.EmptyText = Strings.T("list.empty");
+        _list.Day = row => row.Datum.ToString("dd.MM.yy");
+        _list.DaySummary = run => {
+            var distance = run.Sum(r => r.DistanceKm);
+            var pay = run.Sum(r => r.Zarobok);
+            var u = Units.For(_settings.Units, run.Count > 0 ? run[0].Hra : "");
+            return $"{run.Count} {Strings.T("list.deliveries")} · {u.FormatDistance(distance)} · {u.FormatMoney(pay)}";
+        };
+        _list.Outcome = row => (Label(row.Vysledok), VerdictColour(row.Stav));
+        _list.Mark = row => VerdictColour(row.Stav);
+        _list.Opened -= OnRowOpened;
+        _list.Opened += OnRowOpened;
+        _list.SortChanged -= ApplyFilter;
+        _list.SortChanged += ApplyFilter;
+        DescribeColumns();
 
         var hint = new Label {
-            Dock = DockStyle.Bottom, Height = 24, Text = Strings.T("list.openHint"),
-            ForeColor = Muted, Font = new Font("Segoe UI", 8.5F),
-            Padding = new Padding(2, 6, 0, 0), BackColor = Canvas,
+            Dock = DockStyle.Bottom, Height = 22, ForeColor = Look.Faint, BackColor = Look.Window,
+            Font = Look.Caption, Text = Strings.T("list.hint"), Padding = new Padding(26, 4, 0, 0),
         };
 
-        page.Controls.Add(_grid);
+        page.Controls.Add(_list);
         page.Controls.Add(hint);
         page.Controls.Add(bar);
+        page.Controls.Add(head);
+        // The legend rides at the right end of the toolbar, which a flow panel cannot
+        // do on its own, so it is placed against the page instead and kept there.
+        page.Controls.Add(legend);
+        legend.BringToFront();
+        void Place() => legend.Location = new Point(page.ClientSize.Width - legend.Width - Look.PagePad, head.Bottom + 12);
+        page.Resize += (_, _) => Place();
+        Place();
         return page;
     }
+
+    /// <summary>The columns of the history, in the language it is being read in.</summary>
+    private void DescribeColumns() {
+        _list.Describe(
+            (Strings.T("col.time"), 74, false, nameof(DeliveryRow.Datum), r => r.Datum.ToString("HH:mm")),
+            (Strings.T("col.from"), 150, false, nameof(DeliveryRow.Odkial), r => r.Odkial),
+            (Strings.T("col.to"), 150, false, nameof(DeliveryRow.Kam), r => r.Kam),
+            (Strings.T("col.cargo"), 160, false, nameof(DeliveryRow.Naklad), r => r.Naklad),
+            (Strings.T("col.distance"), 110, true, nameof(DeliveryRow.DistanceKm), r => r.Vzdialenost),
+            (Strings.T("col.pay"), 110, true, nameof(DeliveryRow.Zarobok), r => r.Odmena),
+            (Strings.T("col.outcome"), 110, true, nameof(DeliveryRow.Stav), _ => ""));
+    }
+
+    private void OnSearchTyped(object? sender, EventArgs e) => ApplyFilter();
+
+    private void OnRowOpened(DeliveryRow row) => ShowDetail(row.Id);
 
     private void OnGridDoubleClick(object? sender, DataGridViewCellEventArgs e) {
         if (e.RowIndex < 0) return;
@@ -2257,10 +2285,10 @@ public partial class MainForm : Form {
     /// <summary>The verdict as a colour, in one place, so the dot in the list and the
     /// sample in the legend cannot end up meaning different things.</summary>
     private static Color VerdictColour(string status) => status switch {
-        "rejected" => Color.FromArgb(226, 116, 104),
-        "review" => Color.FromArgb(226, 168, 74),
-        "imported" => Color.FromArgb(112, 172, 214),
-        _ => Color.FromArgb(96, 176, 128),
+        "rejected" => Look.Lost,
+        "review" => Look.Accent,
+        "imported" => Look.Route,
+        _ => Look.Whole,
     };
 
     /// <summary>
@@ -4245,46 +4273,36 @@ public partial class MainForm : Form {
                 r.Tahac.Contains(text, StringComparison.OrdinalIgnoreCase));
         }
 
-        // Rebinding throws the sort away, and the list is rebound whenever anything
-        // sends the user back to it: opening a delivery and pressing Back left them
-        // looking at a list ordered by date again, having asked for it by distance a
-        // moment earlier. The order they chose is theirs until they change it.
-        var sortedBy = _grid.SortedColumn?.DataPropertyName;
-        var sortedWay = _grid.SortOrder == SortOrder.Descending
-            ? System.ComponentModel.ListSortDirection.Descending
-            : System.ComponentModel.ListSortDirection.Ascending;
+        // Ordered here rather than by the list, which draws what it is given. Sorting
+        // by a formatted figure would sort "1 000 km" next to "999 km", so the order
+        // is taken from the stored number and the column merely names which one.
+        var shown = filtered.ToList();
+        Comparison<DeliveryRow> by = _list.SortedBy switch {
+            nameof(DeliveryRow.Odkial) => (a, b) => string.Compare(a.Odkial, b.Odkial, StringComparison.CurrentCultureIgnoreCase),
+            nameof(DeliveryRow.Kam) => (a, b) => string.Compare(a.Kam, b.Kam, StringComparison.CurrentCultureIgnoreCase),
+            nameof(DeliveryRow.Naklad) => (a, b) => string.Compare(a.Naklad, b.Naklad, StringComparison.CurrentCultureIgnoreCase),
+            nameof(DeliveryRow.DistanceKm) => (a, b) => a.DistanceKm.CompareTo(b.DistanceKm),
+            nameof(DeliveryRow.Zarobok) => (a, b) => a.Zarobok.CompareTo(b.Zarobok),
+            nameof(DeliveryRow.Stav) => (a, b) => string.Compare(a.Stav, b.Stav, StringComparison.Ordinal),
+            _ => (a, b) => a.Datum.CompareTo(b.Datum),
+        };
+        shown.Sort((a, b) => _list.Descending ? by(b, a) : by(a, b));
 
-        var bound = new SortableBindingList<DeliveryRow>(filtered.ToList(), new Dictionary<string, string> {
-            [nameof(DeliveryRow.Vzdialenost)] = nameof(DeliveryRow.DistanceKm),
-            [nameof(DeliveryRow.Odmena)] = nameof(DeliveryRow.Zarobok),
-        });
-        _grid.DataSource = bound;
-        // Two kinds of hidden column. The raw metric values stay bound so sorting by
-        // distance or pay compares numbers rather than formatted text. The rest are
-        // simply not what a list is for: they are on the delivery's own card, where
-        // they can be read instead of squeezed into another narrow column.
-        foreach (var hidden in new[] {
-            nameof(DeliveryRow.Id), nameof(DeliveryRow.DistanceKm), nameof(DeliveryRow.Zarobok),
-            nameof(DeliveryRow.Hra), nameof(DeliveryRow.Tahac), nameof(DeliveryRow.Pokuty),
-            nameof(DeliveryRow.Kolizie), nameof(DeliveryRow.Styl), nameof(DeliveryRow.Poznamky),
-            nameof(DeliveryRow.Flags), nameof(DeliveryRow.Special), nameof(DeliveryRow.Stav),
-            // And the identifiers behind the two city names, which are how the region
-            // beside a city is looked up and not something anybody reads.
-            nameof(DeliveryRow.OdkialId), nameof(DeliveryRow.KamId), nameof(DeliveryRow.Dokoncene),
-            // And whether the truck was electric, which is drawn in the gutter. The
-            // grid makes a column out of every property it is given, so anything meant
-            // for the gutter has to be taken back off here or it arrives as a column
-            // headed with the name of the field, in every language at once.
-            nameof(DeliveryRow.Elektricky),
-        }) {
-            if (_grid.Columns[hidden] is { } col) col.Visible = false;
+        // What the page says beside its own name, in the units of the game being shown:
+        // with both games in the list there is no one unit, so it says nothing.
+        var one = _gameFilter.Position != 0 ? (_gameFilter.Position < 0 ? "Ets2" : "Ats")
+                : shown.Select(r => r.Hra).Distinct().Count() == 1 ? shown.FirstOrDefault()?.Hra ?? "" : "";
+        if (one.Length > 0) {
+            var u = Units.For(_settings.Units, one);
+            _historyTotals = $"{shown.Count} {Strings.T("list.deliveries")}  ·  {u.FormatDistance(shown.Sum(r => r.DistanceKm))}"
+                           + $"  ·  {u.FormatMoney(shown.Sum(r => r.Zarobok))}";
+        } else {
+            _historyTotals = $"{shown.Count} {Strings.T("list.deliveries")}";
         }
+        _historyHead?.Invalidate();
 
-        // Put the order back. After the columns are hidden, or sorting by one that
-        // has just been taken off the screen throws.
-        if (sortedBy is not null && _grid.Columns[sortedBy] is { Visible: true } column) {
-            _grid.Sort(column, sortedWay);
-        }
+        _list.Show(shown);
+        RefreshFrame();
     }
 
     private void ReloadStats() {

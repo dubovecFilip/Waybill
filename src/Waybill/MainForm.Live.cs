@@ -352,7 +352,7 @@ public partial class MainForm {
     /// <summary>The same rail with nothing on the hook: the strip of what was noticed
     /// lately, which used to sit at the foot of the sidebar.</summary>
     private List<Step> FeedSteps() =>
-        _feedLines.Take(8).Select(line => new Step {
+        _feedLines.OrderByDescending(line => line.At).Take(8).Select(line => new Step {
             What = line.Text,
             Detail = line.At.ToString("dd.MM HH:mm") + (line.Detail.Length > 0 ? $" · {line.Detail}" : ""),
             Hue = line.Kind == Noticed.Award ? Look.Accent : line.Kind == Noticed.Delivered ? Look.Whole : Look.Route,
