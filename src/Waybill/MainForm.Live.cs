@@ -244,12 +244,13 @@ public partial class MainForm {
     /// page needs an affordance that is not the one thing it is for.</summary>
     private Button MakeQuietButton(string text, Action click) {
         var b = new Button {
-            Text = text, AutoSize = false, Height = 28, Width = 96,
-            FlatStyle = FlatStyle.Flat, BackColor = Look.Chrome, ForeColor = Look.Muted,
+            Text = text, AutoSize = false, Height = Look.InputHeight, Width = 96,
+            FlatStyle = FlatStyle.Flat, BackColor = Look.Control, ForeColor = Look.Ink,
             Font = Look.Small, Cursor = Cursors.Hand, TabStop = false,
         };
         b.FlatAppearance.BorderColor = Look.Border;
-        b.FlatAppearance.MouseOverBackColor = Look.Control;
+        b.FlatAppearance.MouseOverBackColor = Look.ControlHover;
+        b.FlatAppearance.MouseDownBackColor = Look.ControlHover;
         b.Click += (_, _) => click();
         return b;
     }

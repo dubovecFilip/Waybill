@@ -18,12 +18,14 @@ namespace Waybill;
 /// is translated.
 /// </summary>
 public sealed class TriSwitch : Control {
-    private static readonly Color Raised = Color.FromArgb(38, 43, 50);
-    private static readonly Color Edge = Color.FromArgb(48, 54, 62);
-    private static readonly Color Ink = Color.FromArgb(228, 233, 240);
-    private static readonly Color Muted = Color.FromArgb(138, 148, 163);
-    private static readonly Color Accent = Color.FromArgb(232, 168, 74);
-    private static readonly Color AccentSoft = Color.FromArgb(52, 45, 33);
+    // The same palette every other control in this window is drawn from, so a switch
+    // sits in a toolbar beside a search field and three chips as one family rather
+    // than as four things that happen to be near each other.
+    private static readonly Color Raised = Look.Control;
+    private static readonly Color Edge = Look.Border;
+    private static readonly Color Ink = Look.Ink;
+    private static readonly Color Muted = Look.Muted;
+    private static readonly Color Accent = Look.Accent;
 
     private const int Pad = 12;
     private const int BadgeWidth = 10;
@@ -58,10 +60,10 @@ public sealed class TriSwitch : Control {
         _captions = new[] { left, both, right };
         DoubleBuffered = true;
         SetStyle(ControlStyles.ResizeRedraw | ControlStyles.OptimizedDoubleBuffer, true);
-        Height = 28;
-        Font = new Font("Segoe UI", 8.5F);
+        Height = Look.InputHeight;
+        Font = Look.Small;
         Cursor = Cursors.Hand;
-        BackColor = Color.FromArgb(22, 25, 29);
+        BackColor = Look.Window;
     }
 
     /// <summary>Sized to its own text, since a fixed width either clips a language
@@ -132,22 +134,24 @@ public sealed class TriSwitch : Control {
         var whole = new Rectangle(0, 0, Width - 1, Height - 1);
         using (var track = new SolidBrush(Raised))
         using (var border = new Pen(Edge))
-        using (var path = Rounded(whole, 6)) {
+        using (var path = Rounded(whole, Look.RadiusControl)) {
             g.FillPath(track, path);
             g.DrawPath(border, path);
         }
 
         var x = 1;
         for (var i = 0; i < 3; i++) {
-            var seat = new Rectangle(x, 2, _widths[i], Height - 5);
+            var seat = new Rectangle(x, 3, _widths[i], Height - 7);
             var chosen = i == _position + 1;
             if (chosen) {
-                using var fill = new SolidBrush(AccentSoft);
-                using var path = Rounded(seat, 5);
+                using var fill = new SolidBrush(Look.Tint(Look.Accent, 14));
+                using var edge = new Pen(Look.TintEdge(Look.Accent, 34));
+                using var path = Rounded(seat, Look.RadiusChip);
                 g.FillPath(fill, path);
+                g.DrawPath(edge, path);
             } else if (i == _hot) {
-                using var fill = new SolidBrush(Color.FromArgb(46, 52, 60));
-                using var path = Rounded(seat, 5);
+                using var fill = new SolidBrush(Look.ControlHover);
+                using var path = Rounded(seat, Look.RadiusChip);
                 g.FillPath(fill, path);
             }
 

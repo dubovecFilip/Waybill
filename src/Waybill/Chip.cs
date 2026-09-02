@@ -80,8 +80,17 @@ public sealed class Chip : Control {
         Look.DrawRounded(g, box, box.Height / 2, edge);
 
         var text = Look.Measure(g, Text, Look.Small);
-        var left = Badge is null ? (Width - text.Width) / 2 : 30;
-        Badge?.Invoke(g, new RectangleF(12, (Height - 12) / 2f, 14, 12), ink);
+        var left = Badge is null ? (Width - text.Width) / 2 : 36;
+        // The mark keeps its own corner of the chip, rounded like everything else, so
+        // the word beside it never runs into it however the language grows.
+        if (Badge is not null) {
+            var mark = new RectangleF(12, (Height - 11) / 2f, 16, 11);
+            using var path = Look.Rounded(mark, 2.5f);
+            var was = g.Clip;
+            g.SetClip(path, System.Drawing.Drawing2D.CombineMode.Replace);
+            Badge(g, mark, ink);
+            g.Clip = was;
+        }
         Look.Text(g, Text, Look.Small, ink, left, (Height - text.Height) / 2);
     }
 }

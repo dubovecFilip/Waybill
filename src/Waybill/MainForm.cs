@@ -125,7 +125,7 @@ public partial class MainForm : Form {
     /// they do.</summary>
     private readonly ToolTip _tips = new();
     private RouteView? _mapPage;
-    private readonly ComboBox _mapGame = new();
+    private readonly Picker _mapGame = new();
     /// <summary>
     /// What each entry of <see cref="_mapGame"/> stands for: the game as the database
     /// spells it, and which of that game's maps to draw under it.
@@ -1269,6 +1269,11 @@ public partial class MainForm : Form {
         // The column is painted rather than built out of buttons, so it is asked to
         // draw itself again instead of being restyled control by control.
         RefreshFrame();
+
+        // A scrolling panel only takes the dark bars once it has a handle, and a page
+        // gets one the first time it is shown. Asked again here, which is the moment
+        // that is true for whichever page has just come up.
+        UseDarkScrollbars(_content);
     }
 
     private Panel BuildContent() {
@@ -1333,14 +1338,12 @@ public partial class MainForm : Form {
         map.RouteChosen += ShowDetail;
         _mapPage = map;
 
-        _mapGame.DropDownStyle = ComboBoxStyle.DropDownList;
-        _mapGame.FlatStyle = FlatStyle.Flat;
-        _mapGame.BackColor = Raised;
-        _mapGame.ForeColor = Ink;
-        _mapGame.Width = 150;
-        _mapGame.SelectedIndexChanged -= OnMapGameChanged;
-        _mapGame.SelectedIndexChanged += OnMapGameChanged;
-        _mapGame.Font = Look.Small;
+        _mapGame.MenuMaker = () => new ContextMenuStrip {
+            BackColor = Look.Chrome, ForeColor = Look.Ink, ShowImageMargin = false,
+            Renderer = new ToolStripProfessionalRenderer(new DarkMenuColours()), Font = Look.Small,
+        };
+        _mapGame.Changed -= OnMapGameChanged;
+        _mapGame.Changed += OnMapGameChanged;
 
         // The page names itself, says how much is on it, and offers the window.
         var bar = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = Look.Window };
@@ -1365,8 +1368,19 @@ public partial class MainForm : Form {
         bar.Resize += (_, _) => PlaceMapBar();
         PlaceMapBar();
 
-        var frame = new Panel { Dock = DockStyle.Fill, BackColor = Look.Border, Padding = new Padding(1) };
+        // The drawing keeps the same corner every panel in this window has, which a
+        // rectangular control cannot do on its own: the control is given a rounded
+        // region, and the frame behind it paints the edge around that shape.
+        var frame = new Panel { Dock = DockStyle.Fill, BackColor = Look.Window, Padding = new Padding(1) };
+        frame.Paint += (_, e) => {
+            var g = e.Graphics;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.Clear(Look.Window);
+            Look.Surface(g, new RectangleF(0, 0, frame.Width, frame.Height), Look.Window, Look.Border);
+        };
+        frame.Resize += (_, _) => RoundOff(map, Look.RadiusPanel);
         frame.Controls.Add(map);
+        RoundOff(map, Look.RadiusPanel);
         MapButtons(frame, map, null);
 
         // Two entries, laid over the bottom left corner of the drawing: which line is
@@ -1418,7 +1432,7 @@ public partial class MainForm : Form {
         return page;
     }
 
-    private void OnMapGameChanged(object? sender, EventArgs e) => ReloadMapPage();
+    private void OnMapGameChanged() => ReloadMapPage();
 
     /// <summary>Fills the map page from whatever the history currently holds. The
     /// game list is built from the deliveries themselves rather than from the two
@@ -1438,20 +1452,9 @@ public partial class MainForm : Form {
             var was = _mapGame.SelectedIndex >= 0 && _mapGame.SelectedIndex < _mapGames.Count
                 ? _mapGames[_mapGame.SelectedIndex] : ((string, string)?)null;
             _mapGames = picks;
-            _mapGame.Items.Clear();
             // Shown as the game calls itself, kept as the database spells it, and named
             // after its world only where there is more than one to be in.
-            foreach (var (g, name) in picks) {
-                _mapGame.Items.Add(name.Length == 0 ? GameName(g) : $"{GameName(g)} - {name}");
-            }
-            // Wide enough for what is in it. A world is named by its folder, and
-            // somebody who keeps four map mods apart by name deserves to read them.
-            var widest = 0;
-            foreach (string label in _mapGame.Items) {
-                widest = Math.Max(widest, TextRenderer.MeasureText(label, _mapGame.Font).Width);
-            }
-            _mapGame.Width = Math.Clamp(widest + 40, 150, 420);
-            _mapGame.DropDownWidth = Math.Max(_mapGame.Width, Math.Min(widest + 30, 640));
+            _mapGame.Offer(picks.Select(p => p.Map.Length == 0 ? GameName(p.Game) : $"{GameName(p.Game)} - {p.Map}"));
 
             var back = was is { } had ? picks.IndexOf(had) : -1;
             _mapGame.SelectedIndex = back >= 0 ? back : picks.Count > 0 ? 0 : -1;
@@ -2693,14 +2696,23 @@ public partial class MainForm : Form {
         // oversize load is marked in, and this runs after that is set up.
     }
 
+    /// <summary>
+    /// Every ordinary button in the window: control tone, a hairline edge, one word.
+    ///
+    /// The same height, the same tone and the same ink as the search field, the
+    /// segmented switch and the chips beside them, so a toolbar reads as one row of
+    /// controls rather than as four things that happen to be near each other.
+    /// </summary>
     private static Button MakeButton(string text, Action onClick) {
         var b = new Button {
-            Text = text, AutoSize = true, Height = 28, Margin = new Padding(0, 3, 6, 3),
-            Padding = new Padding(10, 0, 10, 0),
-            FlatStyle = FlatStyle.Flat, BackColor = Raised, ForeColor = Ink, Cursor = Cursors.Hand,
+            Text = text, AutoSize = true, Height = Look.InputHeight, Margin = new Padding(0, 2, 8, 2),
+            Padding = new Padding(12, 0, 12, 0), Font = Look.Small,
+            FlatStyle = FlatStyle.Flat, BackColor = Look.Control, ForeColor = Look.Ink, Cursor = Cursors.Hand,
+            TabStop = false,
         };
-        b.FlatAppearance.BorderColor = Line;
-        b.FlatAppearance.MouseOverBackColor = Line;
+        b.FlatAppearance.BorderColor = Look.Border;
+        b.FlatAppearance.MouseOverBackColor = Look.ControlHover;
+        b.FlatAppearance.MouseDownBackColor = Look.ControlHover;
         b.Click += (_, _) => onClick();
         return b;
     }
@@ -3048,13 +3060,14 @@ public partial class MainForm : Form {
         // docking them filled the header's whole height with two slabs.
         Button Action(string text, int width) {
             var b = new Button {
-                Text = text, Width = width, Height = 26, AutoSize = false,
-                FlatStyle = FlatStyle.Flat, BackColor = Surface, ForeColor = Muted,
-                Font = new Font("Segoe UI", 8.5F), Cursor = Cursors.Hand,
+                Text = text, Width = width, Height = Look.InputHeight, AutoSize = false,
+                FlatStyle = FlatStyle.Flat, BackColor = Look.Control, ForeColor = Look.Ink,
+                Font = Look.Small, Cursor = Cursors.Hand, TabStop = false,
                 Margin = new Padding(8, 0, 0, 0), TextAlign = ContentAlignment.MiddleCenter,
             };
-            b.FlatAppearance.BorderColor = Line;
-            b.FlatAppearance.MouseOverBackColor = Raised;
+            b.FlatAppearance.BorderColor = Look.Border;
+            b.FlatAppearance.MouseOverBackColor = Look.ControlHover;
+            b.FlatAppearance.MouseDownBackColor = Look.ControlHover;
             return b;
         }
 
@@ -3418,6 +3431,14 @@ public partial class MainForm : Form {
         box.Controls.Add(profile);
         MapButtons(box, map, () => BigMap(d, u), replay: true, about: d);
         return box;
+    }
+
+    /// <summary>Gives a control a rounded corner by cutting its own shape out of it.
+    /// The only way a control that paints its whole surface can have one.</summary>
+    private static void RoundOff(Control control, float radius) {
+        if (control.Width <= 0 || control.Height <= 0) return;
+        using var path = Look.Rounded(new RectangleF(0, 0, control.Width, control.Height), radius);
+        control.Region = new Region(path);
     }
 
     private RouteView NewMap(Units u) => new() {
@@ -3928,7 +3949,7 @@ public partial class MainForm : Form {
         using var pale = new SolidBrush(Color.FromArgb(alpha, 214, 218, 226));
         g.FillRectangle(dark, where);
 
-        const float band = 5f;
+        const float band = 4f;
         var lean = where.Height;
         for (var x = where.Left - lean; x < where.Right + band; x += band * 2) {
             g.FillPolygon(pale, new[] {
