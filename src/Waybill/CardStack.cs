@@ -39,6 +39,10 @@ public sealed class CardStack : Control {
         public string Middle = "";
         public float? Share;
         public string ShareLabel = "";
+
+        /// <summary>The proportion said in words, at the right end of its own track.
+        /// A bar without a figure beside it is a shape, not a measurement.</summary>
+        public string SharePercent = "";
         public List<Block> Bar = new();
         public List<Figure> Figures = new();
         public object? Behind;
@@ -64,6 +68,10 @@ public sealed class CardStack : Control {
         _top = 0;
         Invalidate();
     }
+
+    /// <summary>How much of the width the scrollbar keeps for itself, so a card's own
+    /// edge is never drawn underneath it.</summary>
+    private int Bar => Whole > ClientSize.Height ? 12 : 2;
 
     private int Whole => _cards.Count * (CardHeight + 10);
 
@@ -107,7 +115,7 @@ public sealed class CardStack : Control {
         for (var i = 0; i < _cards.Count; i++) {
             var y = i * (CardHeight + 10) - _top;
             if (y + CardHeight < 0 || y > ClientSize.Height) continue;
-            PaintCard(g, _cards[i], new RectangleF(0, y, ClientSize.Width - 2, CardHeight), i == 0, i == _hover);
+            PaintCard(g, _cards[i], new RectangleF(0, y, ClientSize.Width - Bar, CardHeight), i == 0, i == _hover);
         }
 
         if (Whole <= ClientSize.Height) return;
@@ -171,10 +179,15 @@ public sealed class CardStack : Control {
                 at += wideBlock;
             }
         } else if (card.Share is { } share) {
-            var track = new RectangleF(middleLeft, box.Y + 40, middleRight - middleLeft, 5);
+            var widePercent = card.SharePercent.Length > 0
+                ? Look.Measure(g, card.SharePercent, Look.Caption).Width + 12 : 0;
+            var track = new RectangleF(middleLeft, box.Y + 40, middleRight - middleLeft - widePercent, 5);
             Look.Track(g, track, share);
             if (card.ShareLabel.Length > 0) {
                 Look.Text(g, card.ShareLabel, Look.Caption, Look.Dim, middleLeft, box.Y + 18);
+            }
+            if (card.SharePercent.Length > 0) {
+                Look.TextRight(g, card.SharePercent, Look.Caption, Look.Dim, middleRight, box.Y + 36);
             }
         }
     }

@@ -196,11 +196,20 @@ public static class Look {
         g.DrawPath(pen, path);
     }
 
-    /// <summary>A panel: a flat surface with an edge, and nothing else. No shadow, no
-    /// gradient, no lift.</summary>
+    /// <summary>
+    /// A panel: a flat surface with an edge, and nothing else. No shadow, no gradient,
+    /// no lift.
+    ///
+    /// The edge is drawn half a pixel inside the box it was given. A one pixel line
+    /// centred on the boundary puts half of itself outside the control, and the half
+    /// outside is the half that gets clipped: panels came out missing their right and
+    /// bottom edges.
+    /// </summary>
     public static void Surface(Graphics g, RectangleF box, Color fill, Color? edge = null, float radius = RadiusPanel) {
         FillRounded(g, box, radius, fill);
-        if (edge is { } line) DrawRounded(g, box, radius, line);
+        if (edge is { } line) {
+            DrawRounded(g, RectangleF.Inflate(box, -0.5f, -0.5f), radius, line);
+        }
     }
 
     /// <summary>

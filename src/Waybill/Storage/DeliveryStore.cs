@@ -674,7 +674,7 @@ public class DeliveryStore : IDisposable {
                        COALESCE(validation_flags, ''), COALESCE(special_transport, 0),
                        COALESCE(source_city_id, ''), COALESCE(destination_city_id, ''),
                        COALESCE(finished_at_ms, started_at_ms),
-                       COALESCE(truck_id, '')
+                       COALESCE(truck_id, ''), COALESCE(late_delivery, 0)
                 FROM deliveries
                 ORDER BY started_at_ms DESC
                 LIMIT $limit;
@@ -713,6 +713,7 @@ public class DeliveryStore : IDisposable {
                     KamId = reader.GetString(18),
                     Dokoncene = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(19)).LocalDateTime,
                     Elektricky = Waybill.Tracking.Trucks.IsElectric(reader.GetString(20), reader.GetString(5)),
+                    Meskala = reader.GetInt32(21) != 0,
                 });
             }
             return rows;

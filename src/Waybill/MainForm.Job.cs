@@ -134,14 +134,23 @@ public partial class MainForm {
     /// </summary>
     private void ToggleFocus() {
         _focusMode = !_focusMode;
+        var page = _focusMode ? _page : _focusFrom;
+        _focusFrom = _focusMode ? _page : "live";
+
         Quiet(this, () => {
             if (_sidebar is { } bar) bar.Visible = !_focusMode;
             if (_titleBar is { } chrome) chrome.Visible = !_focusMode;
-            BuildJobPage();
-            ShowPage("live");
+            // Only the live page has a second arrangement of its own. Every other page
+            // simply gets the window: nothing about a list or a map changes when the
+            // chrome around it goes.
+            if (page == "live") BuildJobPage();
+            ShowPage(page);
         });
         RefreshJob();
     }
+
+    /// <summary>Which page the window was given to, so leaving goes back to it.</summary>
+    private string _focusFrom = "live";
 
     /// <summary>The figures on the left, the log on the right. The log is the whole
     /// of it, technical lines included: it is there for the question "is the tracker

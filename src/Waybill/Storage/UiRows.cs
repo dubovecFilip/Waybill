@@ -105,6 +105,10 @@ public class DeliveryRow {
     /// <summary>An oversize load. Not a column of its own: it paints the narrow
     /// marker at the head of the row, left of the date.</summary>
     public bool Special { get; set; }
+
+    /// <summary>Whether it arrived after the deadline. Not a column either: it is one
+    /// of the three things the list can be narrowed to.</summary>
+    public bool Meskala { get; set; }
 }
 
 /// <summary>Everything about one delivery, for the detail card. All distances,

@@ -116,12 +116,17 @@ public sealed class DeliveryList : Control {
         return tall;
     }
 
+    /// <summary>What the scrollbar keeps for itself, so no row is drawn under it.</summary>
+    private int Bar => Height(_entries.Count) > ClientSize.Height - HeadHeight ? 14 : 4;
+
     private float Scale => _columns.Sum(c => c.Width) is var total && total > 0
-        ? (ClientSize.Width - Gutter - 16) / total : 1f;
+        ? (ClientSize.Width - Gutter - Bar - 8) / total : 1f;
 
     protected override void OnMouseWheel(MouseEventArgs e) {
         base.OnMouseWheel(e);
-        var most = Math.Max(0, Height(_entries.Count) - ClientSize.Height + HeadHeight);
+        // A little further than the last row, so the end of the list is not pressed
+        // against the bottom edge of the panel.
+        var most = Math.Max(0, Height(_entries.Count) - (ClientSize.Height - HeadHeight) + 8);
         _top = Math.Clamp(_top - e.Delta, 0, most);
         Invalidate();
     }
@@ -203,7 +208,7 @@ public sealed class DeliveryList : Control {
         foreach (var (row, title, summary) in _entries) {
             var tall = row is null ? GroupHeight : RowHeight;
             if (y + tall > HeadHeight && y < ClientSize.Height) {
-                if (row is null) Look.GroupHeading(g, new RectangleF(Gutter, y, ClientSize.Width - Gutter - 16, tall), title, summary);
+                if (row is null) Look.GroupHeading(g, new RectangleF(Gutter, y, ClientSize.Width - Gutter - Bar - 6, tall), title, summary);
                 else PaintRow(g, row, y, scale);
             }
             y += tall;
@@ -260,7 +265,7 @@ public sealed class DeliveryList : Control {
             g.FillRectangle(hover, 0, y, ClientSize.Width, RowHeight);
         }
         using (var rule = new Pen(Look.Hairline)) {
-            g.DrawLine(rule, Gutter, y + RowHeight - 1, ClientSize.Width - 16, y + RowHeight - 1);
+            g.DrawLine(rule, Gutter, y + RowHeight - 1, ClientSize.Width - Bar - 6, y + RowHeight - 1);
         }
 
         // The mark in the gutter says the same thing the pill at the other end says,
@@ -304,7 +309,7 @@ public sealed class DeliveryList : Control {
         var room = ClientSize.Height - HeadHeight;
         if (whole <= room) return;
 
-        var track = new RectangleF(ClientSize.Width - 7, HeadHeight + 2, 4, room - 4);
+        var track = new RectangleF(ClientSize.Width - 6, HeadHeight + 2, 4, room - 4);
         Look.FillRounded(g, track, 2, Look.Hairline);
         var tall = Math.Max(30f, track.Height * room / whole);
         var span = track.Height - tall;

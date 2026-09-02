@@ -68,6 +68,15 @@ public partial class MainForm : Form {
     /// <summary>The routes of the game the map is showing, beside the drawing.</summary>
     private readonly CardStack _mapList = new();
 
+    /// <summary>The three things the history can be narrowed to, each on or off.</summary>
+    private Panel? _mapBar;
+    private string _mapNote = "";
+
+    /// <summary>The three things the history can be narrowed to, each on or off.</summary>
+    private readonly Chip _oversizeChip = new();
+    private readonly Chip _lateChip = new();
+    private readonly Chip _damagedChip = new();
+
     private void OnMapRouteOpened(object? behind) {
         if (behind is long id) ShowDetail(id);
     }
@@ -611,41 +620,12 @@ public partial class MainForm : Form {
     /// much of the set has been found.</summary>
     private void DrawAwards() => Quiet(_awardsPage, () => {
         _awardsHead.Controls.Clear();
-
-        var toGo = Math.Max(1, _profile.LevelTo - _profile.LevelFrom);
-        var into = Math.Min(1, Math.Max(0, (_profile.Xp - _profile.LevelFrom) / (double)toGo));
-
-        var level = new Label {
-            Dock = DockStyle.Left, Width = 132, ForeColor = Accent, TextAlign = ContentAlignment.MiddleLeft,
-            Font = new Font("Segoe UI", 15F, FontStyle.Bold),
-            Text = $"{Strings.T("award.level")} {_profile.Level}",
-        };
-
-        var right = new Panel { Dock = DockStyle.Fill, BackColor = Surface };
-        var counts = new Label {
-            Dock = DockStyle.Top, Height = 20, ForeColor = Ink, Font = new Font("Segoe UI", 9.5F),
-            Text = $"{_profile.Xp:N0} XP   ·   {Strings.T("award.unique")} {_profile.Unique} / {_profile.Possible}"
-                 + $"   ·   {Strings.T("award.total")} {_profile.Earned}×",
-        };
-        var toNext = new Label {
-            Dock = DockStyle.Bottom, Height = 18, ForeColor = Muted, Font = new Font("Segoe UI", 8.5F),
-            Text = $"{_profile.Xp - _profile.LevelFrom:N0} / {toGo:N0} XP   ·   "
-                 + $"{Strings.T("award.toLevel")} {_profile.Level + 1}",
-        };
-        var track = new Panel { Dock = DockStyle.Fill, BackColor = Surface, Padding = new Padding(0, 8, 0, 8) };
-        var bar = new Panel { Dock = DockStyle.Fill, BackColor = Raised };
-        var fill = new Panel { Dock = DockStyle.Left, BackColor = Accent, Width = 0 };
-        bar.Controls.Add(fill);
-        bar.Resize += (_, _) => fill.Width = (int)(bar.ClientSize.Width * into);
-        track.Controls.Add(bar);
-
-        right.Controls.Add(track);
-        right.Controls.Add(toNext);
-        right.Controls.Add(counts);
-        _awardsHead.Controls.Add(right);
-        _awardsHead.Controls.Add(level);
-
+        _awardsHead.BackColor = Look.Chrome;
+        _awardsHead.Paint -= PaintAwardsHead;
+        _awardsHead.Paint += PaintAwardsHead;
         DrawAwardList();
+        return;
+
     });
 
     private void DrawAwardList() {
@@ -691,6 +671,49 @@ public partial class MainForm : Form {
         Retype(_awardsList);
     }
 
+    /// <summary>
+    /// The head of the awards page: the level as a tile, what has been earned, the
+    /// track to the next one, and how much of the set has been found.
+    /// </summary>
+    private void PaintAwardsHead(object? sender, PaintEventArgs e) {
+        if (sender is not Control head) return;
+        var g = e.Graphics;
+        g.Clear(Look.Chrome);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+
+        var needs = Math.Max(1, _profile.LevelTo - _profile.LevelFrom);
+        var into = Math.Clamp(_profile.Xp - _profile.LevelFrom, 0, needs);
+        var middle = head.Height / 2f;
+
+        // The level, as a tile rather than a word: it is the one figure on this page
+        // that is not measured in anything.
+        var tile = new RectangleF(20, middle - 23, 46, 46);
+        Look.FillRounded(g, tile, Look.RadiusPanel, Look.Accent);
+        var number = _profile.Level.ToString();
+        var wide = Look.Measure(g, number, Look.Semi(20)).Width;
+        Look.Text(g, number, Look.Semi(20), Look.Window, tile.X + (tile.Width - wide) / 2, tile.Y + 11);
+
+        Look.Text(g, $"{Strings.T("award.level")} {_profile.Level}", Look.Semi(17), Look.Ink, tile.Right + 16, middle - 20);
+        Look.Text(g, $"{_profile.Xp:N0} XP {Strings.T("award.earnedLower")} · {_profile.Earned} {Strings.T("award.inTotalLower")}",
+                  Look.Caption, Look.Dim, tile.Right + 16, middle + 4);
+
+        // The found count at the right end, under its own label.
+        var found = $"{_profile.Unique} / {_profile.Possible}";
+        Look.Tracked(g, Strings.T("award.unique").ToUpperInvariant(), Look.Label, Look.Dim,
+                     head.Width - 20 - Look.TrackedWidth(g, Strings.T("award.unique").ToUpperInvariant(), Look.Label), middle - 22);
+        Look.TextRight(g, found, Look.Semi(20), Look.Ink, head.Width - 20, middle - 6);
+
+        // And the track between the two, with a figure under each of its ends.
+        var left = tile.Right + 220;
+        var right = head.Width - 150;
+        if (right - left < 120) return;
+        Look.Track(g, new RectangleF(left, middle - 9, right - left, 7), into / (float)needs);
+        Look.Text(g, $"{into:N0} / {needs:N0} XP", Look.Caption, Look.Dim, left, middle + 6);
+        Look.TextRight(g, $"{needs - into:N0} XP {Strings.T("award.toLevel")} {_profile.Level + 1}",
+                       Look.Caption, Look.Dim, right, middle + 6);
+    }
+
     private Control AwardShelf(Tracking.AwardGroup group, int earned, int all) {
         var head = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = Canvas, Tag = "shelf" };
         head.Controls.Add(new Label {
@@ -705,12 +728,21 @@ public partial class MainForm : Form {
         // A secret is not named until it is found, or there would be nothing to find.
         var hidden = s.Award.Secret && !s.Earned;
 
+        // A panel each, with a gap between them: found on the panel's own tone, still
+        // to come a step darker so the two sets read apart before a word is read.
+        var ground = s.Earned ? Look.Panel : Look.Well;
         var row = new Panel {
-            Dock = DockStyle.Top, Height = 62, BackColor = Surface,
-            Padding = new Padding(16, 9, 16, 9), Margin = new Padding(0),
+            Dock = DockStyle.Fill, BackColor = ground,
+            Padding = new Padding(16, 9, 16, 9), Margin = new Padding(0, 0, 12, 10),
+        };
+        row.Paint += (_, e) => {
+            var g = e.Graphics;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            Look.Surface(g, new RectangleF(0, 0, row.Width, row.Height), ground,
+                         s.Earned ? Look.Hairline : Look.Tint(Look.Border, 60));
         };
 
-        var title = new Panel { Dock = DockStyle.Top, Height = 22, BackColor = Surface };
+        var title = new Panel { Dock = DockStyle.Top, Height = 22, BackColor = ground };
         var name = new Label {
             Dock = DockStyle.Left, AutoSize = true,
             Text = hidden ? "? ? ?" : s.Award.Name,
@@ -745,11 +777,17 @@ public partial class MainForm : Form {
         // secret, not even how close it is.
         if (!s.Earned && !hidden && s.Award.Threshold > 1) {
             var share = Math.Min(1, s.Progress / s.Award.Threshold);
-            var track = new Panel { Dock = DockStyle.Top, Height = 4, BackColor = Raised, Margin = new Padding(0) };
-            var fill = new Panel { Dock = DockStyle.Left, BackColor = Accent, Width = 0 };
-            track.Controls.Add(fill);
-            track.Resize += (_, _) => fill.Width = (int)(track.ClientSize.Width * share);
-            row.Controls.Add(new Panel { Dock = DockStyle.Top, Height = 4, BackColor = Surface });
+            // Grey rather than amber: this one has not been earned, and amber in this
+            // window means something has.
+            var track = new Panel { Dock = DockStyle.Top, Height = 3, BackColor = ground, Margin = new Padding(0) };
+            track.Paint += (_, e) => {
+                var g = e.Graphics;
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                Look.FillRounded(g, new RectangleF(0, 0, track.Width, 3), 1.5f, Look.Hairline);
+                var run = (float)share * track.Width;
+                if (run > 1) Look.FillRounded(g, new RectangleF(0, 0, run, 3), 1.5f, Look.Dim);
+            };
+            row.Controls.Add(new Panel { Dock = DockStyle.Top, Height = 5, BackColor = ground });
             row.Controls.Add(track);
             under.Text = $"{AwardFigure(s.Award, s.Progress)} / {AwardFigure(s.Award, s.Award.Threshold)}"
                        + $"   ·   {Strings.T("award." + s.Award.Id)}";
@@ -757,7 +795,6 @@ public partial class MainForm : Form {
 
         row.Controls.Add(under);
         row.Controls.Add(title);
-        row.Controls.Add(new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = Line });
 
         // The mark down the left: filled for what has been done, hollow for what has
         // not, so the two read apart at a glance rather than by their type weight.
@@ -851,12 +888,16 @@ public partial class MainForm : Form {
         _truckTotals = $"{trucks.Count} {Strings.T("trucks.haveWorked")}";
         _truckHead?.Invalidate();
 
-        _truckCards.Show(trucks.Select(t => new CardStack.Card {
+        _truckCards.Show(trucks.Select((t, place) => new CardStack.Card {
             Title = t.Kamion,
-            Tag = t.Elektricky ? Strings.T("trucks.electric") : "",
-            Under = $"{GameName(t.Hra)} · {t.Kolizie}× {Strings.T("live.collisions")} · {t.Styl} {Strings.T("trucks.cleanSpirited")}",
+            // The one it is worth saying something about is the one it is driven in.
+            // Electric is the other thing a truck can be that changes what its figures
+            // even mean, since a battery is filled with kilowatt hours.
+            Tag = place == 0 ? Strings.T("trucks.mostUsed") : t.Elektricky ? Strings.T("trucks.electric") : "",
+            Under = $"{GameName(t.Hra)} · {t.Kolizie}× {Strings.T("live.collisions")} · {t.Zasielky - t.Ostro} {Strings.T("trucks.cleanRuns")}",
             Share = (float)t.Zasielky / most,
-            ShareLabel = $"{t.Zasielky} {Strings.T("list.deliveries")} · {t.Zasielky * 100 / most} %",
+            ShareLabel = $"{t.Zasielky} {Strings.T("list.deliveries")}",
+            SharePercent = $"{t.Zasielky * 100 / most} %",
             Figures = new List<CardStack.Figure> {
                 new() { Label = Strings.T("col.distance"), Value = t.Vzdialenost },
                 new() { Label = Strings.T("trucks.earned"), Value = t.Odmena,
@@ -1299,25 +1340,80 @@ public partial class MainForm : Form {
         _mapGame.Width = 150;
         _mapGame.SelectedIndexChanged -= OnMapGameChanged;
         _mapGame.SelectedIndexChanged += OnMapGameChanged;
+        _mapGame.Font = Look.Small;
 
-        var bar = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = Canvas };
+        // The page names itself, says how much is on it, and offers the window.
+        var bar = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = Look.Window };
+        bar.Paint += (_, e) => {
+            var g = e.Graphics;
+            g.Clear(Look.Window);
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            Look.Text(g, Strings.T("tab.map"), Look.PageHeading, Look.Ink, 0, 8);
+            var at = Look.Measure(g, Strings.T("tab.map"), Look.PageHeading).Width + 14;
+            Look.Text(g, _mapNote, Look.Small, Look.Dim, at, 12);
+        };
+        _mapBar = bar;
+
+        var full = MakeQuietButton(Strings.T("map.fullScreen"), ToggleFocus);
+        full.Width = 110;
+        bar.Controls.Add(full);
         bar.Controls.Add(_mapGame);
+        void PlaceMapBar() {
+            full.Location = new Point(bar.ClientSize.Width - full.Width, 4);
+            _mapGame.Location = new Point(full.Left - _mapGame.Width - 12, 5);
+        }
+        bar.Resize += (_, _) => PlaceMapBar();
+        PlaceMapBar();
 
         var frame = new Panel { Dock = DockStyle.Fill, BackColor = Look.Border, Padding = new Padding(1) };
         frame.Controls.Add(map);
         MapButtons(frame, map, null);
 
+        // Two entries, laid over the bottom left corner of the drawing: which line is
+        // the one being pointed at, and what the rest of them are.
+        var legend = new Panel { Width = 210, Height = 30, BackColor = Look.Window };
+        legend.Paint += (_, e) => {
+            var g = e.Graphics;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            Look.Surface(g, new RectangleF(0, 0, legend.Width, legend.Height), Look.Tint(Look.Window, 88), Look.Hairline, Look.RadiusControl);
+            var at = 12f;
+            foreach (var (hue, word) in new[] { (Look.Accent, Strings.T("map.picked")), (Look.Slate, Strings.T("map.everyOther")) }) {
+                using var pen = new Pen(hue, 2f);
+                g.DrawLine(pen, at, legend.Height / 2f, at + 14, legend.Height / 2f);
+                Look.Text(g, word, Look.Caption, Look.Dim, at + 20, legend.Height / 2f - 7);
+                at += 20 + Look.Measure(g, word, Look.Caption).Width + 14;
+            }
+        };
+        frame.Controls.Add(legend);
+        legend.BringToFront();
+        void PlaceLegend() => legend.Location = new Point(12, frame.ClientSize.Height - legend.Height - 12);
+        frame.Resize += (_, _) => PlaceLegend();
+        PlaceLegend();
+
         // The routes as a list beside the drawing, since a line on a map says where but
         // not when, and the two together are how somebody finds the drive they mean.
-        _mapList.Dock = DockStyle.Right;
         _mapList.Width = 250;
         _mapList.CardHeight = 44;
         _mapList.EmptyText = "";
         _mapList.Opened -= OnMapRouteOpened;
         _mapList.Opened += OnMapRouteOpened;
 
+        // The list under its own small capital title, the way every other set of
+        // figures in this window is named.
+        var listHost = new Panel { Dock = DockStyle.Right, Width = 250, BackColor = Look.Window, Padding = new Padding(12, 0, 0, 0) };
+        var title = new Panel { Dock = DockStyle.Top, Height = 26, BackColor = Look.Window };
+        title.Paint += (_, e) => {
+            e.Graphics.Clear(Look.Window);
+            e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            Look.Tracked(e.Graphics, Strings.T("map.routesTitle").ToUpperInvariant(), Look.Label, Look.Dim, 2, 9);
+        };
+        _mapList.Dock = DockStyle.Fill;
+        listHost.Controls.Add(_mapList);
+        listHost.Controls.Add(title);
+
         page.Controls.Add(frame);
-        page.Controls.Add(_mapList);
+        page.Controls.Add(listHost);
         page.Controls.Add(bar);
         return page;
     }
@@ -1384,6 +1480,9 @@ public partial class MainForm : Form {
 
         // The same drives as a list, newest first, each naming its two ends and what it
         // carried. Clicking one opens its card, the way clicking the line does.
+        _mapNote = $"{routes.Routes.Count} {Strings.T("map.routes")} · {Strings.T("map.hoverOne")}";
+        _mapBar?.Invalidate();
+
         _mapList.Show(_rows.Where(r => r.Hra == game).Select(r => new CardStack.Card {
             Title = $"{r.Odkial} → {r.Kam}",
             Under = $"{r.Datum:dd.MM.yy} · {r.Vzdialenost} · {r.Naklad}",
@@ -2187,19 +2286,32 @@ public partial class MainForm : Form {
         };
         searchBox.Controls.Add(_search);
 
-        _cargoFilter.RightBadge = (g, r) => HazardStripes(g, r, 210);
         _gameFilter.Retext(GameName("Ets2"), Strings.T("filter.both"), GameName("Ats"));
-        _cargoFilter.Retext(Strings.T("filter.ordinary"), Strings.T("filter.both"), Strings.T("filter.oversize"));
-        foreach (var filter in new[] { _gameFilter, _cargoFilter }) {
-            filter.Margin = new Padding(0, 2, 10, 2);
-            filter.BackColor = Look.Window;
-            filter.Changed -= OnFilterChanged;
-            filter.Changed += OnFilterChanged;
+        _gameFilter.Margin = new Padding(0, 2, 12, 2);
+        _gameFilter.BackColor = Look.Window;
+        _gameFilter.Changed -= OnFilterChanged;
+        _gameFilter.Changed += OnFilterChanged;
+
+        // Three chips rather than a second switch. Oversize, late and damaged are not
+        // three positions of one question: a run can be all three at once, and asking
+        // for "ordinary" was never a question anybody had.
+        _oversizeChip.Text = Strings.T("filter.oversize");
+        _oversizeChip.Badge = (g, r, ink) => HazardStripes(g, Rectangle.Round(r), 220);
+        _lateChip.Text = Strings.T("filter.late");
+        _damagedChip.Text = Strings.T("filter.damaged");
+        foreach (var chip in new[] { _oversizeChip, _lateChip, _damagedChip }) {
+            chip.Margin = new Padding(0, 2, 8, 2);
+            chip.Toggled -= ApplyFilter;
+            chip.Toggled += ApplyFilter;
+            using var g = CreateGraphics();
+            chip.FitTo(g);
         }
 
         bar.Controls.Add(searchBox);
         bar.Controls.Add(_gameFilter);
-        bar.Controls.Add(_cargoFilter);
+        bar.Controls.Add(_oversizeChip);
+        bar.Controls.Add(_lateChip);
+        bar.Controls.Add(_damagedChip);
 
         // The three marks a row can carry, named. A dot with no key beside it is a
         // colour, and a colour on its own says nothing.
@@ -2211,8 +2323,8 @@ public partial class MainForm : Form {
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
             var at = 0f;
             foreach (var (status, word) in new[] {
-                         ("accepted", Label("accepted")), ("review", Label("review")),
-                         ("rejected", Label("rejected")) }) {
+                         ("accepted", Strings.T("legend.dotClean")), ("review", Strings.T("legend.dotFine")),
+                         ("rejected", Strings.T("legend.dotDamage")) }) {
                 Look.Dot(g, new PointF(at + 4, legend.Height / 2f), VerdictColour(status), 7);
                 Look.Text(g, word, Look.Caption, Look.Dim, at + 13, legend.Height / 2f - 7);
                 at += 13 + Look.Measure(g, word, Look.Caption).Width + 16;
@@ -2648,15 +2760,26 @@ public partial class MainForm : Form {
     private readonly FlowLayoutPanel _statsPeriods = new();
 
     private Panel BuildStatsPage() {
-        var page = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16), BackColor = Canvas };
+        var page = new Panel { Dock = DockStyle.Fill, BackColor = Look.Window,
+                               Padding = new Padding(Look.PagePad, 10, Look.PagePad, Look.PagePad) };
+
+        var head = new Panel { Dock = DockStyle.Top, Height = 34, BackColor = Look.Window };
+        head.Paint += (_, e) => {
+            var g = e.Graphics;
+            g.Clear(Look.Window);
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            Look.Text(g, Strings.T("tab.stats"), Look.PageHeading, Look.Ink, 0, 6);
+        };
 
         // Two questions asked above the figures rather than answered by extra
         // sections below them: which stretch of time, and which game. Sections would
         // have taken the page past the one screen it fits on, and comparing this week
         // with last week by reading two blocks of tiles is not comparing at all.
+        // Not docked: it rides at the right end of the header's own line, so the page
+        // name and the two questions asked about it share one row.
         var bar = new FlowLayoutPanel {
-            Dock = DockStyle.Top, Height = 40, WrapContents = false, BackColor = Canvas,
-            Padding = new Padding(0, 0, 0, 8),
+            AutoSize = true, WrapContents = false, BackColor = Look.Window,
+            FlowDirection = FlowDirection.RightToLeft,
         };
 
         _statsPeriods.AutoSize = true;
@@ -2680,8 +2803,8 @@ public partial class MainForm : Form {
         _statsGame.Changed -= OnStatsGameChanged;
         _statsGame.Changed += OnStatsGameChanged;
 
-        bar.Controls.Add(_statsPeriods);
         bar.Controls.Add(_statsGame);
+        bar.Controls.Add(_statsPeriods);
 
         _statsGrid.Dock = DockStyle.Fill;
         _statsGrid.BackColor = Canvas;
@@ -2712,7 +2835,11 @@ public partial class MainForm : Form {
         _statsGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
         page.Controls.Add(_statsGrid);
-        page.Controls.Add(bar);
+        page.Controls.Add(head);
+        head.Controls.Add(bar);
+        void Place() => bar.Location = new Point(Math.Max(0, head.ClientSize.Width - bar.Width), 0);
+        head.Resize += (_, _) => Place();
+        Place();
         StylePeriods();
         return page;
     }
@@ -2768,7 +2895,7 @@ public partial class MainForm : Form {
             g.Clear(Look.Window);
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-            Look.Surface(g, new RectangleF(0, 0, tile.Width - 1, tile.Height - 1), Look.Panel, Look.Hairline);
+            Look.Surface(g, new RectangleF(0, 0, tile.Width, tile.Height), Look.Panel, Look.Hairline);
 
             var room = tile.Width - 32;
             Look.Tracked(g, caption.ToUpperInvariant(), Look.Label, Look.Dim, 16, 13);
@@ -4140,7 +4267,7 @@ public partial class MainForm : Form {
             g.Clear(Look.Window);
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-            Look.Surface(g, new RectangleF(0, 0, strip.Width - 1, strip.Height - 5), Look.Panel, Look.Hairline);
+            Look.Surface(g, new RectangleF(0, 0, strip.Width, strip.Height - 4), Look.Panel, Look.Hairline);
 
             var tiles = new (string Label, string Figure, string Under, Color Ink)[] {
                 (Strings.T("col.distance"), u.FormatDistance(d.DistanceKm),
@@ -4407,10 +4534,9 @@ public partial class MainForm : Form {
             var game = _gameFilter.Position < 0 ? "Ets2" : "Ats";
             filtered = filtered.Where(r => r.Hra == game);
         }
-        if (_cargoFilter.Position != 0) {
-            var oversize = _cargoFilter.Position > 0;
-            filtered = filtered.Where(r => r.Special == oversize);
-        }
+        if (_oversizeChip.On) filtered = filtered.Where(r => r.Special);
+        if (_lateChip.On) filtered = filtered.Where(r => r.Meskala);
+        if (_damagedChip.On) filtered = filtered.Where(r => r.Kolizie > 0);
         if (text.Length > 0) {
             filtered = filtered.Where(r =>
                 r.Odkial.Contains(text, StringComparison.OrdinalIgnoreCase) ||

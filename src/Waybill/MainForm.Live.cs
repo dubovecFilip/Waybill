@@ -124,7 +124,7 @@ public partial class MainForm {
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
-        var box = new RectangleF(0, 0, panel.Width - 1, panel.Height - 1);
+        var box = new RectangleF(0, 0, panel.Width, panel.Height);
         Look.Surface(g, box, Look.Raised, Look.Border);
 
         if (!_live.OnJob) {
@@ -216,7 +216,7 @@ public partial class MainForm {
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
-        var box = new RectangleF(0, 0, rail.Width - 1, rail.Height - 1);
+        var box = new RectangleF(0, 0, rail.Width, rail.Height);
         Look.Surface(g, box, Look.Panel, Look.Border);
         Look.Tracked(g, Strings.T("live.happened").ToUpperInvariant(), Look.Label, Look.Dim, 14, 13);
 
