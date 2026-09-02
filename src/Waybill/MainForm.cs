@@ -631,12 +631,23 @@ public partial class MainForm : Form {
     private void DrawAwardList() {
         _awardsList.Controls.Clear();
 
-        // Earned first inside each shelf, since what has been done is what a driver
-        // comes here to look at, and the shelves in the order they were defined.
+        // Two sets rather than four shelves: what has been found, and what is still to
+        // come. A driver opening this page is asking one of those two questions, and
+        // splitting the same seventy two by game answered neither of them first.
+        var found = _awards.Where(a => a.Earned)
+                           .OrderByDescending(a => a.LastAt ?? DateTime.MinValue).ToList();
+        var waiting = _awards.Where(a => !a.Earned)
+                             .OrderByDescending(a => a.Award.Threshold > 1 ? a.Progress / a.Award.Threshold : 0)
+                             .ToList();
+
         var rows = new List<Control>();
-        foreach (var shelf in _awards.GroupBy(s => s.Award.Group).OrderBy(g => g.Key)) {
-            rows.Add(AwardShelf(shelf.Key, shelf.Count(s => s.Earned), shelf.Count()));
-            rows.AddRange(shelf.OrderByDescending(s => s.Earned).Select(AwardRow));
+        if (found.Count > 0) {
+            rows.Add(AwardShelf(Strings.T("award.found"), $"{found.Count} {Strings.T("award.ofSome")} {_awards.Count}"));
+            rows.AddRange(found.Select(AwardRow));
+        }
+        if (waiting.Count > 0) {
+            rows.Add(AwardShelf(Strings.T("award.stillToCome"), $"{waiting.Count} {Strings.T("award.left")}"));
+            rows.AddRange(waiting.Select(AwardRow));
         }
 
         // Two columns of panels under each shelf heading, which is what the awards are
@@ -649,15 +660,24 @@ public partial class MainForm : Form {
                 stacked.Add(rows[i]);
                 continue;
             }
+            // A panel carrying a track under its sentence needs the room for it; one
+            // that is already found does not, and found awards spaced for a track that
+            // is not there read as a list with holes in it.
+            var second = i + 1 < rows.Count && rows[i + 1].Tag as string != "shelf" ? rows[i + 1] : null;
+            var tall = rows[i].Tag as string == "track" || second?.Tag as string == "track" ? 80 : 62;
             var pair = new TableLayoutPanel {
-                Dock = DockStyle.Top, Height = 62, BackColor = Look.Window, ColumnCount = 2, RowCount = 1,
+                Dock = DockStyle.Top, Height = tall, BackColor = Look.Window, ColumnCount = 2, RowCount = 1,
                 Margin = new Padding(0), Padding = new Padding(0),
             };
             pair.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
             pair.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            // Without a row style the row sizes itself to the panel rather than the
+            // panel to the row, and a panel that thinks it is a hundred tall inside a
+            // cell of eighty draws its own foot and its track below the cut.
+            pair.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             pair.Controls.Add(rows[i], 0, 0);
-            if (i + 1 < rows.Count && rows[i + 1].Tag as string != "shelf") {
-                pair.Controls.Add(rows[i + 1], 1, 0);
+            if (second is not null) {
+                pair.Controls.Add(second, 1, 0);
                 i++;
             }
             stacked.Add(pair);
@@ -714,106 +734,108 @@ public partial class MainForm : Form {
                        Look.Caption, Look.Dim, right, middle + 6);
     }
 
-    private Control AwardShelf(Tracking.AwardGroup group, int earned, int all) {
-        var head = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = Canvas, Tag = "shelf" };
-        head.Controls.Add(new Label {
-            Dock = DockStyle.Fill, ForeColor = Muted, TextAlign = ContentAlignment.BottomLeft,
-            Font = new Font("Segoe UI", 9F, FontStyle.Bold),
-            Text = $"{Strings.T("award.group." + group.ToString().ToLowerInvariant())}   {earned} / {all}",
-        });
+    /// <summary>A set opens with its name and how many are in it, and nothing else:
+    /// the panels under it say the rest.</summary>
+    private Control AwardShelf(string title, string count) {
+        var head = new Panel { Dock = DockStyle.Top, Height = 38, BackColor = Look.Window, Tag = "shelf" };
+        head.Paint += (_, e) => {
+            var g = e.Graphics;
+            g.Clear(Look.Window);
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            var y = head.Height - 22;
+            Look.Text(g, title, Look.Strong, Look.Ink, 0, y);
+            Look.Text(g, count, Look.Caption, Look.Dim, Look.Measure(g, title, Look.Strong).Width + 12, y + 2);
+        };
         return head;
     }
 
+    /// <summary>
+    /// One award, drawn as a panel of its own.
+    ///
+    /// Found ones sit on the panel tone with an amber tick, their name in capitals and
+    /// the day they were found under it. The ones still to come sit a step darker with
+    /// a closed mark, dim ink and a grey track saying how far off they are. Painted
+    /// rather than stacked out of five labels, since a name in capitals with tracking,
+    /// a figure at the right and a track under both is one drawing, not five controls.
+    /// </summary>
     private Control AwardRow(Tracking.AwardStanding s) {
         // A secret is not named until it is found, or there would be nothing to find.
         var hidden = s.Award.Secret && !s.Earned;
-
-        // A panel each, with a gap between them: found on the panel's own tone, still
-        // to come a step darker so the two sets read apart before a word is read.
         var ground = s.Earned ? Look.Panel : Look.Well;
+
+        var name = hidden ? "? ? ?" : s.Award.Name;
+        var says = hidden ? Strings.T("award.hidden") : Strings.T("award." + s.Award.Id);
+        var worth = $"{(s.TimesEarned > 1 ? s.TotalXp : s.Award.Xp):N0} XP";
+        var toGo = !s.Earned && !hidden && s.Award.Threshold > 1;
+        var share = toGo ? Math.Min(1, s.Progress / s.Award.Threshold) : 0;
+        var figures = toGo ? $"{AwardFigure(s.Award, s.Progress)} / {AwardFigure(s.Award, s.Award.Threshold)}" : "";
+
         var row = new Panel {
-            Dock = DockStyle.Fill, BackColor = ground,
-            Padding = new Padding(16, 9, 16, 9), Margin = new Padding(0, 0, 12, 10),
+            Dock = DockStyle.Fill, BackColor = Look.Window, Margin = new Padding(0, 0, 12, 10),
+            Tag = toGo ? "track" : "plain",
         };
         row.Paint += (_, e) => {
             var g = e.Graphics;
-            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            Look.Surface(g, new RectangleF(0, 0, row.Width, row.Height), ground,
-                         s.Earned ? Look.Hairline : Look.Tint(Look.Border, 60));
-        };
+            g.Clear(Look.Window);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
-        var title = new Panel { Dock = DockStyle.Top, Height = 22, BackColor = ground };
-        var name = new Label {
-            Dock = DockStyle.Left, AutoSize = true,
-            Text = hidden ? "? ? ?" : s.Award.Name,
-            ForeColor = s.Earned ? Ink : Muted,
-            Font = new Font("Segoe UI", 10F, s.Earned ? FontStyle.Bold : FontStyle.Regular),
-        };
-        var worth = new Label {
-            Dock = DockStyle.Right, AutoSize = true, ForeColor = s.Earned ? Accent : Muted,
-            Font = new Font("Segoe UI", 9F, FontStyle.Bold),
-            Text = s.TimesEarned > 1 ? $"{s.TotalXp:N0} XP" : $"{s.Award.Xp:N0} XP",
-        };
-        title.Controls.Add(worth);
-        // How many times over, which is the whole point of a repeatable one. Never
-        // shown at one: the first time is just the award.
-        if (s.TimesEarned > 1) {
-            title.Controls.Add(new Label {
-                Dock = DockStyle.Left, AutoSize = true, ForeColor = Accent,
-                Font = new Font("Segoe UI", 10F, FontStyle.Bold),
-                Padding = new Padding(10, 0, 0, 0), Text = $"{s.TimesEarned}×",
-            });
-        }
-        title.Controls.Add(name);
+            var box = new RectangleF(0, 0, row.Width, row.Height);
+            Look.Surface(g, box, ground, s.Earned ? Look.Hairline : Look.Tint(Look.Border, 70));
 
-        var under = new Label {
-            Dock = DockStyle.Top, Height = 18, ForeColor = Muted, AutoEllipsis = true,
-            Font = new Font("Segoe UI", 8.5F),
-            Text = hidden ? Strings.T("award.hidden") : Strings.T("award." + s.Award.Id),
-        };
-        if (!hidden && s.Earned) under.Text += $"   ·   {s.LastAt:dd.MM.yyyy}";
-
-        // How far off it is, for the ones still to come. Nothing is given away about a
-        // secret, not even how close it is.
-        if (!s.Earned && !hidden && s.Award.Threshold > 1) {
-            var share = Math.Min(1, s.Progress / s.Award.Threshold);
-            // Grey rather than amber: this one has not been earned, and amber in this
-            // window means something has.
-            var track = new Panel { Dock = DockStyle.Top, Height = 3, BackColor = ground, Margin = new Padding(0) };
-            track.Paint += (_, e) => {
-                var g = e.Graphics;
-                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                Look.FillRounded(g, new RectangleF(0, 0, track.Width, 3), 1.5f, Look.Hairline);
-                var run = (float)share * track.Width;
-                if (run > 1) Look.FillRounded(g, new RectangleF(0, 0, run, 3), 1.5f, Look.Dim);
-            };
-            row.Controls.Add(new Panel { Dock = DockStyle.Top, Height = 5, BackColor = ground });
-            row.Controls.Add(track);
-            under.Text = $"{AwardFigure(s.Award, s.Progress)} / {AwardFigure(s.Award, s.Award.Threshold)}"
-                       + $"   ·   {Strings.T("award." + s.Award.Id)}";
-        }
-
-        row.Controls.Add(under);
-        row.Controls.Add(title);
-
-        // The mark down the left: filled for what has been done, hollow for what has
-        // not, so the two read apart at a glance rather than by their type weight.
-        var mark = new Panel { Dock = DockStyle.Left, Width = 22, BackColor = Surface };
-        mark.Paint += (_, e) => {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            var box = new RectangleF(2, mark.Height / 2f - 6, 12, 12);
+            // The mark: a ticked box for what has been done, a closed one for what has
+            // not, so the two sets read apart before a word of them is read.
+            // Level with the name rather than with the middle of the panel: the mark and
+            // the word it marks are one line, and a panel that carries a track underneath
+            // is taller at the bottom, not at the top.
+            var mark = new RectangleF(14, 11, 18, 18);
             if (s.Earned) {
-                using var full = new SolidBrush(Accent);
-                e.Graphics.FillEllipse(full, box);
+                Look.FillRounded(g, mark, 5, Look.Tint(Look.Accent, 18));
+                Look.DrawRounded(g, mark, 5, Look.TintEdge(Look.Accent, 45));
+                using var tick = new Pen(Look.Accent, 1.8f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+                g.DrawLines(tick, new[] {
+                    new PointF(mark.X + 4.5f, mark.Y + 9),
+                    new PointF(mark.X + 7.5f, mark.Y + 12.5f),
+                    new PointF(mark.X + 13.5f, mark.Y + 5.5f),
+                });
             } else {
-                using var edge = new Pen(Line, 1.6f);
-                e.Graphics.DrawEllipse(edge, box);
+                Look.DrawRounded(g, mark, 5, Look.Border);
+                using var shackle = new Pen(Look.Dim, 1.5f);
+                g.DrawArc(shackle, mark.X + 5.5f, mark.Y + 3.5f, 7, 7, 180, 180);
+                using var body = new SolidBrush(Look.Dim);
+                g.FillRectangle(body, mark.X + 4.5f, mark.Y + 8.5f, 9, 6.5f);
             }
+
+            var left = mark.Right + 12;
+            var wideWorth = Look.Measure(g, worth, Look.CaptionSemi).Width;
+            var room = row.Width - left - wideWorth - 26;
+
+            // The name in the same small capitals every label in this window wears,
+            // one step larger because it is the name of the thing rather than of a
+            // figure beside it.
+            var wideName = Look.Tracked(g, name.ToUpperInvariant(), Look.Semi(12.5f),
+                                        s.Earned ? Look.Ink : Look.Muted, left, 12, 0.9f);
+            if (s.TimesEarned > 1) {
+                Look.Text(g, $"{s.TimesEarned}×", Look.CaptionSemi, Look.Accent, left + wideName + 8, 13);
+            }
+            Look.TextRight(g, worth, Look.CaptionSemi, s.Earned ? Look.Accent : Look.Dim, row.Width - 16, 12);
+
+            var under = toGo ? says : s.Earned ? $"{says}   ·   {s.LastAt:dd.MM.yyyy}" : says;
+            Look.Text(g, Look.Clip(g, under, Look.Caption, room), Look.Caption,
+                      s.Earned ? Look.Muted : Look.Dim, left, 33);
+
+            if (!toGo) return;
+
+            // How far off it is, in grey: amber in this window means something has been
+            // earned, and this one has not been.
+            var wideFigures = Look.Measure(g, figures, Look.Caption).Width;
+            var track = new RectangleF(left, row.Height - 16, Math.Max(60, room - wideFigures - 12), 3);
+            Look.FillRounded(g, track, 1.5f, Look.Hairline);
+            if (share > 0) Look.FillRounded(g, new RectangleF(track.X, track.Y, (float)(track.Width * share), 3), 1.5f, Look.Dim);
+            Look.Text(g, figures, Look.Caption, Look.Dim, track.Right + 12, row.Height - 23);
         };
-        row.Controls.Add(mark);
         return row;
     }
-
     /// <summary>A threshold written the way the driver reads it. Distance is the one
     /// that matters: Europe counts in kilometres and America in miles, and neither is
     /// ever turned into the other.</summary>
