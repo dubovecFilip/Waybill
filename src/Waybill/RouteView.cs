@@ -22,12 +22,12 @@ namespace Waybill;
 /// this control is not kilometres and never will be; the odometer answers that.
 /// </summary>
 public class RouteView : Control {
-    private static readonly Color Backdrop = Color.FromArgb(22, 25, 29);
-    private static readonly Color Ink = Color.FromArgb(228, 233, 240);
-    private static readonly Color Muted = Color.FromArgb(138, 148, 163);
-    private static readonly Color Accent = Color.FromArgb(232, 168, 74);
-    private static readonly Color Surface = Color.FromArgb(30, 34, 39);
-    private static readonly Color Edge = Color.FromArgb(48, 54, 62);
+    private static readonly Color Backdrop = Look.Window;
+    private static readonly Color Ink = Look.Ink;
+    private static readonly Color Muted = Look.Muted;
+    private static readonly Color Accent = Look.Accent;
+    private static readonly Color Surface = Look.Panel;
+    private static readonly Color Edge = Look.Border;
 
     /// <summary>Slow to fast. Eight steps rather than a continuous gradient so the
     /// line can be drawn as a handful of polylines instead of a thousand separate

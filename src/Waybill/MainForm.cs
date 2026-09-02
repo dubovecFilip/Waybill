@@ -18,15 +18,15 @@ namespace Waybill;
 /// window needs its own or the drop-downs stay white.</summary>
 
 public partial class MainForm : Form {
-    // One dark palette for the whole window, so nothing has to invent a colour
-    // inline. There is no light variant on purpose: two of them means every control
-    // has to be checked twice and one of them is always the neglected one.
-    private static readonly Color Canvas = Color.FromArgb(22, 25, 29);
-    private static readonly Color Surface = Color.FromArgb(30, 34, 39);
-    private static readonly Color Raised = Color.FromArgb(38, 43, 50);
-    private static readonly Color Line = Color.FromArgb(48, 54, 62);
-    private static readonly Color Ink = Color.FromArgb(228, 233, 240);
-    private static readonly Color Muted = Color.FromArgb(138, 148, 163);
+    // The palette lives in Look, one place for the whole window. These are the names
+    // this file has always used, pointed at it: Canvas is the page behind the panels,
+    // Surface a panel on it, Raised the step above that.
+    private static readonly Color Canvas = Look.Window;
+    private static readonly Color Surface = Look.Panel;
+    private static readonly Color Raised = Look.Raised;
+    private static readonly Color Line = Look.Border;
+    private static readonly Color Ink = Look.Ink;
+    private static readonly Color Muted = Look.Muted;
     // Amber rather than blue: it is the colour of a truck's indicators and warning
     // boards, and it stays legible on a dark ground where blue goes muddy.
     /// <summary>What a cell says when there is nothing to say. A dash rather than an
@@ -34,8 +34,10 @@ public partial class MainForm : Form {
     /// to load, and a dash reads as an answer.</summary>
     private const string Nothing = "\u2014";
 
-    private static readonly Color Accent = Color.FromArgb(232, 168, 74);
-    private static readonly Color AccentSoft = Color.FromArgb(52, 45, 33);
+    private static readonly Color Accent = Look.Accent;
+    /// <summary>The accent as a wash rather than as paint, flattened against the chrome
+    /// it is drawn on, since a control's BackColor cannot be translucent.</summary>
+    private static readonly Color AccentSoft = Color.FromArgb(38, 32, 22);
 
     private readonly DeliveryStore _store = new();
     private readonly Settings _settings = Settings.Load();
