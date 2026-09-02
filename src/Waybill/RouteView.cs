@@ -97,7 +97,23 @@ public class RouteView : Control {
     private bool _fitted;
 
     private Bitmap? _under;
-    private (int W, int H, float Scale, float CX, float CY, long Lit, bool History, bool Stops, string Map) _underKey;
+
+    /// <summary>The centre the cached picture was drawn for. While the view has not
+    /// wandered further than <see cref="UnderSlack"/> from it, that picture is drawn
+    /// at an offset instead of being made again.</summary>
+    private PointF _underAt;
+
+    /// <summary>
+    /// How much picture is kept beyond each edge of the panel.
+    ///
+    /// A map following a truck moves a pixel or three a second, and rebuilding the
+    /// underlay for that meant redrawing every tile, every stop and every drive once a
+    /// second. On a wide screen that is several million pixels of work for a change of
+    /// two, and it showed as a stutter. Drawn with a margin, the same picture serves
+    /// for a minute or so of driving and is then made once.
+    /// </summary>
+    private const int UnderSlack = 192;
+    private (int W, int H, float Scale, long Lit, bool History, bool Stops, string Map) _underKey;
 
     private Point _dragFrom;
     private bool _dragging;
@@ -545,8 +561,9 @@ public class RouteView : Control {
     /// <summary>What the panel can see, in the world's own metres, with a margin so a
     /// stretch that only just reaches the edge is still drawn.</summary>
     private RectangleF Seen() {
-        var topLeft = ToWorld(-40, -40);
-        var bottomRight = ToWorld(Width + 40, Height + 40);
+        const int over = 40 + UnderSlack;
+        var topLeft = ToWorld(-over, -over);
+        var bottomRight = ToWorld(Width + over, Height + over);
         return RectangleF.FromLTRB(topLeft.X, topLeft.Y, bottomRight.X, bottomRight.Y);
     }
 
@@ -873,14 +890,24 @@ public class RouteView : Control {
         // The switches belong in the key: turning a layer off changes what the cached
         // bitmap should hold, and without them the old one was kept and the toggle
         // did nothing until the view happened to move.
-        var key = (Width, Height, PerMetre, _centre.X, _centre.Y, _lit, ShowHistory, ShowStops,
+        var key = (Width, Height, PerMetre, _lit, ShowHistory, ShowStops,
                    GameMap is null ? "" : GameMap.Game);
-        if (_under is null || _underKey != key) {
+        // How far the view has drifted from the picture already drawn, in pixels.
+        var driftX = (_underAt.X - _centre.X) * PerMetre;
+        var driftY = (_underAt.Y - _centre.Y) * PerMetre;
+        var wandered = Math.Abs(driftX) > UnderSlack - 8 || Math.Abs(driftY) > UnderSlack - 8;
+
+        if (_under is null || _underKey != key || wandered) {
             Discard();
             _underKey = key;
-            _under = new Bitmap(Width, Height);
+            _underAt = _centre;
+            driftX = driftY = 0;
+            _under = new Bitmap(Width + UnderSlack * 2, Height + UnderSlack * 2, PixelFormat.Format32bppPArgb);
             using var ug = Graphics.FromImage(_under);
             ug.SmoothingMode = SmoothingMode.AntiAlias;
+            // Everything below draws in the panel's own coordinates; the margin is a
+            // shift, so nothing else has to know it is there.
+            ug.TranslateTransform(UnderSlack, UnderSlack);
             // The ground the map is drawn on, so what the tiles do not reach reads as
             // the empty country it is rather than as a hole in the picture.
             if (GameMap is { } ground) ug.Clear(ground.Ground);
@@ -930,7 +957,7 @@ public class RouteView : Control {
                 }
             }
         }
-        g.DrawImageUnscaled(_under, 0, 0);
+        g.DrawImageUnscaled(_under, (int)Math.Round(driftX) - UnderSlack, (int)Math.Round(driftY) - UnderSlack);
     }
 
     /// <summary>

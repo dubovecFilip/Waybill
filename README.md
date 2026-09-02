@@ -195,16 +195,21 @@ Behind the drive is the rest of that game's history, in the quieter line the map
 uses, so a delivery in a corner of the map has somewhere to sit. Only the delivery is
 singled out, and only it decides the frame.
 
-Beside it, or under it, or over a corner of it, is a second map holding the truck in
-the middle at a fixed scale of about thirty kilometres of road across. Where it goes
-follows the shape of the room: a column down the right of a wide panel, a band along
-the bottom of a tall one, and a corner of a square one, where the wide map is told to
-keep the drive out from under it. And with no delivery on at all, the wide map does
-the following itself, drawing the line being roamed.
+Under it, or over a corner of it, is a second map holding the truck in the middle at
+a fixed scale of about thirty kilometres of road across. A window taller than it is
+wide has room underneath and gets a band there; anything else keeps it inside the wide
+map, in a corner, where the drive is told to stay out from under it. And with no
+delivery on at all, there is one map and the truck is simply where it is.
 
 Neither of them takes a wheel or a drag. They are pictures that reframe themselves
 every second, so anything the pointer did to them would be undone a moment later; the
 map page is one click away for anyone who wants to go looking.
+
+The button in the corner gives the window over to the drive, and so does F11. The
+column of pages, the menu, the log and the launch buttons go, the map takes the whole
+window, and how far along the delivery is runs along the foot of it. Escape brings the
+rest back. It is the app's own window throughout, not the screen: still movable, still
+one alt-tab away from the game.
 
 It grows without twitching, and without losing the truck off the edge. A drive
 being watched is refitted every second, and while everything still sits inside the

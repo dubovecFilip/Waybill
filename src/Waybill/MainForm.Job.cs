@@ -59,8 +59,20 @@ public partial class MainForm {
     private Panel BuildJobPage() {
         _jobPage.Dock = DockStyle.Fill;
         _jobPage.BackColor = Canvas;
-        _jobPage.Padding = new Padding(16, 8, 16, 16);
+        _jobPage.Padding = _focusMode ? new Padding(0) : new Padding(16, 8, 16, 16);
         _jobPage.Controls.Clear();
+
+        // With the window given over to the drive there is the map, and under it how
+        // far along the delivery is, and nothing else. The log answers "is it seeing
+        // the game", which is a question for before setting off; the launch buttons
+        // are for when no game is running; the card repeats what the game's own screen
+        // already says. None of it is worth the width of a road.
+        if (_focusMode) {
+            _jobLaunch = null;
+            _jobPage.Controls.Add(_settings.LiveMap ? BuildJobMap() : new Panel { Dock = DockStyle.Fill, BackColor = Canvas });
+            _jobPage.Controls.Add(BuildFocusBar());
+            return _jobPage;
+        }
 
         // Added innermost first: the map takes what the card above it leaves.
         if (_settings.LiveMap) _jobPage.Controls.Add(BuildJobMap());
@@ -73,6 +85,63 @@ public partial class MainForm {
             Padding = new Padding(0, 8, 0, 0),
         });
         return _jobPage;
+    }
+
+    /// <summary>
+    /// The strip along the foot of the window while the drive has it to itself.
+    ///
+    /// The same progress bar as the card carries, the full width of the window, with
+    /// the two cities and the cargo above it. At the foot rather than the head because
+    /// the map is the subject and this is the readout under it, which is where a
+    /// dashboard sits in every cab ever built.
+    /// </summary>
+    private Control BuildFocusBar() {
+        var bar = new Panel { Dock = DockStyle.Bottom, Height = 64, BackColor = Surface, Padding = new Padding(20, 8, 20, 10) };
+
+        _progressTrack.Dock = DockStyle.Bottom;
+        _progressTrack.Height = 10;
+
+        _jobLine.Dock = DockStyle.Left;
+        _jobLine.Width = 520;
+        _jobLine.Height = 26;
+        _jobLine.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
+        _jobLine.AutoEllipsis = true;
+
+        _progressText.Dock = DockStyle.Right;
+        _progressText.Width = 420;
+        _progressText.TextAlign = ContentAlignment.MiddleRight;
+        _progressText.Padding = new Padding(0);
+
+        var line = new Panel { Dock = DockStyle.Fill, BackColor = Surface };
+        line.Controls.Add(_progressText);
+        line.Controls.Add(_jobLine);
+
+        var hint = new Label {
+            Dock = DockStyle.Bottom, Height = 4, BackColor = Surface,
+        };
+
+        bar.Controls.Add(line);
+        bar.Controls.Add(hint);
+        bar.Controls.Add(_progressTrack);
+        return bar;
+    }
+
+    /// <summary>
+    /// Hands the window to the drive, or takes it back.
+    ///
+    /// Everything is built again rather than hidden in place: the two arrangements
+    /// hold the same controls in different parents, and moving them about by hand is
+    /// how a layout ends up with a progress bar in two places at once.
+    /// </summary>
+    private void ToggleFocus() {
+        _focusMode = !_focusMode;
+        Quiet(this, () => {
+            if (_sidebar is { } bar) bar.Visible = !_focusMode;
+            if (MainMenuStrip is { } menu) menu.Visible = !_focusMode;
+            BuildJobPage();
+            ShowPage("live");
+        });
+        RefreshJob();
     }
 
     /// <summary>The figures on the left, the log on the right. The log is the whole
@@ -216,6 +285,10 @@ public partial class MainForm {
         _jobCloseGap = new Panel { Dock = DockStyle.Bottom, Height = 8, BackColor = Canvas, Visible = false };
         _jobCloseFrame = new Panel { Dock = DockStyle.Bottom, BackColor = Line, Padding = new Padding(1), Height = 0, Visible = false };
 
+        // The one button on this page: the window, given to the drive and taken back.
+        // No layers menu and nothing to fit, since neither map here takes a pointer.
+        MapButtons(frame, _jobMap, ToggleFocus, layers: false, fit: false);
+
         frame.Controls.Add(wide);
         frame.Controls.Add(_jobCloseGap);
         frame.Controls.Add(_jobCloseFrame);
@@ -253,16 +326,18 @@ public partial class MainForm {
         var room = frame.ClientSize;
         var shape = room.Height > 0 ? room.Width / (float)room.Height : 1f;
 
-        if (shape > 1.25f) {
-            Give(band, gap, corner, DockStyle.Right, Math.Clamp(room.Width - room.Height, 200, 380));
-            return;
-        }
-        if (shape < 0.8f) {
+        // A window taller than it is wide has room underneath and nowhere useful to
+        // put a column, so the close view goes below. Anything else keeps it inside
+        // the wide map, in a corner. There used to be a third arrangement, a column
+        // down the right of a wide window, and it was the worst of the three: it ate
+        // the width the drive wants and left the wide map no wider than the panel is
+        // tall.
+        if (shape < 1f) {
             Give(band, gap, corner, DockStyle.Bottom, Math.Clamp(room.Height - room.Width, 160, 300));
             return;
         }
 
-        // Square enough that any band would spoil it: over a corner instead.
+        // Wide enough that a band would only take from the drive: over a corner.
         band.Visible = false;
         gap.Visible = false;
         if (corner.Parent != _jobMap.Parent) _jobMap.Parent!.Controls.Add(corner);

@@ -102,6 +102,19 @@ public partial class MainForm : Form {
     /// </summary>
     private List<(string Game, string Map)> _mapGames = new();
 
+    /// <summary>The column of pages, kept so the map can have the window to itself.</summary>
+    private Panel? _sidebar;
+
+    /// <summary>
+    /// Whether the drive in progress has the window to itself.
+    ///
+    /// Not the screen: this is still a window, still movable, still one alt-tab from
+    /// whatever else is open. What goes are the parts that answer questions nobody is
+    /// asking while driving, which is everything except the map and how far along the
+    /// delivery is.
+    /// </summary>
+    private bool _focusMode;
+
     public MainForm() {
         Text = "Waybill";
         Width = 1100;
@@ -131,6 +144,13 @@ public partial class MainForm : Form {
         }
 
         BuildLayout();
+        KeyPreview = true;
+        KeyDown += (_, k) => {
+            if (k.KeyCode == Keys.F11 || (k.KeyCode == Keys.Escape && _focusMode)) {
+                ToggleFocus();
+                k.Handled = true;
+            }
+        };
 
         Load += (_, _) => {
             UseDarkTitleBar();
@@ -170,6 +190,9 @@ public partial class MainForm : Form {
         var content = BuildContent();
         var sidebar = BuildSidebar();
         var menu = BuildMenu();
+        _sidebar = sidebar;
+        sidebar.Visible = !_focusMode;
+        menu.Visible = !_focusMode;
 
         // Docked children stack in reverse order of adding, so the filling one goes
         // in first and the outermost edges last.
@@ -3271,7 +3294,7 @@ public partial class MainForm : Form {
     /// docked to fill, so there is no layout to anchor to.
     /// </summary>
     private void MapButtons(Control host, RouteView map, Action? expand, bool replay = false,
-                            DeliveryDetail? about = null) {
+                            DeliveryDetail? about = null, bool layers = true, bool fit = true) {
         var bar = new Panel { BackColor = Color.Transparent, Height = 26, Width = 0 };
 
         Button Glyph(string text, string tip, Action click) {
@@ -3289,8 +3312,10 @@ public partial class MainForm : Form {
             return b;
         }
 
-        var layers = Glyph("≡", Strings.T("map.layers"), () => { });
-        layers.Click += (_, _) => LayerMenu(map, about).Show(layers, new Point(0, layers.Height));
+        if (layers) {
+            var sheet = Glyph("≡", Strings.T("map.layers"), () => { });
+            sheet.Click += (_, _) => LayerMenu(map, about).Show(sheet, new Point(0, sheet.Height));
+        }
         // Only where one delivery is singled out: there is nothing to replay on the
         // map of everything, where no drive is more the subject than any other.
         if (replay) {
@@ -3299,7 +3324,7 @@ public partial class MainForm : Form {
                 if (_cardProfile is { IsDisposed: false } beside) beside.Replay();
             });
         }
-        Glyph("⟲", Strings.T("map.fit"), map.Fit);
+        if (fit) Glyph("⟲", Strings.T("map.fit"), map.Fit);
         if (expand is not null) Glyph("⤢", Strings.T("map.expand"), expand);
 
         void Place() => bar.Left = Math.Max(0, host.ClientSize.Width - bar.Width - 8);
