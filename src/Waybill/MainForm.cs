@@ -61,6 +61,21 @@ public partial class MainForm : Form {
     private Panel? _historyHead;
     private Panel? _historyLegend;
 
+    /// <summary>The trucks and the sittings, both stacks of cards. See CardStack.</summary>
+    private readonly CardStack _truckCards = new();
+    private readonly CardStack _sessionCards = new();
+
+    /// <summary>The routes of the game the map is showing, beside the drawing.</summary>
+    private readonly CardStack _mapList = new();
+
+    private void OnMapRouteOpened(object? behind) {
+        if (behind is long id) ShowDetail(id);
+    }
+    private Panel? _truckHead;
+    private Panel? _sessionHead;
+    private string _truckTotals = "";
+    private string _sessionTotals = "";
+
     /// <summary>What the page says beside its own name: how much history there is, in
     /// the units of whichever game is being shown.</summary>
     private string _historyTotals = "";
@@ -214,6 +229,7 @@ public partial class MainForm : Form {
         // Every panel, table and grid in the window paints into a buffer from here
         // on, which is what keeps a redraw from showing its working.
         SmoothPainting(this);
+        Retype(this);
 
         ReloadHistory();
         ReloadStats();
@@ -643,14 +659,40 @@ public partial class MainForm : Form {
             rows.AddRange(shelf.OrderByDescending(s => s.Earned).Select(AwardRow));
         }
 
+        // Two columns of panels under each shelf heading, which is what the awards are
+        // shaped like: a name, a sentence, a figure. One column down a wide window left
+        // two thirds of it empty and made a set of seventy two look like a list of
+        // seventy two chores.
+        var stacked = new List<Control>();
+        for (var i = 0; i < rows.Count; i++) {
+            if (rows[i].Tag as string == "shelf") {
+                stacked.Add(rows[i]);
+                continue;
+            }
+            var pair = new TableLayoutPanel {
+                Dock = DockStyle.Top, Height = 62, BackColor = Look.Window, ColumnCount = 2, RowCount = 1,
+                Margin = new Padding(0), Padding = new Padding(0),
+            };
+            pair.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            pair.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            pair.Controls.Add(rows[i], 0, 0);
+            if (i + 1 < rows.Count && rows[i + 1].Tag as string != "shelf") {
+                pair.Controls.Add(rows[i + 1], 1, 0);
+                i++;
+            }
+            stacked.Add(pair);
+        }
+
         // Docked children stack in reverse, so the list goes in backwards.
-        for (var i = rows.Count - 1; i >= 0; i--) _awardsList.Controls.Add(rows[i]);
+        for (var i = stacked.Count - 1; i >= 0; i--) _awardsList.Controls.Add(stacked[i]);
         UseDarkScrollbars(_awardsList);
+        UseDarkScrollbars(_awardsPage);
         SmoothPainting(_awardsList);
+        Retype(_awardsList);
     }
 
     private Control AwardShelf(Tracking.AwardGroup group, int earned, int all) {
-        var head = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = Canvas };
+        var head = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = Canvas, Tag = "shelf" };
         head.Controls.Add(new Label {
             Dock = DockStyle.Fill, ForeColor = Muted, TextAlign = ContentAlignment.BottomLeft,
             Font = new Font("Segoe UI", 9F, FontStyle.Bold),
@@ -750,30 +792,32 @@ public partial class MainForm : Form {
     private readonly DataGridView _truckGrid = new();
 
     /// <summary>
-    /// What each truck has done, side by side.
+    /// One panel per truck, in the order they have been used.
     ///
-    /// The statistics answer for a period and the card answers for one drive.
-    /// Neither answers "is the Volvo actually cheaper to run than the Peterbilt",
-    /// which is a question about the trucks rather than about the time or the job,
-    /// and needs them on lines under one another to be answered at all.
+    /// A grid of fourteen columns answered every question about a truck equally, which
+    /// is another way of saying it answered none of them first. What a driver asks is
+    /// which truck they use, how far it has gone and what it has cost; the rest is a
+    /// figure at the right end of its own card.
     /// </summary>
     private Panel BuildTrucksPage() {
-        var page = new Panel { Dock = DockStyle.Fill, BackColor = Canvas, Padding = new Padding(16, 12, 16, 16) };
+        var page = new Panel { Dock = DockStyle.Fill, BackColor = Look.Window, Padding = new Padding(Look.PagePad, 10, Look.PagePad, Look.PagePad) };
 
-        _truckGrid.Dock = DockStyle.Fill;
-        _truckGrid.AllowUserToAddRows = false;
-        _truckGrid.AllowUserToDeleteRows = false;
-        _truckGrid.ReadOnly = true;
-        _truckGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _truckGrid.MultiSelect = false;
-        _truckGrid.RowHeadersVisible = false;
-        _truckGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
-        _truckGrid.ScrollBars = ScrollBars.Both;
-        StyleGrid(_truckGrid);
-        _truckGrid.DataBindingComplete -= OnTrucksBound;
-        _truckGrid.DataBindingComplete += OnTrucksBound;
+        var head = new Panel { Dock = DockStyle.Top, Height = 34, BackColor = Look.Window };
+        head.Paint += (_, e) => {
+            var g = e.Graphics;
+            g.Clear(Look.Window);
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            Look.Text(g, Strings.T("tab.trucks"), Look.PageHeading, Look.Ink, 0, 6);
+            Look.TextRight(g, _truckTotals, Look.Small, Look.Dim, head.Width, 10);
+        };
+        _truckHead = head;
 
-        page.Controls.Add(_truckGrid);
+        _truckCards.Dock = DockStyle.Fill;
+        _truckCards.CardHeight = 76;
+        _truckCards.EmptyText = Strings.T("trucks.empty");
+
+        page.Controls.Add(_truckCards);
+        page.Controls.Add(head);
         return page;
     }
 
@@ -800,16 +844,29 @@ public partial class MainForm : Form {
             t.Styl = $"{t.Zasielky - t.Ostro} / {t.Ostro}";
         }
 
-        _truckGrid.DataSource = new SortableBindingList<TruckRow>(trucks.ToList(),
-            new Dictionary<string, string> {
-                [nameof(TruckRow.Vzdialenost)] = nameof(TruckRow.DistanceKm),
-                [nameof(TruckRow.Odmena)] = nameof(TruckRow.Zarobok),
-                [nameof(TruckRow.Palivo)] = nameof(TruckRow.PalivoRaw),
-                [nameof(TruckRow.Priemer)] = nameof(TruckRow.SpeedKmh),
-                [nameof(TruckRow.Pokuty)] = nameof(TruckRow.PokutyRaw),
-                [nameof(TruckRow.Poskodenie)] = nameof(TruckRow.DamagePerJob),
-            });
-        UseDarkScrollbars(_truckGrid);
+        // One card each, most used first, with the share of all deliveries this truck
+        // has pulled drawn across the middle. Damage is tinted by what it means rather
+        // than by how large it is: under a percent a run is a truck coming home whole.
+        var most = Math.Max(1, trucks.Sum(t => t.Zasielky));
+        _truckTotals = $"{trucks.Count} {Strings.T("trucks.haveWorked")}";
+        _truckHead?.Invalidate();
+
+        _truckCards.Show(trucks.Select(t => new CardStack.Card {
+            Title = t.Kamion,
+            Tag = t.Elektricky ? Strings.T("trucks.electric") : "",
+            Under = $"{GameName(t.Hra)} · {t.Kolizie}× {Strings.T("live.collisions")} · {t.Styl} {Strings.T("trucks.cleanSpirited")}",
+            Share = (float)t.Zasielky / most,
+            ShareLabel = $"{t.Zasielky} {Strings.T("list.deliveries")} · {t.Zasielky * 100 / most} %",
+            Figures = new List<CardStack.Figure> {
+                new() { Label = Strings.T("col.distance"), Value = t.Vzdialenost },
+                new() { Label = Strings.T("trucks.earned"), Value = t.Odmena,
+                        Ink = t.Zarobok < 0 ? Look.Lost : Look.Ink },
+                new() { Label = Strings.T("live.fines"), Value = t.Pokuty,
+                        Ink = t.PokutyRaw > 0 ? Look.Lost : Look.Ink },
+                new() { Label = Strings.T("trucks.damage"), Value = t.Poskodenie,
+                        Ink = t.DamagePerJob >= 0.02 ? Look.Lost : t.DamagePerJob >= 0.01 ? Look.Accent : Look.Whole },
+            },
+        }));
     }
 
     /// <summary>
@@ -904,42 +961,31 @@ public partial class MainForm : Form {
     private List<SessionRow> _sessions = new();
 
     /// <summary>
-    /// An evening's driving, rather than a delivery or a month.
+    /// One panel per sitting at the wheel, newest first.
     ///
-    /// The other two pages answer about one drive and about a period. Neither
-    /// answers "what did I get done last night", which is the question a driver
-    /// actually asks getting up from the desk, and which the deliveries can only
-    /// answer if you know which of them belong together.
+    /// A sitting is a shape rather than a row of figures: when it ran, where it went,
+    /// and what the hours in it went on. The bar across the middle says the last of
+    /// those without a single number: driving, resting, and everything else.
     /// </summary>
     private Panel BuildSessionsPage() {
-        var page = new Panel { Dock = DockStyle.Fill, BackColor = Canvas, Padding = new Padding(16, 12, 16, 16) };
+        var page = new Panel { Dock = DockStyle.Fill, BackColor = Look.Window, Padding = new Padding(Look.PagePad, 10, Look.PagePad, Look.PagePad) };
 
-        _sessionSide.Dock = DockStyle.Right;
-        _sessionSide.Width = 320;
-        _sessionSide.BackColor = Surface;
-        _sessionSide.Padding = new Padding(0);
-        _sessionSide.AutoScroll = true;
-        _sessionSide.Controls.Clear();
+        var head = new Panel { Dock = DockStyle.Top, Height = 34, BackColor = Look.Window };
+        head.Paint += (_, e) => {
+            var g = e.Graphics;
+            g.Clear(Look.Window);
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            Look.Text(g, Strings.T("tab.sessions"), Look.PageHeading, Look.Ink, 0, 6);
+            Look.TextRight(g, _sessionTotals, Look.Small, Look.Dim, head.Width, 10);
+        };
+        _sessionHead = head;
 
-        _sessionGrid.Dock = DockStyle.Fill;
-        _sessionGrid.AllowUserToAddRows = false;
-        _sessionGrid.AllowUserToDeleteRows = false;
-        _sessionGrid.ReadOnly = true;
-        _sessionGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _sessionGrid.MultiSelect = false;
-        _sessionGrid.RowHeadersVisible = false;
-        _sessionGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
-        _sessionGrid.ScrollBars = ScrollBars.Both;
-        StyleGrid(_sessionGrid);
-        _sessionGrid.DataBindingComplete -= OnSessionsBound;
-        _sessionGrid.DataBindingComplete += OnSessionsBound;
-        _sessionGrid.SelectionChanged -= OnSessionPicked;
-        _sessionGrid.SelectionChanged += OnSessionPicked;
+        _sessionCards.Dock = DockStyle.Fill;
+        _sessionCards.CardHeight = 76;
+        _sessionCards.EmptyText = Strings.T("sessions.empty");
 
-        var gap = new Panel { Dock = DockStyle.Right, Width = 12, BackColor = Canvas };
-        page.Controls.Add(_sessionGrid);
-        page.Controls.Add(gap);
-        page.Controls.Add(_sessionSide);
+        page.Controls.Add(_sessionCards);
+        page.Controls.Add(head);
         return page;
     }
 
@@ -976,15 +1022,49 @@ public partial class MainForm : Form {
         // Every column written as words sorts on the figure behind it. Clicking
         // "lasted" has to put an hour and a half above fifty minutes, and it cannot do
         // that by comparing the words they are written as.
-        _sessionGrid.DataSource = new SortableBindingList<SessionRow>(_sessions.ToList(),
-            new Dictionary<string, string> {
-                [nameof(SessionRow.Trvanie)] = nameof(SessionRow.DurationMs),
-                [nameof(SessionRow.Vzdialenost)] = nameof(SessionRow.DistanceKm),
-                [nameof(SessionRow.Odmena)] = nameof(SessionRow.Zarobok),
-                [nameof(SessionRow.Priemer)] = nameof(SessionRow.SpeedKmh),
-                [nameof(SessionRow.Oddych)] = nameof(SessionRow.RestMinutes),
-            });
-        UseDarkScrollbars(_sessionGrid);
+        // One card per sitting, newest first: when it was and how long it ran on the
+        // left, the cities it went through in the middle over a bar of what the hours
+        // went on, and three figures at the right.
+        _sessionTotals = $"{_sessions.Count} {Strings.T("sessions.sittings")}";
+        _sessionHead?.Invalidate();
+
+        _sessionCards.Show(_sessions.Select(one => {
+            var u = Units.For(_settings.Units, one.Hra);
+            var drove = _rows.Where(r => r.Datum <= one.Do && r.Dokoncene >= one.Od)
+                             .OrderBy(r => r.Datum).ToList();
+            var chain = drove.Select(r => r.Odkial).Concat(drove.Count > 0 ? new[] { drove[^1].Kam } : Array.Empty<string>())
+                             .Distinct().ToList();
+
+            // What the hours went on, as three blocks: driving, resting, and the rest
+            // of the sitting, which is menus, ferries and standing about.
+            // Measured in the game's own minutes, which is what a sitting is counted in.
+            // The wheel is split between the deliveries and the driving off them, the
+            // bunk is its own block, and whatever is left is left empty rather than
+            // filled with a colour that would have to mean "the rest".
+            var minutes = Math.Max(1, one.GameMinutes);
+            var wheel = one.DistanceKm > 0 && one.SpeedKmh > 0
+                ? (one.DistanceKm + one.FreeroamKm) / one.SpeedKmh * 60 : 0;
+            var driving = Math.Clamp(wheel / minutes, 0, 1);
+            var offTheJob = one.DistanceKm + one.FreeroamKm > 0
+                ? one.FreeroamKm / (one.DistanceKm + one.FreeroamKm) : 0;
+            var resting = Math.Clamp(one.RestMinutes / minutes, 0, 1 - driving);
+
+            return new CardStack.Card {
+                Title = one.Od.ToString("dd.MM.yyyy"),
+                Under = $"{one.Od:HH:mm} → {one.Do:HH:mm}",
+                Middle = chain.Count > 0 ? string.Join("  →  ", chain) : Strings.T("sessions.nothingDriven"),
+                Bar = new List<CardStack.Block> {
+                    new() { Part = (float)(driving * (1 - offTheJob)), Hue = Look.Accent },
+                    new() { Part = (float)(driving * offTheJob), Hue = Look.Route },
+                    new() { Part = (float)resting, Hue = Look.Slate },
+                },
+                Figures = new List<CardStack.Figure> {
+                    new() { Label = Strings.T("sessions.atTheWheel"), Value = one.Trvanie },
+                    new() { Label = Strings.T("list.deliveries"), Value = one.Zasielky.ToString() },
+                    new() { Label = Strings.T("col.distance"), Value = one.Vzdialenost },
+                },
+            };
+        }));
     }
 
     private void OnSessionsBound(object? sender, DataGridViewBindingCompleteEventArgs e) {
@@ -1223,11 +1303,21 @@ public partial class MainForm : Form {
         var bar = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = Canvas };
         bar.Controls.Add(_mapGame);
 
-        var frame = new Panel { Dock = DockStyle.Fill, BackColor = Line, Padding = new Padding(1) };
+        var frame = new Panel { Dock = DockStyle.Fill, BackColor = Look.Border, Padding = new Padding(1) };
         frame.Controls.Add(map);
         MapButtons(frame, map, null);
 
+        // The routes as a list beside the drawing, since a line on a map says where but
+        // not when, and the two together are how somebody finds the drive they mean.
+        _mapList.Dock = DockStyle.Right;
+        _mapList.Width = 250;
+        _mapList.CardHeight = 44;
+        _mapList.EmptyText = "";
+        _mapList.Opened -= OnMapRouteOpened;
+        _mapList.Opened += OnMapRouteOpened;
+
         page.Controls.Add(frame);
+        page.Controls.Add(_mapList);
         page.Controls.Add(bar);
         return page;
     }
@@ -1291,6 +1381,14 @@ public partial class MainForm : Form {
         var routes = RoutesFor(game);
         map.GameMap = GameMapFor(game, Ground(routes.Routes.Values));
         map.Show(Layers(routes), 0, routes.Cities);
+
+        // The same drives as a list, newest first, each naming its two ends and what it
+        // carried. Clicking one opens its card, the way clicking the line does.
+        _mapList.Show(_rows.Where(r => r.Hra == game).Select(r => new CardStack.Card {
+            Title = $"{r.Odkial} → {r.Kam}",
+            Under = $"{r.Datum:dd.MM.yy} · {r.Vzdialenost} · {r.Naklad}",
+            Behind = r.Id,
+        }));
     }
 
     // ---------- menu ----------
@@ -2655,69 +2753,39 @@ public partial class MainForm : Form {
         return new HistorySlice(fromMs, toMs, game);
     }
 
-    /// <summary>One figure: the number large enough to read at a glance, the caption
-    /// under it out of the way.</summary>
+    /// <summary>
+    /// One figure on the statistics page: a small capital label, the figure itself, and
+    /// a dim line under it saying what it is measured against.
+    ///
+    /// Painted rather than stacked out of three labels. A label cannot letter-space its
+    /// capitals, cannot align its baseline with the figure beneath it, and brings a
+    /// layout panel with it to hold the three of them apart.
+    /// </summary>
     private static Control StatTile(string caption, string value, string? note = null) {
-        var card = new Panel {
-            Dock = DockStyle.Fill,
-            Margin = new Padding(0, 0, 12, 12),
-            BackColor = Surface,
-            Padding = new Padding(16, 10, 16, 10),
-        };
+        var tile = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 12, 12), BackColor = Look.Panel };
+        tile.Paint += (_, e) => {
+            var g = e.Graphics;
+            g.Clear(Look.Window);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            Look.Surface(g, new RectangleF(0, 0, tile.Width - 1, tile.Height - 1), Look.Panel, Look.Hairline);
 
-        // Three rows that take what they need rather than what they were given: the
-        // caption and the note as tall as one line of their own type, the figure
-        // everything left over. Fixed heights meant a tile in a shorter section
-        // wasted space and one in a crowded window clipped.
-        var inner = new TableLayoutPanel {
-            Dock = DockStyle.Fill, BackColor = Surface, Margin = new Padding(0), Padding = new Padding(0),
-            ColumnCount = 1, RowCount = 4,
+            var room = tile.Width - 32;
+            Look.Tracked(g, caption.ToUpperInvariant(), Look.Label, Look.Dim, 16, 13);
+            // A figure is stepped down the scale before it is cut short. Two currencies
+            // side by side, or an hour count with its unit spelled out, is a true figure
+            // that happens to be long, and a clipped one answers nothing.
+            var font = Look.FigureLarge;
+            foreach (var step in new[] { 23f, 20f, 17.5f, 15.5f }) {
+                font = step >= 23f ? Look.FigureLarge : Look.Semi(step);
+                if (Look.Measure(g, value, font).Width <= room) break;
+            }
+            Look.Text(g, Look.Clip(g, value, font, room), font, Look.Ink, 16, 30 + (23 - font.Size) / 2);
+            if (!string.IsNullOrEmpty(note)) {
+                Look.Text(g, Look.Clip(g, note, Look.Caption, room), Look.Caption, Look.Dim, 16, 60);
+            }
         };
-        inner.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        // Each line takes exactly its own height and the slack goes to the bottom, so
-        // the three of them stay together at the top of the tile. Giving the figure
-        // the slack instead pushed the note down to the floor, away from what it was
-        // a note about.
-        inner.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        inner.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        inner.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        inner.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-
-        // One line each, shortened with an ellipsis rather than wrapped. A wrapped
-        // note grew past the height a tile has and lost its last line off the bottom
-        // with nothing to show for it; shortened, it says how much is missing and the
-        // tooltip has the rest.
-        var captionLabel = new Label {
-            Dock = DockStyle.Fill, AutoSize = false, Height = 17, Text = caption.ToUpperInvariant(),
-            ForeColor = Muted, Font = new Font("Segoe UI", 7.5F, FontStyle.Bold),
-            Margin = new Padding(0), AutoEllipsis = true,
-        };
-        var valueLabel = new Label {
-            Dock = DockStyle.Fill, AutoSize = true, Text = value, ForeColor = Ink,
-            Font = new Font("Segoe UI", 17F, FontStyle.Bold),
-            Margin = new Padding(0, 3, 0, 3), AutoEllipsis = true,
-        };
-        var noteLabel = new Label {
-            Dock = DockStyle.Fill, AutoSize = false, Height = 18, Text = note ?? "",
-            ForeColor = Muted, Font = new Font("Segoe UI", 8F),
-            Margin = new Padding(0), AutoEllipsis = true,
-        };
-
-
-        inner.Controls.Add(captionLabel, 0, 0);
-        inner.Controls.Add(valueLabel, 0, 1);
-        inner.Controls.Add(noteLabel, 0, 2);
-        card.Controls.Add(inner);
-
-        // Nothing is allowed to disappear silently: whatever ends up shortened still
-        // says the whole of itself when pointed at.
-        var tips = new ToolTip();
-        tips.SetToolTip(captionLabel, caption);
-        tips.SetToolTip(valueLabel, value);
-        if (!string.IsNullOrEmpty(note)) tips.SetToolTip(noteLabel, note);
-        // Handed to the row, which sizes every figure in a section together.
-        card.Tag = valueLabel;
-        return card;
+        return tile;
     }
 
     /// <summary>
@@ -2767,26 +2835,50 @@ public partial class MainForm : Form {
     /// around them.</summary>
     private const float TileHeight = 112F;
 
+    /// <summary>
+    /// A strip of figures across the page.
+    ///
+    /// Every strip is laid out on the same number of columns whatever it holds, so a
+    /// tile in a group of three is exactly as wide as a tile in a group of five and the
+    /// eye reads down the page as well as across it.
+    /// </summary>
+    private const int StatColumns = 5;
+
     private static Control TileRow(Control[] tiles) {
         var row = new TableLayoutPanel {
-            Dock = DockStyle.Fill, BackColor = Canvas,
+            Dock = DockStyle.Fill, BackColor = Look.Window,
             Margin = new Padding(0), Padding = new Padding(0),
-            ColumnCount = Math.Max(tiles.Length, 1), RowCount = 1,
+            ColumnCount = StatColumns, RowCount = 1,
         };
         row.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        for (var i = 0; i < tiles.Length; i++) {
-            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F / tiles.Length));
-            row.Controls.Add(tiles[i], i, 0);
+        for (var i = 0; i < StatColumns; i++) {
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F / StatColumns));
         }
-        FitTogether(row, tiles.Select(t => t.Tag as Label).OfType<Label>().ToList(), 17F, 9F);
+        for (var i = 0; i < tiles.Length && i < StatColumns; i++) row.Controls.Add(tiles[i], i, 0);
         return row;
     }
 
-    private static Control StatHeading(string text) => new Label {
-        Dock = DockStyle.Fill, Text = text, TextAlign = ContentAlignment.BottomLeft,
-        Margin = new Padding(0, 4, 0, 6), BackColor = Canvas,
-        ForeColor = Ink, Font = new Font("Segoe UI", 10.5F, FontStyle.Bold),
-    };
+    /// <summary>A group opens with its name, a dim note, and a hairline filling the
+    /// rest of the line.</summary>
+    private static Control StatHeading(string text, string note = "") {
+        var head = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0, 6, 0, 8), BackColor = Look.Window };
+        head.Paint += (_, e) => {
+            var g = e.Graphics;
+            g.Clear(Look.Window);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            var y = head.Height - 20;
+            Look.Text(g, text, Look.Strong, Look.Ink, 0, y);
+            var at = Look.Measure(g, text, Look.Strong).Width + 12;
+            if (note.Length > 0) {
+                Look.Text(g, note, Look.Caption, Look.Dim, at, y + 2);
+                at += Look.Measure(g, note, Look.Caption).Width + 12;
+            }
+            using var rule = new Pen(Look.Hairline);
+            g.DrawLine(rule, at, y + 8, head.Width, y + 8);
+        };
+        return head;
+    }
 
     // ---------- delivery detail ----------
 
@@ -2808,10 +2900,11 @@ public partial class MainForm : Form {
         });
         ShowPage("detail");
         // Built just now, so its scrolling parts have not been asked for the dark
-        // theme yet and would come up as bright white bars, and none of them has been
-        // told to paint into a buffer either.
+        // theme yet and would come up as bright white bars, none of them has been told
+        // to paint into a buffer, and none of them is on the type scale.
         UseDarkScrollbars(_detailPage);
         SmoothPainting(_detailPage);
+        Retype(_detailPage);
     }
 
     /// <summary>A city as this driver has asked to see it: with the state or the
@@ -4024,7 +4117,60 @@ public partial class MainForm : Form {
         // the first thing anyone asks about a delivery, so it reads across the top
         // rather than as one more row buried in the list of facts.
         body.Controls.Add(VerdictBand(d, u));
+        // Over the verdict, four figures about the drive: what a delivery is, before
+        // any of the detail under it. Added last so it docks above everything else.
+        body.Controls.Add(DetailFigures(d, u));
         return body;
+    }
+
+    /// <summary>
+    /// The strip of four along the top of a card: how far, what it paid, how long it
+    /// took, and what it cost the truck.
+    ///
+    /// The same shape as the strip on the live page, because it answers the same
+    /// question about the same drive, only afterwards.
+    /// </summary>
+    private Control DetailFigures(DeliveryDetail d, Units u) {
+        var strip = new Panel { Dock = DockStyle.Top, Height = 68, BackColor = Look.Window, Margin = new Padding(0) };
+        var hours = d.DrivingGameMin / 60;
+        var damage = Math.Max(d.TruckDamage, d.TrailerDamage) * 100;
+
+        strip.Paint += (_, e) => {
+            var g = e.Graphics;
+            g.Clear(Look.Window);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            Look.Surface(g, new RectangleF(0, 0, strip.Width - 1, strip.Height - 5), Look.Panel, Look.Hairline);
+
+            var tiles = new (string Label, string Figure, string Under, Color Ink)[] {
+                (Strings.T("col.distance"), u.FormatDistance(d.DistanceKm),
+                 d.PlannedDistanceKm > 0 ? $"{Strings.T("detail.planned")} {u.FormatDistance(d.PlannedDistanceKm)}" : "", Look.Ink),
+                (Strings.T("col.pay"), u.FormatMoney(d.Revenue > 0 ? d.Revenue : -d.Penalty),
+                 d.OfferedIncome > 0 ? $"{Strings.T("detail.offered")} {u.FormatMoney(d.OfferedIncome)}" : "",
+                 d.Revenue > 0 ? Look.Ink : Look.Lost),
+                (Strings.T("detail.timeGame"), Units.Duration(d.DrivingGameMin),
+                 d.RestStops > 0 ? $"{d.RestStops}× {Strings.T("detail.rest")}" : Strings.T("detail.noRest"), Look.Ink),
+                // What the drive cost the set, with the collisions under it. Wear on its
+                // own is a truck getting older; a collision is something that happened.
+                (Strings.T("trucks.damage"), $"{damage:0.00} %",
+                 d.Collisions > 0 ? $"{d.Collisions}× {Strings.T("live.collisions")}"
+                     : damage < 0.05 ? Strings.T("live.notAScratch") : Strings.T("detail.wearOnly"),
+                 damage < 0.05 ? Look.Whole : damage < 1 ? Look.Accent : Look.Lost),
+            };
+
+            var wide = (strip.Width - 2) / (float)tiles.Length;
+            for (var i = 0; i < tiles.Length; i++) {
+                var at = new RectangleF(1 + i * wide, 1, wide, strip.Height - 7);
+                if (i > 0) {
+                    using var line = new Pen(Look.Hairline);
+                    g.DrawLine(line, at.X, at.Y + 10, at.X, at.Bottom - 10);
+                }
+                var (label, figure, under, ink) = tiles[i];
+                Look.FigureTile(g, new RectangleF(at.X + 16, at.Y + 12, at.Width - 24, at.Height - 16),
+                                label, figure, under, ink, figureFont: Look.FigureSmall);
+            }
+        };
+        return strip;
     }
 
     /// <summary>Why this delivery got the verdict it did, in words. Every flag is

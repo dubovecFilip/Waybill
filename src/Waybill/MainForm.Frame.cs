@@ -326,6 +326,35 @@ public partial class MainForm {
                   Look.Caption, Look.Faint, 12, panel.Height - 20);
     }
 
+    /// <summary>
+    /// Puts every control on the type scale.
+    ///
+    /// The pages were written against point sizes, which are right at 96 dpi and wrong
+    /// on every other screen, and against three weights of Segoe UI chosen a page at a
+    /// time. Rather than edit two hundred call sites, the tree is walked once when the
+    /// layout is built and each font is mapped to the nearest step of the scale. New
+    /// work uses Look directly; this is what carries the pages that came before it.
+    /// </summary>
+    private static void Retype(Control root) {
+        foreach (Control child in root.Controls) {
+            if (child is RouteView or HeightView) continue;
+            if (child.Font is { } was && !ReferenceEquals(was, Look.Body)) {
+                var bold = was.Bold;
+                var points = was.Unit == GraphicsUnit.Point ? was.SizeInPoints : was.Size * 0.75f;
+                child.Font = points switch {
+                    >= 15f => Look.CardTitle,
+                    >= 12f => bold ? Look.PageHeading : Look.Semi(16),
+                    >= 10.5f => bold ? Look.Semi(14) : Look.BodyLarge,
+                    >= 9.5f => bold ? Look.Strong : Look.Body,
+                    >= 8.8f => bold ? Look.StrongSmall : Look.Body,
+                    >= 8f => bold ? Look.CaptionSemi : Look.Small,
+                    _ => Look.Caption,
+                };
+            }
+            Retype(child);
+        }
+    }
+
     /// <summary>Redraws the frame's own figures. Called whenever the history behind
     /// them changes, since none of them is a control that could notice on its own.</summary>
     private void RefreshFrame() {
