@@ -93,6 +93,11 @@ public static partial class Strings {
 
         // tabs and toolbar
         ["tab.live"] = "Aktuálna zákazka",
+        ["nav.driving"] = "Jazda",
+        ["nav.book"] = "Kniha",
+        ["nav.live"] = "naživo",
+        ["nav.awardsFound"] = "nájdených ocenení",
+        ["chip.recording"] = "nahrávam",
         ["tab.deliveries"] = "Zásielky",
         ["tab.stats"] = "Štatistiky",
         ["search.placeholder"] = "hľadať mesto / náklad / ťahač...",

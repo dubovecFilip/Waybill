@@ -151,7 +151,10 @@ public static class Look {
         return wanted[^1];
     }
 
-    private static readonly HashSet<string> Faces = Families();
+    /// <summary>Read on the first question rather than at type load: the fields above
+    /// are initialised in the order they are declared, and asking a field further down
+    /// the file is asking for null.</summary>
+    private static HashSet<string>? _faces;
 
     private static HashSet<string> Families() {
         var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -162,7 +165,7 @@ public static class Look {
         return found;
     }
 
-    private static bool Installed(string name) => Faces.Contains(name);
+    private static bool Installed(string name) => (_faces ??= Families()).Contains(name);
 
     /// <summary>A rounded rectangle, since GDI+ has no such shape of its own.</summary>
     public static GraphicsPath Rounded(RectangleF box, float radius) {
@@ -210,6 +213,13 @@ public static class Look {
         using var brush = new SolidBrush(ink);
         var at = x;
         foreach (var letter in text) {
+            // A space measures as nothing on its own under typographic measurement, so
+            // it is given a width rather than asked for one; "THE BOOK" ran together
+            // into one word without this.
+            if (letter == ' ') {
+                at += font.Size * 0.34f + tracking;
+                continue;
+            }
             var one = letter.ToString();
             g.DrawString(one, font, brush, at - 1f, y, StringFormat.GenericTypographic);
             at += g.MeasureString(one, font, PointF.Empty, StringFormat.GenericTypographic).Width - 2f + tracking;
@@ -221,7 +231,9 @@ public static class Look {
     public static float TrackedWidth(Graphics g, string text, Font font, float tracking = 1.1f) {
         var wide = 0f;
         foreach (var letter in text) {
-            wide += g.MeasureString(letter.ToString(), font, PointF.Empty, StringFormat.GenericTypographic).Width - 2f + tracking;
+            wide += letter == ' '
+                ? font.Size * 0.34f + tracking
+                : g.MeasureString(letter.ToString(), font, PointF.Empty, StringFormat.GenericTypographic).Width - 2f + tracking;
         }
         return wide;
     }

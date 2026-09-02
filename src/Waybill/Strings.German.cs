@@ -92,6 +92,11 @@ public static partial class Strings {
         ["menu.folder.sessions"] = "Aufzeichnungsordner",
 
         ["tab.live"] = "Aktueller Auftrag",
+        ["nav.driving"] = "Fahrt",
+        ["nav.book"] = "Das Buch",
+        ["nav.live"] = "live",
+        ["nav.awardsFound"] = "Auszeichnungen gefunden",
+        ["chip.recording"] = "Aufnahme",
         ["tab.deliveries"] = "Lieferungen",
         ["tab.stats"] = "Statistik",
         ["search.placeholder"] = "Stadt / Ladung / Zugmaschine suchen...",

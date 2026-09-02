@@ -137,7 +137,7 @@ public partial class MainForm {
         _focusMode = !_focusMode;
         Quiet(this, () => {
             if (_sidebar is { } bar) bar.Visible = !_focusMode;
-            if (MainMenuStrip is { } menu) menu.Visible = !_focusMode;
+            if (_titleBar is { } chrome) chrome.Visible = !_focusMode;
             BuildJobPage();
             ShowPage("live");
         });
@@ -495,6 +495,11 @@ public partial class MainForm {
         var job = _engine.ActiveJob;
         var state = _engine.ActiveState;
         var u = CurrentUnits();
+
+        // The chip along the top of the window says which game is attached, and it is
+        // this refresh that knows. Named as the game names itself, not as the database
+        // spells it.
+        SayAttached(_engine.Connected ? GameName(_engine.WhereGame) : "", _engine.Connected);
 
         if (job is null || state is null) {
             _status.Text = (_engine.Connected

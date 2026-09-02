@@ -92,6 +92,11 @@ public static partial class Strings {
         ["menu.folder.sessions"] = "Carpeta de grabaciones",
 
         ["tab.live"] = "Trabajo actual",
+        ["nav.driving"] = "Conducción",
+        ["nav.book"] = "El libro",
+        ["nav.live"] = "en directo",
+        ["nav.awardsFound"] = "logros encontrados",
+        ["chip.recording"] = "grabando",
         ["tab.deliveries"] = "Entregas",
         ["tab.stats"] = "Estadísticas",
         ["search.placeholder"] = "buscar ciudad / carga / camión...",

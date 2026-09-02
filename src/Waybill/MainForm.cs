@@ -190,18 +190,17 @@ public partial class MainForm : Form {
         BackColor = Canvas;
 
         var content = BuildContent();
-        var sidebar = BuildSidebar();
-        var menu = BuildMenu();
+        var sidebar = BuildSidebarColumn();
+        var bar = BuildTitleBar();
         _sidebar = sidebar;
         sidebar.Visible = !_focusMode;
-        menu.Visible = !_focusMode;
+        bar.Visible = !_focusMode;
 
         // Docked children stack in reverse order of adding, so the filling one goes
         // in first and the outermost edges last.
         Controls.Add(content);
         Controls.Add(sidebar);
-        Controls.Add(menu);
-        MainMenuStrip = menu;
+        Controls.Add(bar);
 
         // Every panel, table and grid in the window paints into a buffer from here
         // on, which is what keeps a redraw from showing its working.
@@ -771,6 +770,9 @@ public partial class MainForm : Form {
 
     private void ReloadTrucks() {
         var trucks = _store.TruckTotals();
+        // The column down the left carries the count, and this is the one place that
+        // knows it without asking the database a second time.
+        _navTrucks = trucks.Count;
         foreach (var t in trucks) {
             var u = Units.For(_settings.Units, t.Hra);
             t.Vzdialenost = u.FormatDistance(t.DistanceKm);
@@ -942,6 +944,7 @@ public partial class MainForm : Form {
         }
 
         _sessions = Tracking.Sessions.List(_store, _settings.SessionGapMinutes);
+        _navSessions = _sessions.Count;
         foreach (var s in _sessions) {
             var u = Units.For(_settings.Units, s.Hra);
             s.DurationMs = s.ToMs - s.FromMs;
@@ -1099,89 +1102,9 @@ public partial class MainForm : Form {
         SmoothPainting(_sessionSide);
     }
 
-    private Panel BuildSidebar() {
-        var bar = new Panel {
-            Dock = DockStyle.Left, Width = SidebarWidth(_settings.SidebarWidth),
-            BackColor = Surface, Padding = new Padding(12, 16, 12, 12),
-        };
-        var edge = new Panel { Dock = DockStyle.Right, Width = 1, BackColor = Line };
-
-        // Down in the corner, quiet, out of the way of everything and never more
-        // than a glance away. Which build somebody is running is the first thing
-        // worth knowing about any report of something being wrong, and asking them
-        // to find it is asking them to go looking through file properties.
-        var version = new Label {
-            Dock = DockStyle.Bottom, Height = 20, Text = AppVersion,
-            ForeColor = Color.FromArgb(96, 104, 116), BackColor = Surface,
-            Font = new Font("Segoe UI", 8F), TextAlign = ContentAlignment.MiddleLeft,
-        };
-
-        // Added bottom-up so the first entry ends up on top. The strip of what just
-        // happened goes in after the version and therefore sits above it, between the
-        // pages and the corner where the build is written.
-        bar.Controls.Add(BuildFeed());
-        bar.Controls.Add(version);
-        bar.Controls.Add(NavButton("stats", Strings.T("tab.stats")));
-        bar.Controls.Add(NavButton("map", Strings.T("tab.map")));
-        bar.Controls.Add(NavButton("awards", Strings.T("tab.awards")));
-        bar.Controls.Add(NavButton("trucks", Strings.T("tab.trucks")));
-        bar.Controls.Add(NavButton("sessions", Strings.T("tab.sessions")));
-        bar.Controls.Add(NavButton("deliveries", Strings.T("tab.deliveries")));
-        bar.Controls.Add(NavButton("live", Strings.T("tab.live")));
-        bar.Controls.Add(edge);
-        bar.Controls.Add(SidebarGrip(bar));
-        return bar;
-    }
-
     /// <summary>Between a column too narrow for its own words and one that has eaten
     /// the page beside it.</summary>
     private static int SidebarWidth(int asked) => Math.Clamp(asked, 176, 380);
-
-    /// <summary>
-    /// The handle down the edge of the sidebar.
-    ///
-    /// The strip of what just happened lives at the foot of this column, and an award
-    /// called NOT EVEN A SCRATCH does not fit in it. How much of that is worth the
-    /// width of the page beside it is not a question with one answer, so it is left to
-    /// whoever is reading, and what they choose is remembered.
-    /// </summary>
-    private Control SidebarGrip(Panel bar) {
-        var grip = new Panel { Dock = DockStyle.Right, Width = 5, BackColor = Surface, Cursor = Cursors.SizeWE };
-
-        grip.Paint += (_, e) => {
-            // The same short bar the card's own handles wear, for the same reason: a
-            // rule down the whole edge reads as a border, and nobody pulls a border.
-            using var pen = new Pen(Line, 1f);
-            var mid = grip.Height / 2;
-            for (var y = mid - 14; y <= mid + 14; y += 4) e.Graphics.DrawLine(pen, 1, y, 3, y);
-        };
-
-        var pulling = false;
-        var from = 0;
-        var started = 0;
-
-        grip.MouseDown += (_, e) => {
-            if (e.Button != MouseButtons.Left) return;
-            pulling = true;
-            grip.Capture = true;
-            // Screen coordinates, since the handle moves with the column it sizes.
-            from = Cursor.Position.X;
-            started = bar.Width;
-        };
-        grip.MouseMove += (_, _) => {
-            if (!pulling) return;
-            bar.Width = SidebarWidth(started + (Cursor.Position.X - from));
-        };
-        grip.MouseUp += (_, _) => {
-            if (!pulling) return;
-            pulling = false;
-            _settings.SidebarWidth = bar.Width;
-            _settings.Save();
-            DrawFeed();
-        };
-
-        return grip;
-    }
 
     /// <summary>
     /// The build, as the project file spells it.
@@ -1204,27 +1127,6 @@ public partial class MainForm : Form {
         }
     }
 
-    private Button NavButton(string page, string label) {
-        var selected = _page == page;
-        var b = new Button {
-            Text = "   " + label,
-            Dock = DockStyle.Top,
-            Height = 38,
-            Margin = new Padding(0, 0, 0, 6),
-            TextAlign = ContentAlignment.MiddleLeft,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = selected ? AccentSoft : Surface,
-            ForeColor = selected ? Accent : Ink,
-            Font = new Font("Segoe UI", 10F, selected ? FontStyle.Bold : FontStyle.Regular),
-            Cursor = Cursors.Hand,
-            Tag = page,
-        };
-        b.FlatAppearance.BorderSize = 0;
-        b.FlatAppearance.MouseOverBackColor = selected ? AccentSoft : Canvas;
-        b.Click += (_, _) => ShowPage(page);
-        return b;
-    }
-
     private void ShowPage(string page) {
         _page = page;
 
@@ -1234,16 +1136,9 @@ public partial class MainForm : Form {
             c.Visible = (string?)c.Tag == page;
         }
 
-        // The buttons carry their own selected styling, so they are restyled rather
-        // than rebuilt, which would lose the click that is still being handled.
-        foreach (var b in Controls.OfType<Panel>().SelectMany(p => p.Controls.OfType<Button>())) {
-            if (b.Tag is not string tag) continue;
-            var selected = tag == page;
-            b.BackColor = selected ? AccentSoft : Surface;
-            b.ForeColor = selected ? Accent : Ink;
-            b.Font = new Font("Segoe UI", 10F, selected ? FontStyle.Bold : FontStyle.Regular);
-            b.FlatAppearance.MouseOverBackColor = selected ? AccentSoft : Canvas;
-        }
+        // The column is painted rather than built out of buttons, so it is asked to
+        // draw itself again instead of being restyled control by control.
+        RefreshFrame();
     }
 
     private Panel BuildContent() {

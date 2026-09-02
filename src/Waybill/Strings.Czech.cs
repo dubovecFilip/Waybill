@@ -92,6 +92,11 @@ public static partial class Strings {
         ["menu.folder.sessions"] = "Složka s nahrávkami",
 
         ["tab.live"] = "Aktuální zakázka",
+        ["nav.driving"] = "Jízda",
+        ["nav.book"] = "Kniha",
+        ["nav.live"] = "živě",
+        ["nav.awardsFound"] = "nalezených ocenění",
+        ["chip.recording"] = "nahrávám",
         ["tab.deliveries"] = "Zásilky",
         ["tab.stats"] = "Statistiky",
         ["search.placeholder"] = "hledat město / náklad / tahač...",
