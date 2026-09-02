@@ -174,6 +174,12 @@ public class JobState {
     /// untouched.
     /// </summary>
     public double LastTrailerWear;
+
+    /// <summary>The truck's wear at the last reading, so the page a driver is looking
+    /// at can say what this job has done to it without waiting for the job to end.
+    /// The record works the difference out again at the close; this is the same figure
+    /// while it is still running.</summary>
+    public double LastTruckWear;
     /// <summary>How knocked about the load was when it went on. Null until it does.</summary>
     public double? StartCargoDamage;
     /// <summary>Which way the truck was pointing when it was last seen, nought to
@@ -805,6 +811,7 @@ public class JobTracker {
             // against a zeroed baseline and report a bogus negative damage figure.
             StartTrailerWear = snap.Trailer.Wear,
             LastTrailerWear = snap.Trailer.Wear,
+            LastTruckWear = snap.Truck.Wear.Total(),
             LastOdometerKm = snap.Truck.OdometerKm,
             // Already hitched when the job began, which is how a quick job starts:
             // the truck is placed at the depot with the load on. There was no
@@ -1112,6 +1119,7 @@ public class JobTracker {
 
         TrackTrailerChain(j, snap);
         if (snap.Trailer.Present) j.LastTrailerWear = snap.Trailer.Wear;
+        j.LastTruckWear = snap.Truck.Wear.Total();
 
         j.Heading = snap.HeadingTurns;
 

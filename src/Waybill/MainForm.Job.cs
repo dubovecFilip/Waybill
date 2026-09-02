@@ -59,7 +59,7 @@ public partial class MainForm {
     private Panel BuildJobPage() {
         _jobPage.Dock = DockStyle.Fill;
         _jobPage.BackColor = Canvas;
-        _jobPage.Padding = _focusMode ? new Padding(0) : new Padding(16, 8, 16, 16);
+        _jobPage.Padding = _focusMode ? new Padding(0) : new Padding(Look.PagePad, 10, Look.PagePad, Look.PagePad);
         _jobPage.Controls.Clear();
 
         // With the window given over to the drive there is the map, and under it how
@@ -74,16 +74,15 @@ public partial class MainForm {
             return _jobPage;
         }
 
-        // Added innermost first: the map takes what the card above it leaves.
-        if (_settings.LiveMap) _jobPage.Controls.Add(BuildJobMap());
-        else _jobMap = null;
-        _jobPage.Controls.Add(new Panel { Dock = DockStyle.Top, Height = 12, BackColor = Canvas });
-        _jobPage.Controls.Add(BuildJobCard());
-        _jobPage.Controls.Add(new Label {
-            Dock = DockStyle.Top, Height = 36, Text = Strings.T("job.onTheRoad"), BackColor = Canvas,
-            ForeColor = Ink, Font = new Font("Segoe UI", 10.5F, FontStyle.Bold),
-            Padding = new Padding(0, 8, 0, 0),
-        });
+        // Added innermost first, so the map takes whatever the hero above it leaves.
+        var body = new Panel { Dock = DockStyle.Fill, BackColor = Look.Window, Padding = new Padding(0, 12, 0, 0) };
+        if (_settings.LiveMap) body.Controls.Add(BuildJobMap());
+        else { _jobMap = null; body.Controls.Add(new Panel { Dock = DockStyle.Fill, BackColor = Look.Window }); }
+        body.Controls.Add(BuildLiveSide());
+
+        _jobPage.Controls.Add(body);
+        _jobPage.Controls.Add(BuildLiveHero());
+        _jobPage.Controls.Add(BuildLiveHeader());
         return _jobPage;
     }
 
@@ -278,8 +277,19 @@ public partial class MainForm {
         _jobClose.Locked = true;
         _jobClose.Visible = false;
 
-        var wide = new Panel { Dock = DockStyle.Fill, BackColor = Line, Padding = new Padding(1) };
+        var wide = new Panel { Dock = DockStyle.Fill, BackColor = Look.Border, Padding = new Padding(1) };
         wide.Controls.Add(_jobMap);
+
+        // The drawing says what it is, in the same small capitals every figure on this
+        // page carries, laid over its top left corner rather than in a bar above it:
+        // the map is the subject and a title bar would take a line of road from it.
+        var title = new Panel { Dock = DockStyle.Top, Height = 26, BackColor = Look.Window };
+        title.Paint += (_, e) => {
+            e.Graphics.Clear(Look.Window);
+            e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            Look.Tracked(e.Graphics, Strings.T("live.routeSoFar").ToUpperInvariant(), Look.Label, Look.Dim, 2, 8);
+        };
+        frame.Controls.Add(title);
 
         _jobCloseCorner = new Panel { BackColor = Line, Padding = new Padding(1), Visible = false };
         _jobCloseGap = new Panel { Dock = DockStyle.Bottom, Height = 8, BackColor = Canvas, Visible = false };
@@ -502,15 +512,7 @@ public partial class MainForm {
         SayAttached(_engine.Connected ? GameName(_engine.WhereGame) : "", _engine.Connected);
 
         if (job is null || state is null) {
-            _status.Text = (_engine.Connected
-                ? $"{Strings.T("live.waitingJob")}   ({Strings.T("live.ticks")}: {_engine.TickCount})"
-                : Strings.T("live.waitingGame")).ToUpperInvariant();
-            _jobLine.Text = _engine.Connected ? Strings.T("live.noJob") : Strings.T("live.waitingGame");
-            _jobLine.ForeColor = Muted;
-            _jobDetail.Text = "";
-            _progressText.Text = "";
-            _progressTrack.Visible = false;
-            if (_jobLaunch is { } waiting) waiting.Visible = true;
+            ShowLive(null, null, u);
             // No delivery, but there may still be a truck: the map follows it while
             // somebody drives about with an empty hook, and equally while they sit in
             // the screen that appears the moment a delivery is done. Where the truck is
@@ -526,17 +528,7 @@ public partial class MainForm {
             return;
         }
 
-        if (_jobLaunch is { } running) running.Visible = false;
-        _status.Text = $"{Strings.T("live.jobRunning")}   ({Strings.T("live.ticks")}: {_engine.TickCount}, {Strings.T("live.deliveriesThisRun")}: {_engine.DeliveriesThisRun})".ToUpperInvariant();
-        // Named the way the history names them, with the state or the country after
-        // the city when the driver has asked for that.
-        _jobLine.Text = _settings.CityRegions
-            ? $"{Places.Say(state.Game, job.SourceCity, job.SourceCityId)}"
-              + $"  →  {Places.Say(state.Game, job.DestinationCity, job.DestinationCityId)}"
-            : $"{job.SourceCity}  →  {job.DestinationCity}";
-        _jobLine.ForeColor = Ink;
-        _jobDetail.Text = $"{job.Cargo} · {u.MassTonnes(job.CargoMassKg):0.0} {u.MassUnit}"
-                        + $"   ·   {Strings.T("live.reward")} {u.FormatMoney(job.Income)}";
+        ShowLive(job, state, u);
 
         // Planned distance is the game's own route length, in the same simulated km
         // the odometer counts, so this genuinely tracks progress toward the drop-off.
