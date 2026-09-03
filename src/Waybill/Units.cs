@@ -120,7 +120,9 @@ public class Units {
     public string FormatDistance(double km, string format = "0.0") => $"{Distance(km).ToString(format)} {DistanceUnit}";
     public string FormatSpeed(double kmh, string format = "0") => $"{Speed(kmh).ToString(format)} {SpeedUnit}";
     public string FormatVolume(double litres, string format = "0.0") => $"{Volume(litres).ToString(format)} {VolumeUnit}";
-    public string FormatMoney(double amount) => $"{Money(amount):0} {Currency}";
+    /// <summary>Grouped in thousands, like every other figure in the window: a
+    /// six figure sum without the separators has to be counted digit by digit.</summary>
+    public string FormatMoney(double amount) => $"{Money(amount):N0} {Currency}";
 
     /// <summary>
     /// What a battery holds, which is never litres and never gallons.
