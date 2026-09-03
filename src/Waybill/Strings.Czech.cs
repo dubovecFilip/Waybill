@@ -25,6 +25,7 @@ public static partial class Strings {
         ["menu.settings"] = "Nastavení",
         ["job.onTheRoad"] = "Na cestě",
         ["job.noRoute"] = "Zatím není co kreslit",
+        ["job.noRouteUnder"] = "Trasa se vykreslí, jak jízda pokračuje.",
         ["menu.units.metric.short"] = "metrické",
         ["menu.units.imperial.short"] = "imperiální",
         ["menu.help"] = "Nápověda",
@@ -93,6 +94,8 @@ public static partial class Strings {
 
         ["tab.live"] = "Aktuální zakázka",
         ["live.jobPill"] = "Probíhá zakázka",
+        ["live.noGamePill"] = "Hra není připojená",
+        ["live.betweenPill"] = "Žádná zakázka",
         ["live.from"] = "Odkud",
         ["live.to"] = "Kam",
         ["live.ofDriven"] = "z",

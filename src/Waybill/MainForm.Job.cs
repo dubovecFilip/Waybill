@@ -272,6 +272,7 @@ public partial class MainForm {
         _jobMap.Dock = DockStyle.Fill;
         _jobMap.ShowMarks = false;
         _jobMap.EmptyText = Strings.T("job.noRoute");
+        _jobMap.EmptyUnder = Strings.T("job.noRouteUnder");
         _jobMap.Hint = "";
         _jobMap.Cursor = Cursors.Default;
         _jobMap.Locked = true;

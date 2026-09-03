@@ -25,6 +25,7 @@ public static partial class Strings {
         ["menu.settings"] = "Ajustes",
         ["job.onTheRoad"] = "En ruta",
         ["job.noRoute"] = "Todavía no hay nada que dibujar",
+        ["job.noRouteUnder"] = "La ruta aparece a medida que avanza el viaje.",
         ["menu.units.metric.short"] = "métrico",
         ["menu.units.imperial.short"] = "imperial",
         ["menu.help"] = "Ayuda",
@@ -93,6 +94,8 @@ public static partial class Strings {
 
         ["tab.live"] = "Trabajo actual",
         ["live.jobPill"] = "Trabajo en curso",
+        ["live.noGamePill"] = "Sin juego conectado",
+        ["live.betweenPill"] = "Sin entrega ahora",
         ["live.from"] = "Desde",
         ["live.to"] = "Hasta",
         ["live.ofDriven"] = "de",

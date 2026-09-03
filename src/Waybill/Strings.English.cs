@@ -24,6 +24,7 @@ public static partial class Strings {
         ["menu.settings"] = "Settings",
         ["job.onTheRoad"] = "On the road",
         ["job.noRoute"] = "Nothing to draw yet",
+        ["job.noRouteUnder"] = "The route appears as the drive goes on.",
         ["menu.units.metric.short"] = "metric",
         ["menu.units.imperial.short"] = "imperial",
         ["menu.help"] = "Help",
@@ -92,6 +93,8 @@ public static partial class Strings {
 
         ["tab.live"] = "Current job",
         ["live.jobPill"] = "Job in progress",
+        ["live.noGamePill"] = "No game attached",
+        ["live.betweenPill"] = "No job just now",
         ["live.from"] = "From",
         ["live.to"] = "To",
         ["live.ofDriven"] = "of",

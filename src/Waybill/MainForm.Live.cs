@@ -79,10 +79,13 @@ public partial class MainForm {
         Look.Text(g, Strings.T("job.onTheRoad"), Look.PageHeading, Look.Ink, 0, y);
         var at = Look.Measure(g, Strings.T("job.onTheRoad"), Look.PageHeading).Width + 14;
 
-        if (_live.OnJob) {
-            var size = Look.PillSize(g, Strings.T("live.jobPill"));
-            Look.Pill(g, new PointF(at, (head.Height - size.Height) / 2), Strings.T("live.jobPill"), Look.Accent);
-        }
+        // The pill is never absent: a page that says nothing about its own state reads
+        // as a page that has not loaded. Amber for a job under way, muted for waiting.
+        var word = _live.OnJob ? Strings.T("live.jobPill")
+                 : _live.Attached ? Strings.T("live.betweenPill") : Strings.T("live.noGamePill");
+        var hue = _live.OnJob ? Look.Accent : Look.Muted;
+        var pill = Look.PillSize(g, word);
+        Look.Pill(g, new PointF(at, (head.Height - pill.Height) / 2), word, hue);
 
         if (_live.Wheel.Length > 0) {
             var right = head.Width - (_logToggle?.Width ?? 0) - 16;
@@ -104,7 +107,7 @@ public partial class MainForm {
         // The two launch buttons live on the hero while there is no game to talk about,
         // which is the one thing worth offering on a page with nothing to say.
         var launch = new FlowLayoutPanel {
-            AutoSize = true, BackColor = Color.Transparent, WrapContents = false, Location = new Point(20, 74),
+            AutoSize = true, BackColor = Color.Transparent, WrapContents = false,
         };
         foreach (var game in new[] { SimGame.Ets2, SimGame.Ats }) {
             var installed = GameLauncher.IsInstalled(game);
@@ -116,6 +119,13 @@ public partial class MainForm {
         }
         _jobLaunch = launch;
         panel.Controls.Add(launch);
+        // At the right end of the hero, against the line that says what is being waited
+        // for: the words are the question and the buttons are the answer to it.
+        void Place() => launch.Location = new Point(Math.Max(20, panel.ClientSize.Width - launch.Width - 20),
+                                                    (panel.ClientSize.Height - launch.Height) / 2);
+        panel.Resize += (_, _) => Place();
+        launch.SizeChanged += (_, _) => Place();
+        Place();
         return hero;
     }
 

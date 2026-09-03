@@ -153,6 +153,11 @@ public class RouteView : Control {
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public string Hint { get; set; } = "";
 
+    /// <summary>The second line of the empty state: what will fill the panel. The hint
+    /// is about working the map and belongs at its foot once there is a map to work.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public string EmptyUnder { get; set; } = "";
+
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public bool ShowCities { get; set; } = true;
 
@@ -833,6 +838,41 @@ public class RouteView : Control {
 
     private static int Band(float kmh) => Math.Clamp((int)(kmh / 15f), 0, Ramp.Length - 1);
 
+    /// <summary>
+    /// An empty map is composed rather than left blank: a folded map drawn in slate
+    /// over what the panel is waiting for, and what will fill it.
+    /// </summary>
+    private void DrawNothing(Graphics g) {
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+
+        var middle = new PointF(Width / 2f, Height / 2f - 16);
+        using (var pen = new Pen(Look.Slate, 1.6f) { LineJoin = LineJoin.Round }) {
+            // Three panels of a folded map, the outer two hanging lower than the middle.
+            var w = 11f;
+            var h = 17f;
+            var x = middle.X - w * 1.5f;
+            var y = middle.Y - h / 2;
+            g.DrawLines(pen, new[] {
+                new PointF(x, y + 4), new PointF(x + w, y), new PointF(x + w * 2, y + 4),
+                new PointF(x + w * 3, y), new PointF(x + w * 3, y + h),
+                new PointF(x + w * 2, y + h + 4), new PointF(x + w, y + h),
+                new PointF(x, y + h + 4), new PointF(x, y + 4),
+            });
+            g.DrawLine(pen, x + w, y, x + w, y + h);
+            g.DrawLine(pen, x + w * 2, y + 4, x + w * 2, y + h + 4);
+        }
+
+        if (EmptyText.Length > 0) {
+            var size = Look.Measure(g, EmptyText, Look.Body);
+            Look.Text(g, EmptyText, Look.Body, Look.Faint, middle.X - size.Width / 2, middle.Y + 26);
+        }
+        if (EmptyUnder.Length > 0) {
+            var size = Look.Measure(g, EmptyUnder, Look.Caption);
+            Look.Text(g, EmptyUnder, Look.Caption, Look.Faint, middle.X - size.Width / 2, middle.Y + 48);
+        }
+    }
+
     protected override void OnPaint(PaintEventArgs e) {
         var g = e.Graphics;
         g.Clear(Backdrop);
@@ -841,11 +881,7 @@ public class RouteView : Control {
         // own: a driver on their first evening has no history behind them and still
         // has a truck, which is the whole of what the map is for at that point.
         if (_drawn.Count == 0 && Follow is null) {
-            if (EmptyText.Length > 0) {
-                using var brush = new SolidBrush(Muted);
-                using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-                g.DrawString(EmptyText, Font, brush, new RectangleF(8, 8, Width - 16, Height - 16), format);
-            }
+            DrawNothing(g);
             return;
         }
         if (!_fitted) Fit();
