@@ -319,9 +319,17 @@ public partial class MainForm : Form {
     private static void SmoothPainting(Control root) {
         var flag = typeof(Control).GetProperty("DoubleBuffered",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        // A panel only invalidates the strip a resize uncovers, which is right for a
+        // panel that draws nothing and wrong for every panel in this window: a heading
+        // pushed against the right edge, a figure at the end of a row and a pill at the
+        // end of the bar are all drawn from the width, so the old drawing stayed behind
+        // as the window narrowed and the page filled with ghosts of itself.
+        var whole = typeof(Control).GetProperty("ResizeRedraw",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         void Walk(Control c) {
             if (c is Panel or TableLayoutPanel or FlowLayoutPanel) {
                 try { flag?.SetValue(c, true, null); } catch { /* not worth failing over */ }
+                try { whole?.SetValue(c, true, null); } catch { /* nor this */ }
             }
             foreach (Control child in c.Controls) Walk(child);
         }
@@ -2290,7 +2298,7 @@ public partial class MainForm : Form {
         _search.BorderStyle = BorderStyle.None;
         _search.BackColor = Look.Control;
         _search.ForeColor = Look.Ink;
-        _search.Font = Look.Body;
+        _search.Font = Look.Small;
         _search.Dock = DockStyle.Fill;
         _search.TextChanged -= OnSearchTyped;
         _search.TextChanged += OnSearchTyped;
@@ -2299,7 +2307,7 @@ public partial class MainForm : Form {
         // a rounded control with a magnifier inset, and that is two shapes.
         var searchBox = new Panel {
             Width = 264, Height = Look.InputHeight, Margin = new Padding(0, 0, 10, 0),
-            BackColor = Look.Window, Padding = new Padding(34, 7, 12, 5),
+            BackColor = Look.Window, Padding = new Padding(32, 8, 12, 6),
         };
         searchBox.Paint += (_, e) => {
             var g = e.Graphics;
@@ -2312,7 +2320,9 @@ public partial class MainForm : Form {
         searchBox.Controls.Add(_search);
 
         _gameFilter.Retext(GameName("Ets2"), Strings.T("filter.both"), GameName("Ats"));
-        _gameFilter.Margin = new Padding(0, 2, 12, 2);
+        // Everything in this bar hangs off the same line: the switch used to sit two
+        // pixels lower than the field beside it, which is exactly enough to see.
+        _gameFilter.Margin = new Padding(0, 0, 10, 0);
         _gameFilter.BackColor = Look.Window;
         _gameFilter.Changed -= OnFilterChanged;
         _gameFilter.Changed += OnFilterChanged;
@@ -2325,7 +2335,7 @@ public partial class MainForm : Form {
         _lateChip.Text = Strings.T("filter.late");
         _damagedChip.Text = Strings.T("filter.damaged");
         foreach (var chip in new[] { _oversizeChip, _lateChip, _damagedChip }) {
-            chip.Margin = new Padding(0, 2, 8, 2);
+            chip.Margin = new Padding(0, 0, 8, 0);
             chip.Toggled -= ApplyFilter;
             chip.Toggled += ApplyFilter;
             using var g = CreateGraphics();
@@ -2387,7 +2397,14 @@ public partial class MainForm : Form {
         // do on its own, so it is placed against the page instead and kept there.
         page.Controls.Add(legend);
         legend.BringToFront();
-        void Place() => legend.Location = new Point(page.ClientSize.Width - legend.Width - Look.PagePad, head.Bottom + 12);
+        // The key gives way to the filters. It rides over the toolbar rather than in it,
+        // so on a narrow window it was drawing itself on top of the three chips; what a
+        // key is for is read once, and a chip is pressed.
+        void Place() {
+            var needs = bar.Controls.Cast<Control>().Sum(c => c.Width + c.Margin.Horizontal);
+            legend.Visible = page.ClientSize.Width - needs > legend.Width + 24;
+            legend.Location = new Point(page.ClientSize.Width - legend.Width - Look.PagePad, head.Bottom + 12);
+        }
         page.Resize += (_, _) => Place();
         Place();
         return page;

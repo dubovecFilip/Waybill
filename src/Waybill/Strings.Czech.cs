@@ -138,7 +138,7 @@ public static partial class Strings {
         ["search.placeholder"] = "hledat město / náklad / tahač...",
         ["filter.both"] = "obě",
         ["filter.ordinary"] = "běžné",
-        ["filter.oversize"] = "nadrozměrné",
+        ["filter.oversize"] = "Nadrozměrná",
         ["filter.late"] = "Zpožděná",
         ["filter.damaged"] = "Poškozená",
         ["legend.dotClean"] = "čistě",

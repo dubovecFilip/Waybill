@@ -43,7 +43,7 @@ public partial class MainForm {
         MainMenuStrip = menu;
 
         var chip = new Label {
-            AutoSize = false, Height = 26, Width = 300, ForeColor = Look.Muted,
+            AutoSize = false, Height = 26, Width = 200, ForeColor = Look.Muted,
             BackColor = Look.Chrome, Font = Look.Small, TextAlign = ContentAlignment.MiddleRight,
         };
         chip.Paint += (_, e) => PaintChip(e.Graphics, chip);
@@ -51,11 +51,8 @@ public partial class MainForm {
         _statusChip = chip;
 
         bar.Paint += (_, e) => PaintTitleBar(e.Graphics, bar);
-        bar.Resize += (_, _) => {
-            chip.Location = new Point(bar.Width - chip.Width - 16, (bar.Height - chip.Height) / 2);
-            chip.Invalidate();
-        };
-        chip.Location = new Point(bar.Width - chip.Width - 16, (bar.Height - chip.Height) / 2);
+        bar.Resize += (_, _) => FitChip();
+        FitChip();
         return bar;
     }
 
@@ -76,6 +73,22 @@ public partial class MainForm {
     }
 
     /// <summary>
+    /// The label is cut to the pill rather than the pill drawn inside a label that is
+    /// wider than it. Drawn the other way round, the shape ran off both ends of its own
+    /// control and arrived with two flat sides.
+    /// </summary>
+    private void FitChip() {
+        if (_statusChip is not { } chip || _titleBar is not { } bar) return;
+        using var g = chip.CreateGraphics();
+        var wide = (int)Math.Ceiling(Look.Measure(g, _chipText, Look.Small).Width) + 44;
+        // Never past the menu: a long game name on a narrow window gives up its own
+        // words before it gives up the shape.
+        chip.Width = Math.Max(60, Math.Min(wide, bar.Width - 240));
+        chip.Location = new Point(bar.Width - chip.Width - 16, (bar.Height - chip.Height) / 2);
+        chip.Invalidate();
+    }
+
+    /// <summary>
     /// The chip at the right end: a dot with a soft ring around it and a line of text,
     /// tinted when a game is attached and faint when there is none.
     /// </summary>
@@ -85,7 +98,7 @@ public partial class MainForm {
 
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         var text = Look.Measure(g, _chipText, Look.Small);
-        var box = new RectangleF(chip.Width - text.Width - 40, 0, text.Width + 40, chip.Height);
+        var box = new RectangleF(0.5f, 0.5f, chip.Width - 1, chip.Height - 1);
         Look.FillRounded(g, box, box.Height / 2, Look.Tint(_chipHue, 10));
         Look.DrawRounded(g, box, box.Height / 2, Look.TintEdge(_chipHue, 22));
 
@@ -93,7 +106,8 @@ public partial class MainForm {
         using var soft = new SolidBrush(Look.Tint(_chipHue, 30));
         g.FillEllipse(soft, box.X + 11, middle - 6.5f, 13, 13);
         Look.Dot(g, new PointF(box.X + 17.5f, middle), _chipHue);
-        Look.Text(g, _chipText, Look.Small, _chipHue, box.X + 30, middle - text.Height / 2);
+        Look.Text(g, Look.Clip(g, _chipText, Look.Small, box.Width - 42), Look.Small, _chipHue,
+                  box.X + 30, middle - text.Height / 2);
     }
 
     /// <summary>Says which game is attached, or that none is. Called from the live page
@@ -104,7 +118,9 @@ public partial class MainForm {
             ? Strings.T("live.waitingGame")
             : recording ? $"{game} · {Strings.T("chip.recording")}" : game;
         _chipHue = game.Length == 0 ? Look.Faint : Look.Whole;
-        if (_chipText != was) _statusChip?.Invalidate();
+        // The shape follows the words: "Waiting for the game" and "ATS · recording" are
+        // not the same width, and a pill sized for one of them cuts the other.
+        if (_chipText != was) FitChip();
     }
 
     // ---------- the column down the left ----------

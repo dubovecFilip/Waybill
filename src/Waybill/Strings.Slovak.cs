@@ -139,7 +139,7 @@ public static partial class Strings {
         ["search.placeholder"] = "hľadať mesto / náklad / ťahač...",
         ["filter.both"] = "obe",
         ["filter.ordinary"] = "bežné",
-        ["filter.oversize"] = "nadrozmerné",
+        ["filter.oversize"] = "Nadrozmerná",
         ["filter.late"] = "Meškala",
         ["filter.damaged"] = "Poškodená",
         ["legend.dotClean"] = "čisto",

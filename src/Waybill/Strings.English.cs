@@ -137,7 +137,7 @@ public static partial class Strings {
         ["search.placeholder"] = "search city / cargo / truck...",
         ["filter.both"] = "both",
         ["filter.ordinary"] = "ordinary",
-        ["filter.oversize"] = "oversize",
+        ["filter.oversize"] = "Oversize",
         ["filter.late"] = "Late",
         ["filter.damaged"] = "Damaged",
         ["legend.dotClean"] = "clean",

@@ -138,7 +138,7 @@ public static partial class Strings {
         ["search.placeholder"] = "buscar ciudad / carga / camión...",
         ["filter.both"] = "ambos",
         ["filter.ordinary"] = "normal",
-        ["filter.oversize"] = "especial",
+        ["filter.oversize"] = "Especial",
         ["filter.late"] = "Tarde",
         ["filter.damaged"] = "Dañada",
         ["legend.dotClean"] = "limpio",
