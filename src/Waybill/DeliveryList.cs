@@ -85,7 +85,7 @@ public sealed class DeliveryList : Control {
     public void Show(IEnumerable<DeliveryRow> rows) {
         _rows = rows.ToList();
         Regroup();
-        _top = Math.Min(_top, Math.Max(0, Height(_entries.Count) - ClientSize.Height));
+        _top = Math.Min(_top, Math.Max(0, Down(_entries.Count) - ClientSize.Height));
         Invalidate();
     }
 
@@ -110,23 +110,24 @@ public sealed class DeliveryList : Control {
         }
     }
 
-    private int Height(int entries) {
+    /// <summary>How far down the list the first so many entries reach.</summary>
+    private int Down(int entries) {
         var tall = 0;
         for (var i = 0; i < entries && i < _entries.Count; i++) tall += _entries[i].Row is null ? GroupHeight : RowHeight;
         return tall;
     }
 
     /// <summary>What the scrollbar keeps for itself, so no row is drawn under it.</summary>
-    private int Bar => Height(_entries.Count) > ClientSize.Height - HeadHeight ? 14 : 4;
+    private int Bar => Down(_entries.Count) > ClientSize.Height - HeadHeight ? 14 : 4;
 
-    private float Scale => _columns.Sum(c => c.Width) is var total && total > 0
+    private float Squeeze => _columns.Sum(c => c.Width) is var total && total > 0
         ? (ClientSize.Width - Gutter - Bar - 8) / total : 1f;
 
     protected override void OnMouseWheel(MouseEventArgs e) {
         base.OnMouseWheel(e);
         // A little further than the last row, so the end of the list is not pressed
         // against the bottom edge of the panel.
-        var most = Math.Max(0, Height(_entries.Count) - (ClientSize.Height - HeadHeight) + 8);
+        var most = Math.Max(0, Down(_entries.Count) - (ClientSize.Height - HeadHeight) + 8);
         _top = Math.Clamp(_top - e.Delta, 0, most);
         Invalidate();
     }
@@ -170,7 +171,7 @@ public sealed class DeliveryList : Control {
 
     private int ColumnAt(int x) {
         var at = (float)Gutter;
-        var scale = Scale;
+        var scale = Squeeze;
         for (var i = 0; i < _columns.Count; i++) {
             var wide = _columns[i].Width * scale;
             if (x >= at && x < at + wide) return i;
@@ -202,7 +203,7 @@ public sealed class DeliveryList : Control {
             return;
         }
 
-        var scale = Scale;
+        var scale = Squeeze;
         var y = (float)HeadHeight - _top;
 
         foreach (var (row, title, summary) in _entries) {
@@ -227,7 +228,7 @@ public sealed class DeliveryList : Control {
         g.DrawLine(rule, 0, HeadHeight - 1, ClientSize.Width, HeadHeight - 1);
 
         var at = (float)Gutter;
-        var scale = Scale;
+        var scale = Squeeze;
         for (var i = 0; i < _columns.Count; i++) {
             var column = _columns[i];
             var wide = column.Width * scale;
@@ -305,7 +306,7 @@ public sealed class DeliveryList : Control {
     /// <summary>A hairline of a scrollbar down the right, drawn only while there is
     /// more list than window.</summary>
     private void PaintScrollbar(Graphics g) {
-        var whole = Height(_entries.Count);
+        var whole = Down(_entries.Count);
         var room = ClientSize.Height - HeadHeight;
         if (whole <= room) return;
 
