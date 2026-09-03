@@ -327,7 +327,9 @@ public partial class MainForm : Form {
         var whole = typeof(Control).GetProperty("ResizeRedraw",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         void Walk(Control c) {
-            if (c is Panel or TableLayoutPanel or FlowLayoutPanel) {
+            // The menu strip is in here too: it draws its own hover state, and a
+            // ToolStrip left unbuffered draws it straight onto the screen.
+            if (c is Panel or TableLayoutPanel or FlowLayoutPanel or ToolStrip) {
                 try { flag?.SetValue(c, true, null); } catch { /* not worth failing over */ }
                 try { whole?.SetValue(c, true, null); } catch { /* nor this */ }
             }
@@ -1370,7 +1372,7 @@ public partial class MainForm : Form {
 
         _mapGame.MenuMaker = () => new ContextMenuStrip {
             BackColor = Look.Chrome, ForeColor = Look.Ink, ShowImageMargin = false,
-            Renderer = new ToolStripProfessionalRenderer(new DarkMenuColours()), Font = Look.Small,
+            Renderer = new MenuLook(), Font = Look.Small,
         };
         _mapGame.Changed -= OnMapGameChanged;
         _mapGame.Changed += OnMapGameChanged;
@@ -1532,7 +1534,7 @@ public partial class MainForm : Form {
     private MenuStrip BuildMenu() {
         var menu = new MenuStrip {
             BackColor = Surface, ForeColor = Ink,
-            Renderer = new ToolStripProfessionalRenderer(new DarkMenuColours()),
+            Renderer = new MenuLook(),
             Padding = new Padding(8, 4, 0, 4),
         };
         menu.Items.Add(BuildPlayMenu());
@@ -3575,6 +3577,55 @@ public partial class MainForm : Form {
         public override Color SeparatorLight => Line;
     }
 
+    /// <summary>
+    /// The menu, drawn the way the rest of the window draws a thing under the pointer.
+    ///
+    /// The professional renderer marks the word being pointed at with a hard cornered
+    /// box and a light border around it, sized to the word rather than to the line, so
+    /// running the pointer along four menu words popped four boxes of four widths in
+    /// and out at slightly different heights. Everything else in this window answers a
+    /// pointer with a soft rounded wash and no border, and the top of the window had no
+    /// business being the one place that did not.
+    /// </summary>
+    private sealed class MenuLook : ToolStripProfessionalRenderer {
+        public MenuLook() : base(new DarkMenuColours()) => RoundedEdges = false;
+
+        private static bool Open(ToolStripItem item) =>
+            item is ToolStripMenuItem m && (m.Pressed || m.DropDown.Visible);
+
+        protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e) {
+            var item = e.Item;
+            var open = Open(item);
+            if (!item.Selected && !open) return;
+
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            // A word in the top row keeps its own line; an entry in a dropped list
+            // takes the width of the list, the way a row in any list here does.
+            var top = item.Owner is MenuStrip;
+            var box = top
+                ? new RectangleF(0.5f, 2.5f, item.Width - 1, item.Height - 5)
+                : new RectangleF(2.5f, 1.5f, item.Width - 5, item.Height - 3);
+            var fill = top && open ? Look.Tint(Look.Accent, 14) : top ? Look.Control : Look.RowHover;
+            Look.FillRounded(g, box, Look.RadiusChip, fill);
+        }
+
+        protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e) {
+            var top = e.Item.Owner is MenuStrip;
+            e.TextColor = !e.Item.Enabled ? Look.Faint
+                : top ? Open(e.Item) ? Look.Accent : e.Item.Selected ? Look.Ink : Look.Muted
+                : e.Item.Selected ? Look.Ink : Look.Secondary;
+            base.OnRenderItemText(e);
+        }
+
+        /// <summary>The strip is part of the bar it sits on, not a raised thing lying
+        /// on top of it, so it has no edge of its own.</summary>
+        protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e) {
+            if (e.ToolStrip is MenuStrip) return;
+            base.OnRenderToolStripBorder(e);
+        }
+    }
+
     private static Image? _eyeOpen, _eyeShut;
 
     /// <summary>
@@ -4037,7 +4088,7 @@ public partial class MainForm : Form {
     private ContextMenuStrip LayerMenu(RouteView map, DeliveryDetail? about = null) {
         var menu = new ContextMenuStrip {
             BackColor = Surface, ForeColor = Ink, ShowImageMargin = true,
-            Renderer = new ToolStripProfessionalRenderer(new DarkMenuColours()),
+            Renderer = new MenuLook(),
         };
         // Turning one layer off is rarely the whole intent, so the menu survives a
         // click and stays under the pointer until it is dismissed.
