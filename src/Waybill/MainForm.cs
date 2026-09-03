@@ -1119,10 +1119,16 @@ public partial class MainForm : Form {
                     new() { Part = (float)(driving * offTheJob), Hue = Look.Route },
                     new() { Part = (float)resting, Hue = Look.Slate },
                 },
+                // Five, in the order the specification asks them in: how long the
+                // sitting ran, how much of it was slept through, how far it went, what
+                // it earned and how fast it moved. The delivery count is already on the
+                // bar and in the chain of cities beside it.
                 Figures = new List<CardStack.Figure> {
                     new() { Label = Strings.T("sessions.atTheWheel"), Value = one.Trvanie },
-                    new() { Label = Strings.T("list.deliveries"), Value = one.Zasielky.ToString() },
+                    new() { Label = Strings.T("sess.rest"), Value = one.Oddych, Ink = Look.Muted },
                     new() { Label = Strings.T("col.distance"), Value = one.Vzdialenost },
+                    new() { Label = Strings.T("sess.earned"), Value = one.Odmena },
+                    new() { Label = Strings.T("stats.avgSpeed"), Value = one.Priemer, Ink = Look.Muted },
                 },
             };
         }));
